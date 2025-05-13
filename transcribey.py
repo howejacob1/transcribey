@@ -60,4 +60,22 @@ model_comparison = [
 
 # fastest english model: https://huggingface.co/nvidia/parakeet-tdt_ctc-110m
 
-language = "English"
+languages = ["en", "es"]
+
+def select_model(language, prioritize_speed=True):
+    """
+    Select the best model for the given language.
+    If prioritize_speed is True, select the fastest model (highest RTFx, lowest size).
+    Otherwise, select the most accurate model (lowest WER).
+    Returns the model name as a string, or None if no suitable model is found.
+    """
+    candidates = [m for m in model_comparison if language in m["languages"]]
+    if not candidates:
+        return None
+    if prioritize_speed:
+        # Fastest: highest RTFx, then lowest size
+        candidates = sorted(candidates, key=lambda m: (-m["RTFx"], m["size_gb"]))
+    else:
+        # Most accurate: lowest WER
+        candidates = sorted(candidates, key=lambda m: m["WER"])
+    return candidates[0]["model"]
