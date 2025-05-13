@@ -5,7 +5,7 @@
 model_comparison = [
     {
         "model": "nvidia/parakeet-tdt-0.6b-v2",
-        "languages": ["English"],
+        "languages": ["en"],
         "WER": 6.05,
         "RTFx": 3386.02,
         "size_gb": 2.47,
@@ -13,7 +13,7 @@ model_comparison = [
     },
     {
         "model": "microsoft/Phi-4-multimodal-instruct",
-        "languages": ["English", "Chinese", "German", "French", "Italian", "Japanese", "Spanish", "Portuguese"],
+        "languages": ["en", "zh", "de", "fr", "it", "ja", "es", "pt"],
         "WER": 6.14,
         "RTFx": 62.12,
         "size_gb": 11.2,
@@ -21,7 +21,7 @@ model_comparison = [
     },
     {
         "model": "nvidia/parakeet-tdt_ctc-110m",
-        "languages": ["English"],
+        "languages": ["en"],
         "WER": 7.49,
         "RTFx": 5345.14,
         "size_gb": 0.5,
@@ -29,7 +29,7 @@ model_comparison = [
     },
     {
         "model": "nvidia/canary-1b-flash",
-        "languages": ["English", "German", "French", "Spanish"],
+        "languages": ["en", "de", "fr", "es"],
         "WER": 6.35,
         "RTFx": 1045.75,
         "size_gb": 3.54,
@@ -60,3 +60,4 @@ model_comparison = [
 
 # fastest english model: https://huggingface.co/nvidia/parakeet-tdt_ctc-110m
 
+language = "English"
