@@ -1,6 +1,20 @@
 # Architecture: 
 
-# 1.) Identify language
+# Load all filesystem filenames into memory
+
+# Make a vcon for each file
+
+# In background, always load up wav files into buffer
+
+# Detect language on each, save to vcon
+
+# If english, transcribe with fastest english model on each
+
+# Else, add the wav to the list of files to be transcribed. 
+
+# Write the vcon and remove the wav if successful.
+
+# Now, go through all non-english ones and use fastest model for each language. 
 
 model_comparison = [
     {
@@ -37,28 +51,7 @@ model_comparison = [
     }
 ]
 
-# We have a ton of files that need transcribing. 
 
-# We also have a ton of computers that have numerous GPUs.
-
-# So, how do we do this the best? 
-
-# We have access to say a folder, with a number of files on it.
-
-# VCons will be saved in a folder as well. 
-
-# Looks like the conserver can do all this. 
-
-# So, run a conserver? 
-
-# I don't think the conserver will be fast enough. 
-
-# To that end, 
-
-# We need to identify language and if english then we use fastest english model. 
-
-
-# fastest english model: https://huggingface.co/nvidia/parakeet-tdt_ctc-110m
 
 languages = ["en", "es"]
 
