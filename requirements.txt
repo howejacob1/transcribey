@@ -1,0 +1,15 @@
+openai
+
+toml
+
+deepseek-infer
+
+torch
+torchaudio
+librosa
+numpy
+soundfile
+transformers
+matplotlib
+scikit-learn
+sentencepiece 
