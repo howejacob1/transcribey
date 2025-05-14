@@ -6,6 +6,8 @@ This module provides functions to load and manage all ASR models used in the pro
 # Example placeholder for model loading functions
 # Actual implementation will depend on the model frameworks/APIs used (e.g., HuggingFace, NVIDIA, Microsoft, etc.)
 
+import importlib
+
 MODEL_REGISTRY = {}
 
 
@@ -22,9 +24,12 @@ def load_microsoft_phi_4_multimodal_instruct():
 
 
 def load_nvidia_parakeet_tdt_ctc_110m():
-    """Load nvidia/parakeet-tdt_ctc-110m model."""
-    # TODO: Implement actual loading code
-    pass
+    """Load nvidia/parakeet-tdt_ctc-110m model using NVIDIA NeMo."""
+    try:
+        nemo_asr = importlib.import_module("nemo.collections.asr")
+    except ImportError as e:
+        raise ImportError("nemo_toolkit is required to load this model. Install with: pip install nemo_toolkit['all']") from e
+    return nemo_asr.models.ASRModel.from_pretrained(model_name="nvidia/parakeet-tdt_ctc-110m")
 
 
 def load_nvidia_canary_1b_flash():
