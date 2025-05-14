@@ -10,7 +10,7 @@ secrets = toml.load("secrets.toml")
 openai.api_key = secrets["openai"]["api_key"]
 
 VOICES = [
-    "alloy", "ash", "ballad", "coral", "echo", "fable", "onyx", "nova", "sage", "shimmer", "verse"
+    "nova", "shimmer", "echo", "onyx", "fable", "alloy", "ash", "sage", "coral"
 ]
 
 def generate_conversation():
@@ -44,7 +44,7 @@ def synthesize_wav(text, output_path, voice="onyx"):
 
 def main():
     os.makedirs("fake_wavs", exist_ok=True)
-    for i in range(5):
+    for i in range(100):
         conversation = generate_conversation()
         print(f"Conversation {i+1}:\n{conversation}\n")
         timestamp = int(time.time() * 1000)
@@ -52,7 +52,13 @@ def main():
         voice = random.choice(VOICES)
         output_path = f"fake_wavs/openai_fake_conversation_{timestamp}_{rand_suffix}.wav"
         print(f"Using voice: {voice}")
-        synthesize_wav(conversation, output_path, voice=voice)
+        while True:
+            try:
+                synthesize_wav(conversation, output_path, voice=voice)
+                break
+            except Exception as e:
+                print(f"Error generating wav: {e}. Retrying...")
+                time.sleep(2)
 
 if __name__ == "__main__":
     main() 
