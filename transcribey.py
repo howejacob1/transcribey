@@ -58,7 +58,7 @@ model_comparison = [
 
 languages = ["en", "es"]
 
-def select_model(language, prioritize_speed=True):
+def select_transcriptionmodel(language, prioritize_speed=True):
     """
     Select the best model for the given language.
     If prioritize_speed is True, select the fastest model (highest RTFx, lowest size).
@@ -75,9 +75,3 @@ def select_model(language, prioritize_speed=True):
         # Most accurate: lowest WER
         candidates = sorted(candidates, key=lambda m: m["WER"])
     return candidates[0]["model"]
-
-# Before loading filenames
-t0 = time.time()
-wav_files_dict = get_all_filenames('fake_wavs')
-t1 = time.time()
-print(f"Loaded {len(wav_files_dict)} files from fake_wavs in {t1-t0:.2f} seconds.")
