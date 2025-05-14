@@ -58,7 +58,7 @@ model_comparison = [
 
 languages = ["en", "es"]
 
-def select_transcriptionmodel(language, prioritize_speed=True):
+def select_transcription_model(language, prioritize_speed=True):
     """
     Select the best model for the given language.
     If prioritize_speed is True, select the fastest model (highest RTFx, lowest size).
