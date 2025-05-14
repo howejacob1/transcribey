@@ -4,6 +4,7 @@ import os
 import time
 import random
 import string
+import concurrent.futures
 
 # Load OpenAI API key from secrets.toml
 secrets = toml.load("secrets.toml")
@@ -42,23 +43,30 @@ def synthesize_wav(text, output_path, voice="onyx"):
         f.write(response.content)
     print(f"WAV file saved to {output_path}")
 
+def generate_one_wav(i):
+    conversation = generate_conversation()
+    print(f"Conversation {i+1}:\n{conversation}\n")
+    timestamp = int(time.time() * 1000)
+    rand_suffix = ''.join(random.choices(string.ascii_lowercase + string.digits, k=6))
+    voice = random.choice(VOICES)
+    output_path = f"fake_wavs/openai_fake_conversation_{timestamp}_{rand_suffix}.wav"
+    print(f"Using voice: {voice}")
+    while True:
+        try:
+            synthesize_wav(conversation, output_path, voice=voice)
+            break
+        except Exception as e:
+            print(f"Error generating wav: {e}. Retrying...")
+            time.sleep(2)
+
 def main():
     os.makedirs("fake_wavs", exist_ok=True)
-    for i in range(100):
-        conversation = generate_conversation()
-        print(f"Conversation {i+1}:\n{conversation}\n")
-        timestamp = int(time.time() * 1000)
-        rand_suffix = ''.join(random.choices(string.ascii_lowercase + string.digits, k=6))
-        voice = random.choice(VOICES)
-        output_path = f"fake_wavs/openai_fake_conversation_{timestamp}_{rand_suffix}.wav"
-        print(f"Using voice: {voice}")
-        while True:
-            try:
-                synthesize_wav(conversation, output_path, voice=voice)
-                break
-            except Exception as e:
-                print(f"Error generating wav: {e}. Retrying...")
-                time.sleep(2)
+    total = 100
+    batch_size = 10
+    for batch_start in range(0, total, batch_size):
+        with concurrent.futures.ThreadPoolExecutor(max_workers=batch_size) as executor:
+            futures = [executor.submit(generate_one_wav, i) for i in range(batch_start, min(batch_start+batch_size, total))]
+            concurrent.futures.wait(futures)
 
 if __name__ == "__main__":
     main() 
