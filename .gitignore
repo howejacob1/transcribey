@@ -1,1 +1,2 @@
 fake_wavs/*.wav .secrets.toml
+.secrets.toml
