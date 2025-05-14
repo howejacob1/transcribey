@@ -9,6 +9,10 @@ import string
 secrets = toml.load("secrets.toml")
 openai.api_key = secrets["openai"]["api_key"]
 
+VOICES = [
+    "alloy", "ash", "ballad", "coral", "echo", "fable", "onyx", "nova", "sage", "shimmer", "verse"
+]
+
 def generate_conversation():
     prompt = (
         "Generate a short, natural-sounding conversation between two people. "
@@ -45,8 +49,10 @@ def main():
         print(f"Conversation {i+1}:\n{conversation}\n")
         timestamp = int(time.time() * 1000)
         rand_suffix = ''.join(random.choices(string.ascii_lowercase + string.digits, k=6))
+        voice = random.choice(VOICES)
         output_path = f"fake_wavs/openai_fake_conversation_{timestamp}_{rand_suffix}.wav"
-        synthesize_wav(conversation, output_path)
+        print(f"Using voice: {voice}")
+        synthesize_wav(conversation, output_path, voice=voice)
 
 if __name__ == "__main__":
     main() 
