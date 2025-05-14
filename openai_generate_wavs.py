@@ -14,6 +14,10 @@ def generate_conversation():
         "Generate a short, natural-sounding conversation between two people. "
         "Include pauses in the conversation, denoted by one or more periods (e.g., '....'). "
         "Do not use speaker labels. The conversation should be about 50-100 words."
+        "Choose a random language for the conversation. 95%% are english,"
+        "4%% are spanish, 1%% are french, and 1%% are german."
+        "Do not use emojis. Do not end the conversation early if it goes"
+        " on longer than 100 words."
     )
     response = openai.chat.completions.create(
         model="gpt-3.5-turbo",
