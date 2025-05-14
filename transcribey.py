@@ -17,6 +17,7 @@
 # Now, go through all non-english ones and use fastest model for each language. 
 
 from utils import get_all_filenames
+import time
 
 model_comparison = [
     {
@@ -75,4 +76,8 @@ def select_model(language, prioritize_speed=True):
         candidates = sorted(candidates, key=lambda m: m["WER"])
     return candidates[0]["model"]
 
+# Before loading filenames
+t0 = time.time()
 wav_files_dict = get_all_filenames('fake_wavs')
+t1 = time.time()
+print(f"Loaded {len(wav_files_dict)} files from fake_wavs in {t1-t0:.2f} seconds.")
