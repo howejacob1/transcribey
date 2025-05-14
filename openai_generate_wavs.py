@@ -6,8 +6,8 @@ import random
 import string
 import concurrent.futures
 
-# Load OpenAI API key from secrets.toml
-secrets = toml.load("secrets.toml")
+# Load OpenAI API key from .secrets.toml
+secrets = toml.load(".secrets.toml")
 openai.api_key = secrets["openai"]["api_key"]
 
 VOICES = [
@@ -16,11 +16,13 @@ VOICES = [
 
 def generate_conversation():
     prompt = (
-        "Generate a short, natural-sounding conversation between two people. "
-        "Include pauses in the conversation, denoted by one or more periods (e.g., '....'). "
+        "Generate a short, random topic conversation between two people. "
+        "Maybe Include pauses in the conversation, denoted by one or more periods (e.g., '....'). "
         "Do not use speaker labels. The conversation should be about 50-100 words."
         "Choose a random language for the conversation. 95%% are english,"
-        "4%% are spanish, 1%% are french, and 1%% are german."
+        "4%% are spanish, 1%% are french, and 1%% are german. If the conversation"
+        "is in spanish, then include a mixture of english and spanish words."
+        "also make the conversation double the length."
         "Do not use emojis. Do not end the conversation early if it goes"
         " on longer than 100 words."
     )
@@ -62,7 +64,7 @@ def generate_one_wav(i):
 def main():
     os.makedirs("fake_wavs", exist_ok=True)
     total = 100
-    batch_size = 10
+    batch_size = 20
     for batch_start in range(0, total, batch_size):
         with concurrent.futures.ThreadPoolExecutor(max_workers=batch_size) as executor:
             futures = [executor.submit(generate_one_wav, i) for i in range(batch_start, min(batch_start+batch_size, total))]
