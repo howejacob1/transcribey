@@ -4,3 +4,4 @@ fake_wavs/
 venv/
 venv/*
 *.pyc
+secrets.toml
