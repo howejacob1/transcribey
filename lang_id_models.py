@@ -1,6 +1,34 @@
- # ok now do the same with TitaNet-LID Rep-TDNN whus VoxLingua107 ECAPA-TDNN CommonLanguage ECAPA
+import torchaudio
 
-import nemo.collections.asr as nemo_asr
-speaker_model = nemo_asr.models.EncDecSpeakerLabelModel.from_pretrained("nvidia/speakerverification_en_titanet_large")
 
-emb = speaker_model.get_embedding("/media/jhowe/BACKUPBOY/fake_wavs/openai_fake_conversation_1747206400811_wvk62e.wav")
+#VoxLingua107, ECAPA-TDNN, Rep-ECAPA-TDNN, pyannote-audio
+
+def test_speechbrain_voxlingua107_ecapa(wav_path):
+    """Test the speechbrain/lang-id-voxlingua107-ecapa model on a given wav file and print the prediction."""
+    from speechbrain.inference.classifiers import EncoderClassifier
+    language_id = EncoderClassifier.from_hparams(source="speechbrain/lang-id-voxlingua107-ecapa", savedir="tmp")
+    signal = language_id.load_audio(wav_path)
+    prediction = language_id.classify_batch(signal)
+    print(prediction)
+
+def test_speechbrain_commonlanguage_ecapa(wav_path):
+    """Test the speechbrain/lang-id-commonlanguage_ecapa model on a given wav file and print the prediction."""
+    from speechbrain.inference.classifiers import EncoderClassifier
+    language_id = EncoderClassifier.from_hparams(source="speechbrain/lang-id-commonlanguage_ecapa", savedir="tmp")
+    signal = language_id.load_audio(wav_path)
+    prediction = language_id.classify_batch(signal)
+    print(prediction)
+
+def test_whisper_tiny_lang_id(wav_path):
+    """Test the Whisper Tiny model for language identification on a given wav file and print the prediction."""
+    import whisper
+    # Load the tiny Whisper model
+    model = whisper.load_model('tiny')
+    # Load and preprocess the audio
+    audio = whisper.load_audio(wav_path)
+    mel = whisper.log_mel_spectrogram(audio)
+    mel = whisper.pad_or_trim(mel, 3000)  # 3000 is N_FRAMES for Whisper
+    # Run language detection
+    _, probs = model.detect_language(mel)
+    language = max(probs, key=probs.get)
+    print({"language": language, "probs": probs})
