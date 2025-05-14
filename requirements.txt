@@ -9,4 +9,4 @@ transformers
 matplotlib
 scikit-learn
 sentencepiece
-nemo_toolkit[all] 
+nemo_toolkit[all]
