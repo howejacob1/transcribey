@@ -10,3 +10,4 @@ matplotlib
 scikit-learn
 sentencepiece
 nemo_toolkit[all]
+huggingface_hub[hf_xet]
