@@ -13,3 +13,4 @@ nemo_toolkit[all]
 huggingface_hub[hf_xet]
 pydub
 ffmpeg-python
+jiwer
