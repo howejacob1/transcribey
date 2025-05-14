@@ -1,4 +1,4 @@
-# model_loader.py
+# transcription_models.py
 """
 This module provides functions to load and manage all ASR models used in the project.
 """

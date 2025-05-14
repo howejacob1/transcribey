@@ -1,4 +1,4 @@
-from model_loader import load_nvidia_parakeet_tdt_ctc_110m
+from transcription_models import load_nvidia_parakeet_tdt_ctc_110m
 
 # Picked sample wav file
 wav_path = "fake_wavs/level0000/copy_94200076.wav"
