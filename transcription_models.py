@@ -50,7 +50,7 @@ MODEL_LOADERS = {
 }
 
 
-def load_model(model_name):
+def load_transcription_model(model_name):
     """
     Load a model by name using the appropriate loader function.
     Returns the loaded model object, or None if not found.
