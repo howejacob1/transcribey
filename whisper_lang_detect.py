@@ -2,6 +2,7 @@ import whisper
 import random
 import os
 from collections import Counter
+import time
 
 # Directory containing wav files
 dir = 'fake_wavs'
@@ -28,6 +29,8 @@ model = whisper.load_model('tiny')
 # Counter for detected languages
 lang_counter = Counter()
 
+start_time = time.time()
+
 for i, wav_path in enumerate(wav_files):
     # Load and preprocess the audio to a mel spectrogram
     audio = whisper.load_audio(wav_path)
@@ -40,8 +43,13 @@ for i, wav_path in enumerate(wav_files):
     if (i+1) % 10 == 0:
         print(f"Completed {i+1} iterations...")
 
+end_time = time.time()
+
 # Print detected language rates
 print("\nLanguage detection rates after sampling:")
 total = sum(lang_counter.values())
 for lang, count in lang_counter.most_common():
-    print(f"{lang}: {count} ({count/total:.2%})") 
+    print(f"{lang}: {count} ({count/total:.2%})")
+
+print(f"\nTotal time: {end_time - start_time:.2f} seconds for {len(wav_files)} files.")
+print(f"Average time per file: {(end_time - start_time)/len(wav_files):.2f} seconds.") 
