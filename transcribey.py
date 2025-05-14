@@ -16,6 +16,8 @@
 
 # Now, go through all non-english ones and use fastest model for each language. 
 
+from utils import get_all_filenames
+
 model_comparison = [
     {
         "model": "nvidia/parakeet-tdt-0.6b-v2",
@@ -72,3 +74,5 @@ def select_model(language, prioritize_speed=True):
         # Most accurate: lowest WER
         candidates = sorted(candidates, key=lambda m: m["WER"])
     return candidates[0]["model"]
+
+wav_files_dict = get_all_filenames('fake_wavs')
