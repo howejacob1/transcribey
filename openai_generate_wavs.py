@@ -1,5 +1,6 @@
 import openai
 import toml
+import os
 
 # Load OpenAI API key from secrets.toml
 secrets = toml.load("secrets.toml")
@@ -31,10 +32,11 @@ def synthesize_wav(text, output_path, voice="onyx"):
     print(f"WAV file saved to {output_path}")
 
 def main():
+    os.makedirs("fake_wavs", exist_ok=True)
     for i in range(5):
         conversation = generate_conversation()
         print(f"Conversation {i+1}:\n{conversation}\n")
-        output_path = f"openai_fake_conversation_{i+1}.wav"
+        output_path = f"fake_wavs/openai_fake_conversation_{i+1}.wav"
         synthesize_wav(conversation, output_path)
 
 if __name__ == "__main__":
