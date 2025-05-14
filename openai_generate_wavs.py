@@ -1,6 +1,9 @@
 import openai
 import toml
 import os
+import time
+import random
+import string
 
 # Load OpenAI API key from secrets.toml
 secrets = toml.load("secrets.toml")
@@ -36,7 +39,9 @@ def main():
     for i in range(5):
         conversation = generate_conversation()
         print(f"Conversation {i+1}:\n{conversation}\n")
-        output_path = f"fake_wavs/openai_fake_conversation_{i+1}.wav"
+        timestamp = int(time.time() * 1000)
+        rand_suffix = ''.join(random.choices(string.ascii_lowercase + string.digits, k=6))
+        output_path = f"fake_wavs/openai_fake_conversation_{timestamp}_{rand_suffix}.wav"
         synthesize_wav(conversation, output_path)
 
 if __name__ == "__main__":
