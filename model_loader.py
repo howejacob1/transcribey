@@ -33,9 +33,12 @@ def load_nvidia_parakeet_tdt_ctc_110m():
 
 
 def load_nvidia_canary_1b_flash():
-    """Load nvidia/canary-1b-flash model."""
-    # TODO: Implement actual loading code
-    pass
+    """Load nvidia/canary-1b-flash model using NVIDIA NeMo."""
+    try:
+        nemo_asr = importlib.import_module("nemo.collections.asr")
+    except ImportError as e:
+        raise ImportError("nemo_toolkit is required to load this model. Install with: pip install nemo_toolkit['all']") from e
+    return nemo_asr.models.ASRModel.from_pretrained(model_name="nvidia/canary-1b-flash")
 
 
 # Map model names to loader functions
@@ -56,3 +59,6 @@ def load_model(model_name):
     if loader is None:
         raise ValueError(f"No loader function for model: {model_name}")
     return loader() 
+
+
+# ok now do the same with TitaNet-LID Rep-TDNN whus VoxLingua107 ECAPA-TDNN CommonLanguage ECAPA
