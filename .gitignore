@@ -2,3 +2,5 @@ fake_wavs/*.wav .secrets.toml
 fake_wavs/
 .secrets.toml
 venv/
+venv/*
+*.pyc
