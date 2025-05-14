@@ -1,1 +1,1 @@
- 
+ # ok now do the same with TitaNet-LID Rep-TDNN whus VoxLingua107 ECAPA-TDNN CommonLanguage ECAPA
