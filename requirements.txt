@@ -1,9 +1,5 @@
 openai
-
 toml
-
-deepseek-infer
-
 torch
 torchaudio
 librosa
@@ -12,4 +8,5 @@ soundfile
 transformers
 matplotlib
 scikit-learn
-sentencepiece 
+sentencepiece
+nemo_toolkit[all] 
