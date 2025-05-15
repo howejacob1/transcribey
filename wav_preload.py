@@ -2,6 +2,7 @@ import os
 import shutil
 import threading
 import time
+from utils import wav_file_generator
 
 
 def get_total_size(directory):
@@ -22,20 +23,25 @@ def preload_wavs_threaded(source_dir, dest_dir, size_limit_bytes=1*1024*1024*102
     def worker():
         os.makedirs(dest_dir, exist_ok=True)
         copied = set(os.listdir(dest_dir))
+        wav_gen = wav_file_generator(source_dir)
         while True:
             # Check if we've reached the size limit
             total_size = get_total_size(dest_dir)
             if total_size >= size_limit_bytes:
                 print(f"[wav_preload] Buffer full: {total_size/(1024*1024):.2f} MB")
                 break
-            # Find all .wav files in source_dir
-            source_wavs = []
-            for root, _, files in os.walk(source_dir):
-                for f in files:
-                    if f.endswith('.wav'):
-                        source_wavs.append(os.path.join(root, f))
-            # Only copy files not already in dest_dir
-            to_copy = [f for f in source_wavs if os.path.basename(f) not in copied]
+            # Use wav_file_generator to get .wav files one at a time
+            to_copy = []
+            try:
+                while True:
+                    src = next(wav_gen)
+                    if os.path.basename(src) not in copied:
+                        to_copy.append(src)
+                    # Only collect a batch per loop
+                    if len(to_copy) >= 10:
+                        break
+            except StopIteration:
+                pass
             if not to_copy:
                 print("[wav_preload] No more wavs to copy. Exiting thread.")
                 break
