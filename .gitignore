@@ -5,3 +5,4 @@ venv/
 venv/*
 *.pyc
 secrets.toml
+working_memory/*
