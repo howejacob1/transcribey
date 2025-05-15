@@ -40,6 +40,7 @@ import time
 import os
 import transcription_models
 from wav_preload import preload_wavs_threaded
+import shutil
 
 
 model_comparison = [
@@ -91,10 +92,25 @@ def select_transcription_model(language, prioritize_speed=True):
         candidates = sorted(candidates, key=lambda m: m["WER"])
     return candidates[0]["model"]
 
+def clear_wav_cache():
+    """
+    Remove all files and directories under working_memory.
+    """
+    import shutil
+    cache_dir = 'working_memory'
+    for entry in os.listdir(cache_dir):
+        path = os.path.join(cache_dir, entry)
+        if os.path.isfile(path) or os.path.islink(path):
+            os.remove(path)
+        elif os.path.isdir(path):
+            shutil.rmtree(path)
+
 def main():
+    # Clear the working_memory cache
+    clear_wav_cache()
     # Start background thread to preload wavs
     source_dir = '/media/jhowe/BACKUPBOY/fake_wavs/'
-    dest_dir = 'working_memory/raw_wavs'
+    dest_dir = 'working_memory/raw_wavs/'
     preload_thread = preload_wavs_threaded(source_dir, dest_dir)
     print("Loading nvidia/parakeet-tdt_ctc-110m ...")
     parakeet_model = transcription_models.load_nvidia_parakeet_tdt_ctc_110m()
@@ -105,7 +121,37 @@ def main():
     print("Loading openai/whisper-tiny ...")
     whisper_tiny_model, whisper_tiny_processor, whisper_tiny_device = transcription_models.load_openai_whisper_tiny()
     print("Loaded openai/whisper-tiny.")
-    # Load wav files up to a total of 1GB (1073741824 bytes)
  
+    # After loading models, move up to 1GB of wavs to wavs_to_id in a loop until preload_thread exits
+    raw_wavs_dir = 'working_memory/raw_wavs/'
+    wavs_to_id_dir = 'working_memory/wavs_to_id/'
+    os.makedirs(wavs_to_id_dir, exist_ok=True)
+    max_bytes = 1073741824  # 1GB
+
+    def move_up_to_1gb():
+        wav_files = [f for f in os.listdir(raw_wavs_dir) if f.endswith('.wav')]
+        moved_bytes = 0
+        moved_files = 0
+        for wav_file in wav_files:
+            src = os.path.join(raw_wavs_dir, wav_file)
+            dst = os.path.join(wavs_to_id_dir, wav_file)
+            file_size = os.path.getsize(src)
+            if moved_bytes + file_size > max_bytes:
+                break
+            shutil.move(src, dst)
+            moved_bytes += file_size
+            moved_files += 1
+        print(f"Moved {moved_files} wav files totaling {moved_bytes / (1024*1024):.2f} MB to {wavs_to_id_dir}")
+        return moved_files
+
+    # Loop until preload_thread exits
+    while preload_thread.is_alive():
+        moved = move_up_to_1gb()
+        if moved == 0:
+            time.sleep(1)
+
+    # Do one final move for any remaining files
+    move_up_to_1gb()
+
 if __name__ == "__main__":
     main()
