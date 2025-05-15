@@ -11,3 +11,14 @@ def get_all_filenames(directory):
             rel_path = os.path.relpath(abs_path, directory)
             file_dict[rel_path] = abs_path
     return file_dict 
+
+def wav_file_generator(directory):
+    """
+    Generator that recursively walks a directory and yields .wav file paths one at a time.
+    Retains state between calls.
+    """
+    for root, _, files in os.walk(directory):
+        for f in files:
+            if f.endswith('.wav'):
+                yield os.path.join(root, f)
+
