@@ -22,7 +22,13 @@ def preload_wavs_threaded(source_dir, dest_dir, size_limit_bytes=1*1024*1024*102
     """
     def worker():
         os.makedirs(dest_dir, exist_ok=True)
-        copied = set(os.listdir(dest_dir))
+        copied = set()
+        for root, _, files in os.walk(dest_dir):
+            for f in files:
+                if f.endswith('.wav'):
+                    # Store relative path from dest_dir
+                    rel_path = os.path.relpath(os.path.join(root, f), dest_dir)
+                    copied.add(rel_path)
         wav_gen = wav_file_generator(source_dir)
         while True:
             # Check if we've reached the size limit
@@ -35,8 +41,9 @@ def preload_wavs_threaded(source_dir, dest_dir, size_limit_bytes=1*1024*1024*102
             try:
                 while True:
                     src = next(wav_gen)
-                    if os.path.basename(src) not in copied:
-                        to_copy.append(src)
+                    rel_path = os.path.relpath(src, source_dir)
+                    if rel_path not in copied:
+                        to_copy.append((src, rel_path))
                     # Only collect a batch per loop
                     if len(to_copy) >= 10:
                         break
@@ -45,16 +52,17 @@ def preload_wavs_threaded(source_dir, dest_dir, size_limit_bytes=1*1024*1024*102
             if not to_copy:
                 print("[wav_preload] No more wavs to copy. Exiting thread.")
                 break
-            for src in to_copy:
-                dest = os.path.join(dest_dir, os.path.basename(src))
+            for src, rel_path in to_copy:
+                dest = os.path.join(dest_dir, rel_path)
                 temp_dest = dest + ".tmp"
+                os.makedirs(os.path.dirname(dest), exist_ok=True)
                 try:
                     # Copy to temp file first
                     with open(src, 'rb') as fsrc, open(temp_dest, 'wb') as fdst:
                         shutil.copyfileobj(fsrc, fdst)
                     # Rename to final name (atomic)
                     os.rename(temp_dest, dest)
-                    copied.add(os.path.basename(src))
+                    copied.add(rel_path)
                     print(f"[wav_preload] Copied: {src} -> {dest}")
                 except Exception as e:
                     print(f"[wav_preload] Error copying {src}: {e}")
