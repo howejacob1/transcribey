@@ -1,6 +1,25 @@
 # Architecture: 
 
-# Load all filesystem filenames into memory
+# We will be getting several hard drives, each one has tons of wavs.
+# Load some set of wavs into ram. Always fill up.
+# For each wav, detect language.
+# For each wav, transcribe.
+# Then, save the vcon.
+
+# Our job is to transcribe each wav file to a vcon. 
+# We will put each back onto the target hard drive.
+
+# Exo is great-- However, it can't do nemo files. 
+
+# I am stuck with nemo files. I need the acceleration. 
+# Here's what we'll do-- 
+
+# Find wav files- load into buffer (in ram)
+
+# # Detect language on all in batch
+# Transcribe all (by language) in each batch
+# Save each into a vcon
+# Make a vcon for each file. 
 
 # Make a vcon for each file
 
@@ -16,8 +35,9 @@
 
 # Now, go through all non-english ones and use fastest model for each language. 
 
-from utils import get_all_filenames
+from utils import get_all_filenames, wav_file_generator
 import time
+
 
 model_comparison = [
     {
@@ -67,3 +87,21 @@ def select_transcription_model(language, prioritize_speed=True):
         # Most accurate: lowest WER
         candidates = sorted(candidates, key=lambda m: m["WER"])
     return candidates[0]["model"]
+
+def main():
+    # Example: Load up to 10 wav files using wav_file_generator
+    directory = '/media/jhowe/BACKUPBOY/fake_wavs/'  # Or set to your actual wav directory
+    num_files = 10
+    gen = wav_file_generator(directory)
+    wavs = []
+    for _ in range(num_files):
+        try:
+            wavs.append(next(gen))
+        except StopIteration:
+            break
+    print(f"Loaded {len(wavs)} wav files:")
+    for wav in wavs:
+        print(wav)
+
+if __name__ == "__main__":
+    main()
