@@ -7,6 +7,16 @@ import time
 # Directory containing wav files
 dir = 'fake_wavs'
 
+def wav_file_generator(directory):
+    """
+    Generator that recursively walks a directory and yields .wav file paths one at a time.
+    Retains state between calls.
+    """
+    for root, _, files in os.walk(directory):
+        for f in files:
+            if f.endswith('.wav'):
+                yield os.path.join(root, f)
+
 # Recursively find up to 100 wav files in the directory and subdirectories
 wav_files = []
 for root, _, files in os.walk(dir):
