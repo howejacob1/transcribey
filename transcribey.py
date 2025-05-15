@@ -73,8 +73,6 @@ model_comparison = [
     }
 ]
 
-
-
 languages = ["en", "es"]
 
 def select_transcription_model(language, prioritize_speed=True):
