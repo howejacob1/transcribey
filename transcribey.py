@@ -37,6 +37,7 @@
 
 from utils import get_all_filenames, wav_file_generator
 import time
+import os
 
 
 model_comparison = [
@@ -89,17 +90,24 @@ def select_transcription_model(language, prioritize_speed=True):
     return candidates[0]["model"]
 
 def main():
-    # Example: Load up to 10 wav files using wav_file_generator
+    # Load wav files up to a total of 1GB (1073741824 bytes)
     directory = '/media/jhowe/BACKUPBOY/fake_wavs/'  # Or set to your actual wav directory
-    num_files = 10
+    size_limit_bytes = 1 * 1024 * 1024 * 1024  # 1GB
     gen = wav_file_generator(directory)
     wavs = []
-    for _ in range(num_files):
+    total_size = 0
+    while total_size < size_limit_bytes:
         try:
-            wavs.append(next(gen))
+            wav = next(gen)
+            wav_size = os.path.getsize(wav)
+            if total_size + wav_size > size_limit_bytes and wavs:
+                break
+            wavs.append(wav)
+            total_size += wav_size
+            print(f"Loaded: {wav} | Current buffer: {total_size / (1024*1024):.2f} MB")
         except StopIteration:
             break
-    print(f"Loaded {len(wavs)} wav files:")
+    print(f"\nLoaded {len(wavs)} wav files, total size: {total_size / (1024*1024):.2f} MB")
     for wav in wavs:
         print(wav)
 
