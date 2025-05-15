@@ -9,13 +9,16 @@ from difflib import SequenceMatcher
 from transformers.utils import logging
 logging.set_verbosity_error()
 from jiwer import wer
+from datasets import load_dataset
+
+ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
 
 # Path to audio
 audio_path = 'training/transcription-example-2.mp3'
 
 # List of HuggingFace model IDs, largest to smallest
 model_ids = [
-    'openai/whisper-large-v2',
+    'openai/whisper-large-v2', 
     'distil-whisper/distil-large-v3',
     'openai/whisper-large',
     'openai/whisper-medium',

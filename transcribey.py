@@ -29,14 +29,6 @@ model_comparison = [
         "note": "Most accurate english model"
     },
     {
-        "model": "microsoft/Phi-4-multimodal-instruct",
-        "languages": ["en", "zh", "de", "fr", "it", "ja", "es", "pt"],
-        "WER": 6.14,
-        "RTFx": 62.12,
-        "size_gb": 11.2,
-        "note": "Most accurate Chinese, German, French, Italian, Japanese, Spanish, Portuguese Model"
-    },
-    {
         "model": "nvidia/parakeet-tdt_ctc-110m",
         "languages": ["en"],
         "WER": 7.49,

@@ -20,15 +20,25 @@ def load_nvidia_parakeet_tdt_06b_v2():
 
 
 def load_microsoft_phi_4_multimodal_instruct():
-    """Load microsoft/Phi-4-multimodal-instruct model using HuggingFace Transformers with trust_remote_code=True. Returns (model, processor)."""
+    """Load microsoft/Phi-4-multimodal-instruct model using HuggingFace Transformers with trust_remote_code=True. Returns (model, processor, device)."""
     try:
-        from transformers import AutoModel, AutoProcessor
+        from transformers import AutoModelForCausalLM, AutoProcessor
         import torch
     except ImportError as e:
         raise ImportError("transformers and torch are required to load this model. Install with: pip install transformers torch") from e
-    model = AutoModel.from_pretrained("microsoft/Phi-4-multimodal-instruct", trust_remote_code=True)
-    processor = AutoProcessor.from_pretrained("microsoft/Phi-4-multimodal-instruct", trust_remote_code=True)
-    return model, processor
+    model_path = "microsoft/Phi-4-multimodal-instruct"
+    processor = AutoProcessor.from_pretrained(model_path, trust_remote_code=True)
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    model = AutoModelForCausalLM.from_pretrained(
+        model_path,
+        device_map="cuda" if torch.cuda.is_available() else "cpu",
+        torch_dtype="auto",
+        trust_remote_code=True,
+        attn_implementation='flash_attention_2' if torch.cuda.is_available() else 'eager',
+    )
+    if device.type == 'cuda':
+        model = model.cuda()
+    return model, processor, device
 
 
 def load_nvidia_parakeet_tdt_ctc_110m():
@@ -227,32 +237,3 @@ if __name__ == "__main__":
     import sys
     import traceback
     
-    # List all load functions defined in this module
-    load_functions = [
-        load_nvidia_parakeet_tdt_06b_v2,
-        load_microsoft_phi_4_multimodal_instruct,
-        load_nvidia_parakeet_tdt_ctc_110m,
-        load_nvidia_canary_1b_flash,
-        load_openai_whisper_large_v2,
-        load_distil_whisper_distil_large_v3,
-        load_openai_whisper_large,
-        load_openai_whisper_medium,
-        load_openai_whisper_medium_en,
-        load_openai_whisper_small,
-        load_openai_whisper_small_en,
-        load_openai_whisper_base,
-        load_openai_whisper_base_en,
-        load_openai_whisper_tiny,
-        load_openai_whisper_tiny_en,
-    ]
-    
-    for func in load_functions:
-        print(f"\nTesting {func.__name__}...")
-        try:
-            result = func()
-            print(f"  Success: {func.__name__} returned {type(result)}")
-        except Exception as e:
-            print(f"  ERROR in {func.__name__}: {e}")
-            traceback.print_exc()
-
-
