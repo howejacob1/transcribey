@@ -39,6 +39,7 @@ from utils import get_all_filenames, wav_file_generator
 import time
 import os
 import transcription_models
+from wav_preload import preload_wavs_threaded
 
 
 model_comparison = [
@@ -91,6 +92,10 @@ def select_transcription_model(language, prioritize_speed=True):
     return candidates[0]["model"]
 
 def main():
+    # Start background thread to preload wavs
+    source_dir = '/media/jhowe/BACKUPBOY/fake_wavs/'
+    dest_dir = 'working_memory/raw_wavs'
+    preload_thread = preload_wavs_threaded(source_dir, dest_dir)
     print("Loading nvidia/parakeet-tdt_ctc-110m ...")
     parakeet_model = transcription_models.load_nvidia_parakeet_tdt_ctc_110m()
     print("Loaded nvidia/parakeet-tdt_ctc-110m.")
@@ -101,25 +106,6 @@ def main():
     whisper_tiny_model, whisper_tiny_processor, whisper_tiny_device = transcription_models.load_openai_whisper_tiny()
     print("Loaded openai/whisper-tiny.")
     # Load wav files up to a total of 1GB (1073741824 bytes)
-    directory = '/media/jhowe/BACKUPBOY/fake_wavs/'  # Or set to your actual wav directory
-    size_limit_bytes = 1 * 1024 * 1024 * 1024  # 1GB
-    gen = wav_file_generator(directory)
-    wavs = []
-    total_size = 0
-    while total_size < size_limit_bytes:
-        try:
-            wav = next(gen)
-            wav_size = os.path.getsize(wav)
-            if total_size + wav_size > size_limit_bytes and wavs:
-                break
-            wavs.append(wav)
-            total_size += wav_size
-            print(f"Loaded: {wav} | Current buffer: {total_size / (1024*1024):.2f} MB")
-        except StopIteration:
-            break
-    print(f"\nLoaded {len(wavs)} wav files, total size: {total_size / (1024*1024):.2f} MB")
-    for wav in wavs:
-        print(wav)
-
+ 
 if __name__ == "__main__":
     main()
