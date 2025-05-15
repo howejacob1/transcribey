@@ -50,6 +50,7 @@ def preload_wavs_threaded(source_dir, dest_dir, size_limit_bytes=1*1024*1024*102
             except StopIteration:
                 pass
             if not to_copy:
+                print("[wav_preload] Buffer empty. Waiting for new files or stopping.")
                 print("[wav_preload] No more wavs to copy. Exiting thread.")
                 break
             for src, rel_path in to_copy:
@@ -63,9 +64,10 @@ def preload_wavs_threaded(source_dir, dest_dir, size_limit_bytes=1*1024*1024*102
                     # Rename to final name (atomic)
                     os.rename(temp_dest, dest)
                     copied.add(rel_path)
-                    print(f"[wav_preload] Copied: {src} -> {dest}")
+                    # Suppress per-file copy print
                 except Exception as e:
-                    print(f"[wav_preload] Error copying {src}: {e}")
+                    # Suppress error print
+                    pass
                 # Check size after each copy
                 total_size = get_total_size(dest_dir)
                 if total_size >= size_limit_bytes:
