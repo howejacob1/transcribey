@@ -108,7 +108,7 @@ def clear_wav_cache():
         elif os.path.isdir(path):
             shutil.rmtree(path)
 
-def get_top_two_languages(wav_path, model, processor, device):
+def get_detected_languages(wav_path, model, processor, device, threshold=0.2):
     import torch
     import torchaudio
     # Load audio
@@ -136,10 +136,9 @@ def get_top_two_languages(wav_path, model, processor, device):
     lang_logits = logits[0, language_token_ids]
     lang_probs = torch.softmax(lang_logits, dim=-1).cpu().numpy()
 
-    # Get top two languages
-    top_indices = lang_probs.argsort()[-2:][::-1]
-    top_two_langs = [language_tokens[i][2:-2] for i in top_indices]  # strip <| and |>
-    return top_two_langs
+    # Get all languages above threshold
+    detected_langs = [language_tokens[i][2:-2] for i, prob in enumerate(lang_probs) if prob >= threshold]
+    return detected_langs
 
 def main():
     # Clear the working_memory cache
@@ -183,15 +182,15 @@ def main():
     # Do one final move for any remaining files
     start_processing_wavs()
 
-    # Identify top two languages for each wav in wavs_to_id_dir
+    # Identify languages above threshold for each wav in wavs_to_id_dir
     lang_results = {}
     for wav_file in os.listdir(wavs_to_id_dir):
         if not wav_file.endswith('.wav'):
             continue
         wav_path = os.path.join(wavs_to_id_dir, wav_file)
-        top_two = get_top_two_languages(wav_path, whisper_tiny_model, whisper_tiny_processor, whisper_tiny_device)
-        lang_results[wav_file] = top_two
-        print(f"{wav_file}: Top 2 languages: {top_two}")
+        detected_langs = get_detected_languages(wav_path, whisper_tiny_model, whisper_tiny_processor, whisper_tiny_device)
+        lang_results[wav_file] = detected_langs
+        print(f"{wav_file}: Detected languages (>=20%): {detected_langs}")
     print("\nAll language results:")
     print(lang_results)
 
