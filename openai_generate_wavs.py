@@ -5,6 +5,7 @@ import time
 import random
 import string
 import concurrent.futures
+import transcription_models
 
 # Load OpenAI API key from .secrets.toml
 secrets = toml.load(".secrets.toml")
@@ -63,6 +64,15 @@ def generate_one_wav(i):
 
 def main():
     os.makedirs("fake_wavs", exist_ok=True)
+    print("Loading nvidia/parakeet-tdt_ctc-110m ...")
+    parakeet_model = transcription_models.load_nvidia_parakeet_tdt_ctc_110m()
+    print("Loaded nvidia/parakeet-tdt_ctc-110m.")
+    print("Loading nvidia/canary-1b-flash ...")
+    canary_model = transcription_models.load_nvidia_canary_1b_flash()
+    print("Loaded nvidia/canary-1b-flash.")
+    print("Loading openai/whisper-tiny ...")
+    whisper_tiny_model, whisper_tiny_processor, whisper_tiny_device = transcription_models.load_openai_whisper_tiny()
+    print("Loaded openai/whisper-tiny.")
     total = 100
     batch_size = 20
     for batch_start in range(0, total, batch_size):

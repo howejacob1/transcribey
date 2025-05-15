@@ -38,6 +38,7 @@
 from utils import get_all_filenames, wav_file_generator
 import time
 import os
+import transcription_models
 
 
 model_comparison = [
@@ -90,6 +91,15 @@ def select_transcription_model(language, prioritize_speed=True):
     return candidates[0]["model"]
 
 def main():
+    print("Loading nvidia/parakeet-tdt_ctc-110m ...")
+    parakeet_model = transcription_models.load_nvidia_parakeet_tdt_ctc_110m()
+    print("Loaded nvidia/parakeet-tdt_ctc-110m.")
+    print("Loading nvidia/canary-1b-flash ...")
+    canary_model = transcription_models.load_nvidia_canary_1b_flash()
+    print("Loaded nvidia/canary-1b-flash.")
+    print("Loading openai/whisper-tiny ...")
+    whisper_tiny_model, whisper_tiny_processor, whisper_tiny_device = transcription_models.load_openai_whisper_tiny()
+    print("Loaded openai/whisper-tiny.")
     # Load wav files up to a total of 1GB (1073741824 bytes)
     directory = '/media/jhowe/BACKUPBOY/fake_wavs/'  # Or set to your actual wav directory
     size_limit_bytes = 1 * 1024 * 1024 * 1024  # 1GB

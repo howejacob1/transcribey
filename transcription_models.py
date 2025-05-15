@@ -19,28 +19,6 @@ def load_nvidia_parakeet_tdt_06b_v2():
     return nemo_asr.models.ASRModel.from_pretrained(model_name="nvidia/parakeet-tdt-0.6b-v2")
 
 
-def load_microsoft_phi_4_multimodal_instruct():
-    """Load microsoft/Phi-4-multimodal-instruct model using HuggingFace Transformers with trust_remote_code=True. Returns (model, processor, device)."""
-    try:
-        from transformers import AutoModelForCausalLM, AutoProcessor
-        import torch
-    except ImportError as e:
-        raise ImportError("transformers and torch are required to load this model. Install with: pip install transformers torch") from e
-    model_path = "microsoft/Phi-4-multimodal-instruct"
-    processor = AutoProcessor.from_pretrained(model_path, trust_remote_code=True)
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    model = AutoModelForCausalLM.from_pretrained(
-        model_path,
-        device_map="cuda" if torch.cuda.is_available() else "cpu",
-        torch_dtype="auto",
-        trust_remote_code=True,
-        attn_implementation='flash_attention_2' if torch.cuda.is_available() else 'eager',
-    )
-    if device.type == 'cuda':
-        model = model.cuda()
-    return model, processor, device
-
-
 def load_nvidia_parakeet_tdt_ctc_110m():
     """Load nvidia/parakeet-tdt_ctc-110m model using NVIDIA NeMo."""
     try:
@@ -212,28 +190,6 @@ def load_openai_whisper_tiny_en():
     model = model.to(device)
     return model, processor, device
 
-
-# Map model names to loader functions
-MODEL_LOADERS = {
-    "nvidia/parakeet-tdt-0.6b-v2": load_nvidia_parakeet_tdt_06b_v2,
-    "microsoft/Phi-4-multimodal-instruct": load_microsoft_phi_4_multimodal_instruct,
-    "nvidia/parakeet-tdt_ctc-110m": load_nvidia_parakeet_tdt_ctc_110m,
-    "nvidia/canary-1b-flash": load_nvidia_canary_1b_flash,
-}
-
-
-def load_transcription_model(model_name):
-    """
-    Load a model by name using the appropriate loader function.
-    Returns the loaded model object, or None if not found.
-    """
-    loader = MODEL_LOADERS.get(model_name)
-    if loader is None:
-        raise ValueError(f"No loader function for model: {model_name}")
-    return loader()
-
-
 if __name__ == "__main__":
     import sys
     import traceback
-    
