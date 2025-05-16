@@ -182,6 +182,8 @@ def main():
 
     # Identify languages above threshold for each wav in wavs_to_id_dir
     lang_results = {}
+    non_english_dir = 'working_memory/non_english/'
+    os.makedirs(non_english_dir, exist_ok=True)
     for wav_file in os.listdir(wavs_to_id_dir):
         if not wav_file.endswith('.wav'):
             continue
@@ -189,6 +191,12 @@ def main():
         detected_langs = get_detected_languages(wav_path, whisper_tiny_model, whisper_tiny_processor, whisper_tiny_device)
         lang_results[wav_file] = detected_langs
         print(f"{wav_file}: Detected languages (>=20%): {detected_langs}")
+        # If not exclusively English, move to non_english_dir
+        if any(lang != 'en' for lang in detected_langs):
+            dest_path = os.path.join(non_english_dir, wav_file)
+            shutil.move(wav_path, dest_path)
+            print(f"Moved {wav_file} to {non_english_dir} (non-English detected)")
+    
     print("\nAll language results:")
     print(lang_results)
 
