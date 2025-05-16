@@ -14,7 +14,6 @@ def clear_wav_cache():
     """
     Remove all files and directories under working_memory.
     """
-    import shutil
     cache_dir = 'working_memory'
     for entry in os.listdir(cache_dir):
         path = os.path.join(cache_dir, entry)
@@ -24,8 +23,6 @@ def clear_wav_cache():
             shutil.rmtree(path)
 
 def get_detected_languages(wav_path, model, processor, device, threshold=0.2):
-    import torch
-    import torchaudio
     # Load audio
     waveform, sample_rate = torchaudio.load(wav_path)
     target_sample_rate = 16000
@@ -56,9 +53,6 @@ def get_detected_languages(wav_path, model, processor, device, threshold=0.2):
     return detected_langs
 
 def batch_get_detected_languages(wav_paths, model, processor, device, threshold=0.2):
-    import torch
-    import torchaudio
-
     waveforms = []
     for wav_path in wav_paths:
         waveform, sample_rate = torchaudio.load(wav_path)
