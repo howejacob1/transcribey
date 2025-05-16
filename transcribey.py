@@ -1,5 +1,14 @@
 import logging
 logging.basicConfig(level=logging.INFO)
+import time
+import os
+import transcription_models
+from utils import get_all_filenames, wav_file_generator
+from wav_preload import preload_wavs_threaded
+import shutil
+import numpy as np
+import torch
+import torchaudio
 
 # Architecture: 
 
@@ -37,17 +46,6 @@ logging.basicConfig(level=logging.INFO)
 # Write the vcon and remove the wav if successful.
 
 # Now, go through all non-english ones and use fastest model for each language. 
-
-from utils import get_all_filenames, wav_file_generator
-import time
-import os
-import transcription_models
-from wav_preload import preload_wavs_threaded
-import shutil
-import numpy as np
-import torch
-import torchaudio
-
 
 model_comparison = [
     {
@@ -174,7 +172,6 @@ def batch_get_detected_languages(wav_paths, model, processor, device, threshold=
     return results
 
 def main():
-    import time
     total_start_time = time.time()
     # Clear the working_memory cache
     clear_wav_cache()
@@ -220,7 +217,6 @@ def main():
     os.makedirs(non_english_dir, exist_ok=True)
     processed_file_count = 0
     def detect_langs_in_wavs_processing():
-        import time
         nonlocal processed_file_count
         wav_files = [f for f in os.listdir(wavs_processing_dir) if f.endswith('.wav')]
         wav_paths = [os.path.join(wavs_processing_dir, f) for f in wav_files]

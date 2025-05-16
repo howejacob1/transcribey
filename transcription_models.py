@@ -10,6 +10,8 @@ import importlib
 from utils import suppress_output
 import time
 import logging
+from transformers import AutoModelForSpeechSeq2Seq, AutoProcessor
+import torch
 
 logger = logging.getLogger(__name__)
 
@@ -66,8 +68,6 @@ def load_openai_whisper_large_v2():
     start_time = time.time()
     try:
         with suppress_output():
-            from transformers import AutoModelForSpeechSeq2Seq, AutoProcessor
-            import torch
             model = AutoModelForSpeechSeq2Seq.from_pretrained("openai/whisper-large-v2")
             processor = AutoProcessor.from_pretrained("openai/whisper-large-v2")
             device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -84,8 +84,6 @@ def load_openai_whisper_tiny():
     start_time = time.time()
     try:
         with suppress_output():
-            from transformers import AutoModelForSpeechSeq2Seq, AutoProcessor
-            import torch
             model = AutoModelForSpeechSeq2Seq.from_pretrained("openai/whisper-tiny")
             processor = AutoProcessor.from_pretrained("openai/whisper-tiny")
             device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
