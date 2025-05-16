@@ -4,7 +4,7 @@ import time
 import os
 import transcription_models
 from utils import get_all_filenames, wav_file_generator
-from wav_preload import preload_wavs_threaded
+from wav_cache import preload_wavs_threaded
 import shutil
 import numpy as np
 import torch
@@ -87,7 +87,7 @@ def main():
     clear_wav_cache()
     # Start background thread to preload wavs
     source_dir = '/media/jhowe/BACKUPBOY/fake_wavs/'
-    dest_dir = 'working_memory/raw_wavs/'
+    dest_dir = 'working_memory/raw_wavs_cache/'
     preload_thread = preload_wavs_threaded(source_dir, dest_dir, size_limit_bytes=104857600)
     # Remove print statements for model loading
     parakeet_model = transcription_models.load_nvidia_parakeet_tdt_ctc_110m()
@@ -95,8 +95,8 @@ def main():
     whisper_tiny_model, whisper_tiny_processor, whisper_tiny_device = transcription_models.load_openai_whisper_tiny()
  
     # After loading models, move up to 1GB of wavs to wavs_to_id in a loop until preload_thread exits
-    raw_wavs_dir = 'working_memory/raw_wavs/'
-    wavs_processing_dir = 'working_memory/wavs_processing/'
+    raw_wavs_dir = 'working_memory/raw_wavs_cache/'
+    wavs_processing_dir = 'working_memory/wavs_in_progress_cache/'
     os.makedirs(wavs_processing_dir, exist_ok=True)
     max_bytes = 104857600  # 100MB
     
@@ -118,7 +118,7 @@ def main():
 
     vcons = {}
     # Identify languages above threshold for each wav in wavs_to_id_dir
-    non_english_dir = 'working_memory/non_english/'
+    non_english_dir = 'working_memory/non_en_wavs_in_progress_cache/'
     os.makedirs(non_english_dir, exist_ok=True)
     processed_file_count = 0
     def detect_langs_in_wavs_processing():
