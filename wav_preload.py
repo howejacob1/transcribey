@@ -34,7 +34,7 @@ def preload_wavs_threaded(source_dir, dest_dir, size_limit_bytes=1*1024*1024*102
             # Check if we've reached the size limit
             total_size = get_total_size(dest_dir)
             if total_size >= size_limit_bytes:
-                print(f"[wav_preload] Buffer full: {total_size/(1024*1024):.2f} MB")
+                print(f"[wav_cache] Buffer full: {total_size/(1024*1024):.2f} MB")
                 break
             # Use wav_file_generator to get .wav files one at a time
             to_copy = []
@@ -50,8 +50,8 @@ def preload_wavs_threaded(source_dir, dest_dir, size_limit_bytes=1*1024*1024*102
             except StopIteration:
                 pass
             if not to_copy:
-                print("[wav_preload] Buffer empty. Waiting for new files or stopping.")
-                print("[wav_preload] No more wavs to copy. Exiting thread.")
+                print("[wav_cache] Buffer empty. Waiting for new files or stopping.")
+                print("[wav_cache] No more wavs to copy. Exiting thread.")
                 break
             for src, rel_path in to_copy:
                 dest = os.path.join(dest_dir, rel_path)
@@ -71,7 +71,7 @@ def preload_wavs_threaded(source_dir, dest_dir, size_limit_bytes=1*1024*1024*102
                 # Check size after each copy
                 total_size = get_total_size(dest_dir)
                 if total_size >= size_limit_bytes:
-                    print(f"[wav_preload] Buffer full: {total_size/(1024*1024):.2f} MB")
+                    print(f"[wav_cache] Buffer full: {total_size/(1024*1024):.2f} MB")
                     break
             # Sleep briefly to avoid tight loop if not enough files
             time.sleep(1)

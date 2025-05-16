@@ -27,15 +27,22 @@ def clear_wav_cache():
     elapsed = time.time() - start_time
     logging.info(f"Finished clearing working_memory cache in {elapsed:.2f} seconds.")
 
-def batch_get_detected_languages(wav_paths, model, processor, device, threshold=0.2):
+def load_and_resample_waveforms(wav_paths, target_sample_rate=16000):
+    """
+    Loads and resamples a list of wav files to the target sample rate.
+    Returns a list of numpy arrays (waveforms).
+    """
     waveforms = []
     for wav_path in wav_paths:
         waveform, sample_rate = torchaudio.load(wav_path)
-        target_sample_rate = 16000
         if sample_rate != target_sample_rate:
             resampler = torchaudio.transforms.Resample(orig_freq=sample_rate, new_freq=target_sample_rate)
             waveform = resampler(waveform)
         waveforms.append(waveform.squeeze().numpy())
+    return waveforms
+
+def batch_get_detected_languages(wav_paths, model, processor, device, threshold=0.2):
+    waveforms = load_and_resample_waveforms(wav_paths, target_sample_rate=16000)
 
     # Batch process
     input_features = processor(waveforms, sampling_rate=16000, return_tensors="pt").input_features.to(device)

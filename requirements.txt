@@ -21,3 +21,4 @@ pyannote-audio
 # To install with CUDA 12.0, use:
 # pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu126
 flash-attn
+pymongo
