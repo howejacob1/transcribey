@@ -138,7 +138,41 @@ def get_detected_languages(wav_path, model, processor, device, threshold=0.2):
     detected_langs = [language_tokens[i][2:-2] for i, prob in enumerate(lang_probs) if prob >= threshold]
     return detected_langs
 
+def batch_get_detected_languages(wav_paths, model, processor, device, threshold=0.2):
+    import torch
+    import torchaudio
+
+    waveforms = []
+    for wav_path in wav_paths:
+        waveform, sample_rate = torchaudio.load(wav_path)
+        target_sample_rate = 16000
+        if sample_rate != target_sample_rate:
+            resampler = torchaudio.transforms.Resample(orig_freq=sample_rate, new_freq=target_sample_rate)
+            waveform = resampler(waveform)
+        waveforms.append(waveform.squeeze().numpy())
+
+    # Batch process
+    input_features = processor(waveforms, sampling_rate=16000, return_tensors="pt").input_features.to(device)
+
+    tokenizer = processor.tokenizer
+    language_tokens = [t for t in tokenizer.additional_special_tokens if len(t) == 6]
+    language_token_ids = tokenizer.convert_tokens_to_ids(language_tokens)
+
+    with torch.no_grad():
+        logits = model(input_features, decoder_input_ids=torch.tensor([[50258]] * len(wav_paths), device=device)).logits
+    logits = logits[:, 0, :]  # (batch, vocab_size)
+
+    results = []
+    for i in range(len(wav_paths)):
+        lang_logits = logits[i, language_token_ids]
+        lang_probs = torch.softmax(lang_logits, dim=-1).cpu().numpy()
+        detected_langs = [language_tokens[j][2:-2] for j, prob in enumerate(lang_probs) if prob >= threshold]
+        results.append(detected_langs)
+    return results
+
 def main():
+    import time
+    total_start_time = time.time()
     # Clear the working_memory cache
     clear_wav_cache()
     # Start background thread to preload wavs
@@ -181,24 +215,35 @@ def main():
     # Identify languages above threshold for each wav in wavs_to_id_dir
     non_english_dir = 'working_memory/non_english/'
     os.makedirs(non_english_dir, exist_ok=True)
+    processed_file_count = 0
     def detect_langs_in_wavs_processing():
-        for wav_file in os.listdir(wavs_processing_dir):
-            if not wav_file.endswith('.wav'):
-                continue
-            wav_path = os.path.join(wavs_processing_dir, wav_file)
-            detected_langs = get_detected_languages(wav_path, whisper_tiny_model, whisper_tiny_processor, whisper_tiny_device)
+        import time
+        nonlocal processed_file_count
+        wav_files = [f for f in os.listdir(wavs_processing_dir) if f.endswith('.wav')]
+        wav_paths = [os.path.join(wavs_processing_dir, f) for f in wav_files]
+        if not wav_paths:
+            return {}
+        total_bytes = sum(os.path.getsize(p) for p in wav_paths)
+        start_time = time.time()
+        batch_results = batch_get_detected_languages(wav_paths, whisper_tiny_model, whisper_tiny_processor, whisper_tiny_device)
+        elapsed = time.time() - start_time
+        print(f"Processed {len(wav_files)} files, total size: {total_bytes/(1024*1024):.2f} MB, time taken: {elapsed:.2f} seconds")
+        lang_results = {}
+        for wav_file, detected_langs in zip(wav_files, batch_results):
             lang_results[wav_file] = detected_langs
+            processed_file_count += 1
             print(f"{wav_file}: Detected languages (>=20%): {detected_langs}")
             # If not exclusively English, move to non_english_dir
             if any(lang != 'en' for lang in detected_langs):
                 dest_path = os.path.join(non_english_dir, wav_file)
-                shutil.move(wav_path, dest_path)
+                shutil.move(os.path.join(wavs_processing_dir, wav_file), dest_path)
                 print(f"Moved {wav_file} to {non_english_dir} (non-English detected)")
         return lang_results
     lang_results = {}
     transcription_results = {}
     last_time_there_were_files = time.time()
     max_no_new_file_seconds = 5
+    MAX_FILES = 10000
     while True:
         start_processing_wavs()
         # Check for new wav files in raw_wavs_dir
@@ -213,6 +258,9 @@ def main():
 
         # First
         lang_results.update(detect_langs_in_wavs_processing())
+        if processed_file_count >= MAX_FILES:
+            print(f"Processed {processed_file_count} files, reached limit of {MAX_FILES}. Exiting main loop.")
+            break
         # INSERT_YOUR_CODE
         # Check if non_english_dir exceeds 100MB
         non_english_wavs = [f for f in os.listdir(non_english_dir) if f.endswith('.wav')]
@@ -251,8 +299,11 @@ def main():
         print(f"Number of files processed: {len(lang_results)}")
         time.sleep(3)
 
-    print("\nAll language results:")
+    total_elapsed = time.time() - total_start_time
+    print(f"\nAll language results:")
     print(lang_results)
+    print(f"\nTotal files processed: {processed_file_count}")
+    print(f"Total script runtime: {total_elapsed:.2f} seconds")
 
 if __name__ == "__main__":
     main()
