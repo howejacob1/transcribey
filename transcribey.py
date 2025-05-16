@@ -9,6 +9,7 @@ import shutil
 import numpy as np
 import torch
 import torchaudio
+import settings
 
 def clear_wav_cache():
     """
@@ -86,19 +87,19 @@ def main():
     # Clear the working_memory cache
     clear_wav_cache()
     # Start background thread to preload wavs
-    source_dir = '/media/jhowe/BACKUPBOY/fake_wavs/'
-    dest_dir = 'working_memory/raw_wavs_cache/'
-    preload_thread = preload_wavs_threaded(source_dir, dest_dir, size_limit_bytes=104857600)
+    source_dir = settings.source_dir
+    dest_dir = settings.dest_dir
+    preload_thread = preload_wavs_threaded(source_dir, dest_dir, size_limit_bytes=settings.preload_size_limit_bytes)
     # Remove print statements for model loading
     parakeet_model = transcription_models.load_nvidia_parakeet_tdt_ctc_110m()
     canary_model = transcription_models.load_nvidia_canary_1b_flash()
     whisper_tiny_model, whisper_tiny_processor, whisper_tiny_device = transcription_models.load_openai_whisper_tiny()
  
     # After loading models, move up to 1GB of wavs to wavs_to_id in a loop until preload_thread exits
-    raw_wavs_dir = 'working_memory/raw_wavs_cache/'
-    wavs_processing_dir = 'working_memory/wavs_in_progress_cache/'
+    raw_wavs_dir = settings.dest_dir
+    wavs_processing_dir = settings.wavs_in_progress_dir
     os.makedirs(wavs_processing_dir, exist_ok=True)
-    max_bytes = 104857600  # 100MB
+    max_bytes = settings.max_bytes
     
     def start_processing_wavs():
         wav_files = [f for f in os.listdir(raw_wavs_dir) if f.endswith('.wav')]
@@ -118,7 +119,7 @@ def main():
 
     vcons = {}
     # Identify languages above threshold for each wav in wavs_to_id_dir
-    non_english_dir = 'working_memory/non_en_wavs_in_progress_cache/'
+    non_english_dir = settings.non_en_wavs_in_progress_dir
     os.makedirs(non_english_dir, exist_ok=True)
     processed_file_count = 0
     def detect_langs_in_wavs_processing():
@@ -129,7 +130,7 @@ def main():
             return {}
         total_bytes = sum(os.path.getsize(p) for p in wav_paths)
         start_time = time.time()
-        batch_results = batch_get_detected_languages(wav_paths, whisper_tiny_model, whisper_tiny_processor, whisper_tiny_device)
+        batch_results = batch_get_detected_languages(wav_paths, whisper_tiny_model, whisper_tiny_processor, whisper_tiny_device, threshold=settings.lang_detect_threshold)
         elapsed = time.time() - start_time
         print(f"Processed {len(wav_files)} files, total size: {total_bytes/(1024*1024):.2f} MB, time taken: {elapsed:.2f} seconds")
         lang_results = {}
@@ -146,8 +147,8 @@ def main():
     lang_results = {}
     transcription_results = {}
     last_time_there_were_files = time.time()
-    max_no_new_file_seconds = 5
-    MAX_FILES = 10000
+    max_no_new_file_seconds = settings.max_no_new_file_seconds
+    MAX_FILES = settings.max_files
     while True:
         start_processing_wavs()
         # Check for new wav files in raw_wavs_dir
