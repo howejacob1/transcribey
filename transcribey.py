@@ -1,3 +1,6 @@
+import logging
+logging.basicConfig(level=logging.INFO)
+
 # Architecture: 
 
 # We will be getting several hard drives, each one has tons of wavs.
