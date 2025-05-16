@@ -15,6 +15,8 @@ def clear_wav_cache():
     """
     Remove all files and directories under working_memory.
     """
+    logging.info("Starting to clear working_memory cache...")
+    start_time = time.time()
     cache_dir = 'working_memory'
     for entry in os.listdir(cache_dir):
         path = os.path.join(cache_dir, entry)
@@ -22,36 +24,8 @@ def clear_wav_cache():
             os.remove(path)
         elif os.path.isdir(path):
             shutil.rmtree(path)
-
-def get_detected_languages(wav_path, model, processor, device, threshold=0.2):
-    # Load audio
-    waveform, sample_rate = torchaudio.load(wav_path)
-    target_sample_rate = 16000
-    if sample_rate != target_sample_rate:
-        resampler = torchaudio.transforms.Resample(orig_freq=sample_rate, new_freq=target_sample_rate)
-        waveform = resampler(waveform)
-        sample_rate = target_sample_rate
-    # Prepare input features for Whisper
-    input_features = processor(waveform.squeeze().numpy(), sampling_rate=sample_rate, return_tensors="pt").input_features.to(device)
-
-    # Get the language tokens from the tokenizer
-    tokenizer = processor.tokenizer
-    # All language tokens in Whisper are 6 characters long, e.g., '<|en|>'
-    language_tokens = [t for t in tokenizer.additional_special_tokens if len(t) == 6]
-    language_token_ids = tokenizer.convert_tokens_to_ids(language_tokens)
-
-    # Run a single decoding step to get logits for language tokens
-    # 50258 is the transcribe token for Whisper
-    with torch.no_grad():
-        logits = model(input_features, decoder_input_ids=torch.tensor([[50258]], device=device)).logits
-    # logits shape: (batch, seq_len=1, vocab_size)
-    logits = logits[:, 0, :]  # (batch, vocab_size)
-    lang_logits = logits[0, language_token_ids]
-    lang_probs = torch.softmax(lang_logits, dim=-1).cpu().numpy()
-
-    # Get all languages above threshold
-    detected_langs = [language_tokens[i][2:-2] for i, prob in enumerate(lang_probs) if prob >= threshold]
-    return detected_langs
+    elapsed = time.time() - start_time
+    logging.info(f"Finished clearing working_memory cache in {elapsed:.2f} seconds.")
 
 def batch_get_detected_languages(wav_paths, model, processor, device, threshold=0.2):
     waveforms = []
