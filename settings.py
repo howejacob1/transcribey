@@ -1,4 +1,4 @@
-# Settings for transcribey.py
+# Settings for main.py
 
 source_dir = "/media/jhowe/trans/fake_wavs/"
 dest_dir = "working_memory/raw_wavs_cache/"
