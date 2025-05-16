@@ -157,46 +157,100 @@ def main():
  
     # After loading models, move up to 1GB of wavs to wavs_to_id in a loop until preload_thread exits
     raw_wavs_dir = 'working_memory/raw_wavs/'
-    wavs_to_id_dir = 'working_memory/wavs_to_id/'
-    os.makedirs(wavs_to_id_dir, exist_ok=True)
+    wavs_processing_dir = 'working_memory/wavs_processing/'
+    os.makedirs(wavs_processing_dir, exist_ok=True)
     max_bytes = 104857600  # 100MB
-
+    
     def start_processing_wavs():
         wav_files = [f for f in os.listdir(raw_wavs_dir) if f.endswith('.wav')]
         moved_bytes = 0
         moved_files = 0
         for wav_file in wav_files:
             src = os.path.join(raw_wavs_dir, wav_file)
-            dst = os.path.join(wavs_to_id_dir, wav_file)
+            dst = os.path.join(wavs_processing_dir, wav_file)
             file_size = os.path.getsize(src)
             if moved_bytes + file_size > max_bytes:
                 break
             shutil.move(src, dst)
             moved_bytes += file_size
             moved_files += 1
-        print(f"Moved {moved_files} wav files totaling {moved_bytes / (1024*1024):.2f} MB to {wavs_to_id_dir}")
+        print(f"Moved {moved_files} wav files totaling {moved_bytes / (1024*1024):.2f} MB to {wavs_processing_dir}")
         return moved_files
 
-    # Do one final move for any remaining files
-    start_processing_wavs()
-
+    vcons = {}
     # Identify languages above threshold for each wav in wavs_to_id_dir
-    lang_results = {}
     non_english_dir = 'working_memory/non_english/'
     os.makedirs(non_english_dir, exist_ok=True)
-    for wav_file in os.listdir(wavs_to_id_dir):
-        if not wav_file.endswith('.wav'):
-            continue
-        wav_path = os.path.join(wavs_to_id_dir, wav_file)
-        detected_langs = get_detected_languages(wav_path, whisper_tiny_model, whisper_tiny_processor, whisper_tiny_device)
-        lang_results[wav_file] = detected_langs
-        print(f"{wav_file}: Detected languages (>=20%): {detected_langs}")
-        # If not exclusively English, move to non_english_dir
-        if any(lang != 'en' for lang in detected_langs):
-            dest_path = os.path.join(non_english_dir, wav_file)
-            shutil.move(wav_path, dest_path)
-            print(f"Moved {wav_file} to {non_english_dir} (non-English detected)")
-    
+    def detect_langs_in_wavs_processing():
+        for wav_file in os.listdir(wavs_processing_dir):
+            if not wav_file.endswith('.wav'):
+                continue
+            wav_path = os.path.join(wavs_processing_dir, wav_file)
+            detected_langs = get_detected_languages(wav_path, whisper_tiny_model, whisper_tiny_processor, whisper_tiny_device)
+            lang_results[wav_file] = detected_langs
+            print(f"{wav_file}: Detected languages (>=20%): {detected_langs}")
+            # If not exclusively English, move to non_english_dir
+            if any(lang != 'en' for lang in detected_langs):
+                dest_path = os.path.join(non_english_dir, wav_file)
+                shutil.move(wav_path, dest_path)
+                print(f"Moved {wav_file} to {non_english_dir} (non-English detected)")
+        return lang_results
+    lang_results = {}
+    transcription_results = {}
+    last_time_there_were_files = time.time()
+    max_no_new_file_seconds = 5
+    while True:
+        start_processing_wavs()
+        # Check for new wav files in raw_wavs_dir
+        current_raw_wavs = set(os.listdir(raw_wavs_dir))
+        if len(current_raw_wavs) != 0:
+            print(f"New wav files detected: {current_raw_wavs}")
+            last_time_there_were_files = time.time()
+        else:
+            if time.time() - last_time_there_were_files >= max_no_new_file_seconds:
+                print("No new wav files detected for 5 seconds. Exiting main loop.")
+                break
+
+        # First
+        lang_results.update(detect_langs_in_wavs_processing())
+        # INSERT_YOUR_CODE
+        # Check if non_english_dir exceeds 100MB
+        non_english_wavs = [f for f in os.listdir(non_english_dir) if f.endswith('.wav')]
+        total_non_english_bytes = sum(os.path.getsize(os.path.join(non_english_dir, f)) for f in non_english_wavs)
+        if total_non_english_bytes > 100 * 1024 * 1024 and non_english_wavs:
+            print(f"Non-English buffer exceeds 100MB ({total_non_english_bytes/(1024*1024):.2f} MB). Transcribing with canary-1b-flash.")
+            # Load canary-1b-flash model if not already loaded
+            if 'canary_model' not in globals():
+                canary_model = transcription_models.load_nvidia_canary_1b_flash()
+            for wav_file in non_english_wavs:
+                wav_path = os.path.join(non_english_dir, wav_file)
+                try:
+                    print(f"Transcribing {wav_file} with canary-1b-flash")
+                    transcription = canary_model.transcribe([wav_path])[0]
+                    transcription_results[wav_file] = transcription
+                    print(f"Done Transcribed {wav_file} with canary-1b-flash")
+                    os.remove(wav_path)
+                except Exception as e:
+                    print(f"Error transcribing {wav_file} with canary-1b-flash: {str(e)}")
+        # Transcribe English files with Parakeet model
+        for wav_file in os.listdir(wavs_processing_dir):
+            if not wav_file.endswith('.wav'):
+                continue
+            wav_path = os.path.join(wavs_processing_dir, wav_file)
+            try:
+                # Transcribe with Parakeet
+                print(f"Transcribing {wav_file} with Parakeet")
+                transcription = parakeet_model.transcribe([wav_path])[0]
+                transcription_results[wav_file] = transcription
+                print(f"Done Transcribed {wav_file} with Parakeet")
+                # Remove file after successful transcription
+                os.remove(wav_path)
+            except Exception as e:
+                print(f"Error transcribing {wav_file}: {str(e)}")
+
+        print(f"Number of files processed: {len(lang_results)}")
+        time.sleep(3)
+
     print("\nAll language results:")
     print(lang_results)
 
