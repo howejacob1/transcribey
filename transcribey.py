@@ -1,5 +1,5 @@
 import logging
-logging.basicConfig(level=logging.ERROR)
+logging.basicConfig(level=logging.INFO)
 import time
 import os
 import transcription_models
@@ -179,15 +179,10 @@ def main():
     source_dir = '/media/jhowe/BACKUPBOY/fake_wavs/'
     dest_dir = 'working_memory/raw_wavs/'
     preload_thread = preload_wavs_threaded(source_dir, dest_dir, size_limit_bytes=104857600)
-    print("Loading nvidia/parakeet-tdt_ctc-110m ...")
+    # Remove print statements for model loading
     parakeet_model = transcription_models.load_nvidia_parakeet_tdt_ctc_110m()
-    print("Loaded nvidia/parakeet-tdt_ctc-110m.")
-    print("Loading nvidia/canary-1b-flash ...")
     canary_model = transcription_models.load_nvidia_canary_1b_flash()
-    print("Loaded nvidia/canary-1b-flash.")
-    print("Loading openai/whisper-tiny ...")
     whisper_tiny_model, whisper_tiny_processor, whisper_tiny_device = transcription_models.load_openai_whisper_tiny()
-    print("Loaded openai/whisper-tiny.")
  
     # After loading models, move up to 1GB of wavs to wavs_to_id in a loop until preload_thread exits
     raw_wavs_dir = 'working_memory/raw_wavs/'
