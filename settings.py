@@ -1,6 +1,6 @@
 # Settings for transcribey.py
 
-source_dir = "/media/jhowe/BACKUPBOY/fake_wavs/"
+source_dir = "/media/jhowe/trans/fake_wavs/"
 dest_dir = "working_memory/raw_wavs_cache/"
 preload_size_limit_bytes = 104857600
 wavs_in_progress_dir = "working_memory/wavs_in_progress_cache/"
