@@ -26,15 +26,17 @@ def wav_file_generator(directory):
 
 @contextmanager
 def suppress_output():
-    """Context manager to suppress stdout and stderr."""
+    """Suppress all stdout and stderr, including output from C extensions."""
     with open(os.devnull, 'w') as devnull:
-        old_stdout = sys.stdout
-        old_stderr = sys.stderr
+        old_stdout_fd = os.dup(1)
+        old_stderr_fd = os.dup(2)
         try:
-            sys.stdout = devnull
-            sys.stderr = devnull
+            os.dup2(devnull.fileno(), 1)
+            os.dup2(devnull.fileno(), 2)
             yield
         finally:
-            sys.stdout = old_stdout
-            sys.stderr = old_stderr
+            os.dup2(old_stdout_fd, 1)
+            os.dup2(old_stderr_fd, 2)
+            os.close(old_stdout_fd)
+            os.close(old_stderr_fd)
 
