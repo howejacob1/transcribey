@@ -70,18 +70,11 @@ def batch_get_detected_languages(wav_paths, model, processor, device, threshold=
         results.append(detected_langs)
     return results
 
-def create_and_insert_vcon_for_wav(collection, rel_path, abs_path):
+def create_vcon_for_wav(rel_path, abs_path):
     """
-    Create a vCon for the given wav file and insert it into MongoDB if it doesn't already exist.
+    Create a vCon for the given wav file and return it as a dict.
     """
-    # Set logging to ERROR at the start
-    logging.getLogger().setLevel(logging.ERROR)
-    existing = collection.find_one({"attachments.filename": rel_path})
-    if existing:
-        # Still at ERROR level, so this info won't print
-        logging.info(f"vCon for {rel_path} already exists in MongoDB, skipping.")
-        return
-
+    logging.getLogger().setLevel(logging.WARN)
     vcon = Vcon.build_new()
     party = Party(name="Unknown", role="participant")
     vcon.add_party(party)
@@ -98,26 +91,79 @@ def create_and_insert_vcon_for_wav(collection, rel_path, abs_path):
     )
     vcon.add_dialog(dialog)
     vcon.add_attachment(type="audio", body=rel_path, encoding="none")
-    collection.insert_one(vcon.to_dict())
-
-    # Re-enable INFO logging right before the final info print
     logging.getLogger().setLevel(logging.INFO)
-    logging.info(f"Inserted vCon for {rel_path} into MongoDB.")
+    return vcon.to_dict()
 
 def maybe_add_vcons_to_mongo(target_dir):
     """
-    For each .wav file in target_dir (recursively), create a vCon referencing it and insert into MongoDB,
+    For each .wav file in target_dir (recursively), create a vCon referencing it and insert into MongoDB in bulk,
     unless a vCon for that wav already exists.
     """
+    t0 = time.time()
     logging.info(f"Load mongo collection.")
     collection = get_mongo_collection()
+    t1 = time.time()
+    logging.info(f"Loaded mongo collection in {t1 - t0:.2f} seconds.")
+
     logging.info(f"Getting all wav files in {target_dir}")
     file_dict = get_all_filenames(target_dir)
+    t2 = time.time()
+    logging.info(f"Got all filenames in {t2 - t1:.2f} seconds.")
+
     wavs = {rel: abs for rel, abs in file_dict.items() if rel.lower().endswith('.wav')}
     logging.info(f"Found {len(wavs)} wav files in {target_dir}")
 
+    # Find which files already have vCons
+    existing_filenames = set()
+    t_exist_start = time.time()
+    count = 0
+    for doc in collection.find({}, {"attachments.filename": 1}):
+        attachments = doc.get("attachments", [])
+        for att in attachments:
+            fname = att.get("filename") or att.get("body")
+            if fname:
+                existing_filenames.add(fname)
+        count += 1
+        if count % 10000 == 0:
+            print(f"Scanned {count} MongoDB documents for existing vCons...")
+    t_exist_end = time.time()
+    print(f"Scanned {count} MongoDB documents for existing vCons in {t_exist_end - t_exist_start:.2f} seconds.")
+
+    vcon_dicts = []
+    skipped = 0
+    loop_start_time = time.time()
+    last_print_time = loop_start_time
+    processed = 0
     for rel_path, abs_path in wavs.items():
-        create_and_insert_vcon_for_wav(collection, rel_path, abs_path)
+        file_start_time = time.time()
+        if rel_path in existing_filenames:
+            skipped += 1
+            continue
+        vcon_dicts.append(create_vcon_for_wav(rel_path, abs_path))
+        processed += 1
+        file_elapsed = time.time() - file_start_time
+        now = time.time()
+        # Print every 10 files or every 5 seconds
+        if processed % 10000 == 0 or (now - last_print_time) > 5:
+            print(f"Processed {processed} new vCons so far (skipped {skipped})")
+            last_print_time = now
+    loop_elapsed = time.time() - loop_start_time
+    print(f"Finished building {len(vcon_dicts)} new vCons in {loop_elapsed:.2f} seconds. Skipped {skipped} files.")
+
+    t3 = time.time()
+    if vcon_dicts:
+        batch_size = 10000
+        total = len(vcon_dicts)
+        for i in range(0, total, batch_size):
+            batch = vcon_dicts[i:i+batch_size]
+            collection.insert_many(batch)
+            print(f"Inserted batch {i//batch_size + 1} ({min(i+batch_size, total)}/{total}) vCons into MongoDB.")
+        t4 = time.time()
+        logging.info(f"Inserted {len(vcon_dicts)} vCons into MongoDB in {t4 - t3:.2f} seconds.")
+    else:
+        logging.info("No new vCons to insert.")
+    if skipped:
+        logging.info(f"Skipped {skipped} files that already had vCons.")
 
 def main():
     total_start_time = time.time()
