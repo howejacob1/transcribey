@@ -10,6 +10,13 @@ import numpy as np
 import torch
 import torchaudio
 import settings
+from mongo_utils import get_mongo_collection
+
+# Add vCon imports
+import datetime
+from vcon import Vcon
+from vcon.party import Party
+from vcon.dialog import Dialog
 
 def clear_wav_cache():
     """
@@ -63,7 +70,54 @@ def batch_get_detected_languages(wav_paths, model, processor, device, threshold=
         results.append(detected_langs)
     return results
 
+def create_and_insert_vcon_for_wav(collection, rel_path, abs_path):
+    """
+    Create a vCon for the given wav file and insert it into MongoDB if it doesn't already exist.
+    """
+    existing = collection.find_one({"attachments.filename": rel_path})
+    if existing:
+        logging.info(f"vCon for {rel_path} already exists in MongoDB, skipping.")
+        return
+
+    vcon = Vcon.build_new()
+    party = Party(name="Unknown", role="participant")
+    vcon.add_party(party)
+    now = datetime.datetime.now(datetime.timezone.utc)
+    dialog = Dialog(
+        type="audio",
+        start=now.isoformat(),
+        parties=[0],
+        originator=0,
+        mimetype="audio/wav",
+        filename=rel_path,
+        body=None,
+        encoding=None
+    )
+    vcon.add_dialog(dialog)
+    vcon.add_attachment(type="audio", body=rel_path, encoding="none")
+    collection.insert_one(vcon.to_dict())
+    logging.info(f"Inserted vCon for {rel_path} into MongoDB.")
+
+def maybe_add_vcons_to_mongo(target_dir):
+    """
+    For each .wav file in target_dir (recursively), create a vCon referencing it and insert into MongoDB,
+    unless a vCon for that wav already exists.
+    """
+    collection = get_mongo_collection()
+    file_dict = get_all_filenames(target_dir)
+    wavs = {rel: abs for rel, abs in file_dict.items() if rel.lower().endswith('.wav')}
+    logging.info(f"Found {len(wavs)} wav files in {target_dir}")
+
+    for rel_path, abs_path in wavs.items():
+        create_and_insert_vcon_for_wav(collection, rel_path, abs_path)
+
 def main():
+    total_start_time = time.time()
+    maybe_add_vcons_to_mongo(settings.source_dir)
+
+    logging.info(f"Total runtime: {time.time() - total_start_time:.2f}")
+
+def old_main():
     total_start_time = time.time()
     # Clear the working_memory cache
     clear_wav_cache()
