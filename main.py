@@ -3,7 +3,7 @@ logging.basicConfig(level=logging.INFO)
 import time
 import os
 import transcription_models
-from utils import get_all_filenames, wav_file_generator
+from utils import get_all_filenames, wav_file_generator, filter_wav_files
 from wav_cache import preload_wavs_threaded
 import shutil
 import numpy as np
@@ -114,7 +114,7 @@ def maybe_add_vcons_to_mongo(target_dir):
     t2 = time.time()
     logging.info(f"Got all filenames in {t2 - t1:.2f} seconds.")
 
-    wavs = {rel: abs for rel, abs in file_dict.items() if rel.lower().endswith('.wav')}
+    wavs = filter_wav_files(file_dict)
     logging.info(f"Found {len(wavs)} wav files in {target_dir}")
 
     # Find which files already have vCons - build a comprehensive set of existing filenames

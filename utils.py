@@ -14,6 +14,13 @@ def get_all_filenames(directory):
             file_dict[rel_path] = abs_path
     return file_dict 
 
+def filter_wav_files(file_dict):
+    """
+    Filter a file dictionary to only include .wav files.
+    Returns a dict mapping relative paths to absolute paths for wav files only.
+    """
+    return {rel: abs for rel, abs in file_dict.items() if rel.lower().endswith('.wav')}
+
 def wav_file_generator(directory):
     """
     Generator that recursively walks a directory and yields .wav file paths one at a time.
