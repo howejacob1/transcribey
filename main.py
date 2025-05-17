@@ -94,25 +94,11 @@ def create_vcon_for_wav(rel_path, abs_path):
     logging.getLogger().setLevel(logging.INFO)
     return vcon.to_dict()
 
-def maybe_add_vcons_to_mongo(target_dir):
+def get_existing_vcon_filenames(collection):
     """
-    For each .wav file in target_dir (recursively), create a vCon referencing it and insert into MongoDB in bulk,
-    unless a vCon for that wav already exists.
+    Find all filenames that already have vCons in the MongoDB collection.
+    Returns a set of filenames.
     """
-    collection = get_mongo_collection()
-    
-    # Ensure we have an index on dialog filenames for faster lookups
-    collection.create_index([("dialog.filename", 1)])
-    
-    logging.info(f"Getting all wav files in {target_dir}")
-    start_time = time.time()
-    file_dict = get_all_filenames(target_dir)
-    logging.info(f"Got all filenames in {time.time() - start_time:.2f} seconds.")
-
-    wavs = filter_wav_files(file_dict)
-    logging.info(f"Found {len(wavs)} wav files in {target_dir}")
-
-    # Find which files already have vCons - build a comprehensive set of existing filenames
     existing_filenames = set()
     t_exist_start = time.time()
     
@@ -131,6 +117,29 @@ def maybe_add_vcons_to_mongo(target_dir):
     t_exist_end = time.time()
     logging.info(f"Scanned {dialog_count} MongoDB documents for existing vCons in {t_exist_end - t_exist_start:.2f} seconds.")
     logging.info(f"Found {len(existing_filenames)} unique filenames in the database.")
+    
+    return existing_filenames
+
+def maybe_add_vcons_to_mongo(target_dir):
+    """
+    For each .wav file in target_dir (recursively), create a vCon referencing it and insert into MongoDB in bulk,
+    unless a vCon for that wav already exists.
+    """
+    collection = get_mongo_collection()
+    
+    # Ensure we have an index on dialog filenames for faster lookups
+    collection.create_index([("dialog.filename", 1)])
+    
+    logging.info(f"Getting all wav files in {target_dir}")
+    start_time = time.time()
+    file_dict = get_all_filenames(target_dir)
+    logging.info(f"Got all filenames in {time.time() - start_time:.2f} seconds.")
+
+    wavs = filter_wav_files(file_dict)
+    logging.info(f"Found {len(wavs)} wav files in {target_dir}")
+
+    # Find which files already have vCons
+    existing_filenames = get_existing_vcon_filenames(collection)
 
     vcon_dicts = []
     skipped = 0
