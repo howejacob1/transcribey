@@ -213,16 +213,16 @@ def main():
     vcon_thread.start()
     
     # Load models while the vcon thread is running
-    logging.info("Loading transcription models...")
     parakeet_model = transcription_models.load_nvidia_parakeet_tdt_ctc_110m()
     canary_model = transcription_models.load_nvidia_canary_1b_flash()
     whisper_tiny_model, whisper_tiny_processor, whisper_tiny_device = transcription_models.load_openai_whisper_tiny()
-    logging.info("Finished loading transcription models")
     
     # Wait for the vcon thread to complete
-    logging.info("Waiting for vCon thread to complete...")
+    logging.info("Waiting for vCon loading thread to complete...")
     vcon_thread.join()
-    logging.info("vCon thread completed")
+    logging.info("vCon loading thread completed")
+
+
 
     logging.info(f"Total runtime: {time.time() - total_start_time:.2f}")
 
