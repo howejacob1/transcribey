@@ -74,6 +74,7 @@ def create_and_insert_vcon_for_wav(collection, rel_path, abs_path):
     """
     Create a vCon for the given wav file and insert it into MongoDB if it doesn't already exist.
     """
+    print(f"Creating vCon for {rel_path}")
     existing = collection.find_one({"attachments.filename": rel_path})
     if existing:
         logging.info(f"vCon for {rel_path} already exists in MongoDB, skipping.")
