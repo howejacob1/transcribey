@@ -99,20 +99,15 @@ def maybe_add_vcons_to_mongo(target_dir):
     For each .wav file in target_dir (recursively), create a vCon referencing it and insert into MongoDB in bulk,
     unless a vCon for that wav already exists.
     """
-    t0 = time.time()
-    logging.info(f"Load mongo collection.")
     collection = get_mongo_collection()
     
     # Ensure we have an index on dialog filenames for faster lookups
     collection.create_index([("dialog.filename", 1)])
     
-    t1 = time.time()
-    logging.info(f"Loaded mongo collection in {t1 - t0:.2f} seconds.")
-
     logging.info(f"Getting all wav files in {target_dir}")
+    start_time = time.time()
     file_dict = get_all_filenames(target_dir)
-    t2 = time.time()
-    logging.info(f"Got all filenames in {t2 - t1:.2f} seconds.")
+    logging.info(f"Got all filenames in {time.time() - start_time:.2f} seconds.")
 
     wavs = filter_wav_files(file_dict)
     logging.info(f"Found {len(wavs)} wav files in {target_dir}")
@@ -120,7 +115,6 @@ def maybe_add_vcons_to_mongo(target_dir):
     # Find which files already have vCons - build a comprehensive set of existing filenames
     existing_filenames = set()
     t_exist_start = time.time()
-    count = 0
     
     # Check dialog.filename which may contain filenames
     dialog_count = 0
@@ -132,16 +126,11 @@ def maybe_add_vcons_to_mongo(target_dir):
                 existing_filenames.add(fname)
         dialog_count += 1
         if dialog_count % 10000 == 0:
-            print(f"Scanned {dialog_count} MongoDB documents for existing vCons (dialogs)...")
+            logging.info(f"Scanned {dialog_count} MongoDB documents for existing vCons (dialogs)...")
     
     t_exist_end = time.time()
-    print(f"Scanned {dialog_count} MongoDB documents for existing vCons in {t_exist_end - t_exist_start:.2f} seconds.")
-    print(f"Found {len(existing_filenames)} unique filenames in the database.")
-
-    # Log a sample of existing filenames for debugging
-    if existing_filenames:
-        sample = list(existing_filenames)[:5]
-        print(f"Sample of existing filenames: {sample}")
+    logging.info(f"Scanned {dialog_count} MongoDB documents for existing vCons in {t_exist_end - t_exist_start:.2f} seconds.")
+    logging.info(f"Found {len(existing_filenames)} unique filenames in the database.")
 
     vcon_dicts = []
     skipped = 0
@@ -159,10 +148,10 @@ def maybe_add_vcons_to_mongo(target_dir):
         now = time.time()
         # Print every 10000 files or every 5 seconds
         if processed % 10000 == 0 or (now - last_print_time) > 5:
-            print(f"Processed {processed} new vCons so far (skipped {skipped})")
+            logging.info(f"Processed {processed} new vCons so far (skipped {skipped})")
             last_print_time = now
     loop_elapsed = time.time() - loop_start_time
-    print(f"Finished building {len(vcon_dicts)} new vCons in {loop_elapsed:.2f} seconds. Skipped {skipped} files.")
+    logging.info(f"Finished building {len(vcon_dicts)} new vCons in {loop_elapsed:.2f} seconds. Skipped {skipped} files.")
 
     t3 = time.time()
     if vcon_dicts:
@@ -171,7 +160,7 @@ def maybe_add_vcons_to_mongo(target_dir):
         for i in range(0, total, batch_size):
             batch = vcon_dicts[i:i+batch_size]
             collection.insert_many(batch)
-            print(f"Inserted batch {i//batch_size + 1} ({min(i+batch_size, total)}/{total}) vCons into MongoDB.")
+            logging.info(f"Inserted batch {i//batch_size + 1} ({min(i+batch_size, total)}/{total}) vCons into MongoDB.")
         t4 = time.time()
         logging.info(f"Inserted {len(vcon_dicts)} vCons into MongoDB in {t4 - t3:.2f} seconds.")
     else:
@@ -217,7 +206,7 @@ def old_main():
             shutil.move(src, dst)
             moved_bytes += file_size
             moved_files += 1
-        print(f"Moved {moved_files} wav files totaling {moved_bytes / (1024*1024):.2f} MB to {wavs_processing_dir}")
+        logging.info(f"Moved {moved_files} wav files totaling {moved_bytes / (1024*1024):.2f} MB to {wavs_processing_dir}")
         return moved_files
 
     vcons = {}
@@ -235,17 +224,17 @@ def old_main():
         start_time = time.time()
         batch_results = batch_get_detected_languages(wav_paths, whisper_tiny_model, whisper_tiny_processor, whisper_tiny_device, threshold=settings.lang_detect_threshold)
         elapsed = time.time() - start_time
-        print(f"Processed {len(wav_files)} files, total size: {total_bytes/(1024*1024):.2f} MB, time taken: {elapsed:.2f} seconds")
+        logging.info(f"Processed {len(wav_files)} files, total size: {total_bytes/(1024*1024):.2f} MB, time taken: {elapsed:.2f} seconds")
         lang_results = {}
         for wav_file, detected_langs in zip(wav_files, batch_results):
             lang_results[wav_file] = detected_langs
             processed_file_count += 1
-            print(f"{wav_file}: Detected languages (>=20%): {detected_langs}")
+            logging.info(f"{wav_file}: Detected languages (>=20%): {detected_langs}")
             # If not exclusively English, move to non_english_dir
             if any(lang != 'en' for lang in detected_langs):
                 dest_path = os.path.join(non_english_dir, wav_file)
                 shutil.move(os.path.join(wavs_processing_dir, wav_file), dest_path)
-                print(f"Moved {wav_file} to {non_english_dir} (non-English detected)")
+                logging.info(f"Moved {wav_file} to {non_english_dir} (non-English detected)")
         return lang_results
     lang_results = {}
     transcription_results = {}
@@ -257,37 +246,37 @@ def old_main():
         # Check for new wav files in raw_wavs_dir
         current_raw_wavs = set(os.listdir(raw_wavs_dir))
         if len(current_raw_wavs) != 0:
-            print(f"New wav files detected: {current_raw_wavs}")
+            logging.info(f"New wav files detected: {current_raw_wavs}")
             last_time_there_were_files = time.time()
         else:
             if time.time() - last_time_there_were_files >= max_no_new_file_seconds:
-                print("No new wav files detected for 5 seconds. Exiting main loop.")
+                logging.info("No new wav files detected for 5 seconds. Exiting main loop.")
                 break
 
         # First
         lang_results.update(detect_langs_in_wavs_processing())
         if processed_file_count >= MAX_FILES:
-            print(f"Processed {processed_file_count} files, reached limit of {MAX_FILES}. Exiting main loop.")
+            logging.info(f"Processed {processed_file_count} files, reached limit of {MAX_FILES}. Exiting main loop.")
             break
         # INSERT_YOUR_CODE
         # Check if non_english_dir exceeds 100MB
         non_english_wavs = [f for f in os.listdir(non_english_dir) if f.endswith('.wav')]
         total_non_english_bytes = sum(os.path.getsize(os.path.join(non_english_dir, f)) for f in non_english_wavs)
         if total_non_english_bytes > 100 * 1024 * 1024 and non_english_wavs:
-            print(f"Non-English buffer exceeds 100MB ({total_non_english_bytes/(1024*1024):.2f} MB). Transcribing with canary-1b-flash.")
+            logging.info(f"Non-English buffer exceeds 100MB ({total_non_english_bytes/(1024*1024):.2f} MB). Transcribing with canary-1b-flash.")
             # Load canary-1b-flash model if not already loaded
             if 'canary_model' not in globals():
                 canary_model = transcription_models.load_nvidia_canary_1b_flash()
             for wav_file in non_english_wavs:
                 wav_path = os.path.join(non_english_dir, wav_file)
                 try:
-                    print(f"Transcribing {wav_file} with canary-1b-flash")
+                    logging.info(f"Transcribing {wav_file} with canary-1b-flash")
                     transcription = canary_model.transcribe([wav_path])[0]
                     transcription_results[wav_file] = transcription
-                    print(f"Done Transcribed {wav_file} with canary-1b-flash")
+                    logging.info(f"Done Transcribed {wav_file} with canary-1b-flash")
                     os.remove(wav_path)
                 except Exception as e:
-                    print(f"Error transcribing {wav_file} with canary-1b-flash: {str(e)}")
+                    logging.error(f"Error transcribing {wav_file} with canary-1b-flash: {str(e)}")
         # Transcribe English files with Parakeet model
         for wav_file in os.listdir(wavs_processing_dir):
             if not wav_file.endswith('.wav'):
@@ -295,23 +284,23 @@ def old_main():
             wav_path = os.path.join(wavs_processing_dir, wav_file)
             try:
                 # Transcribe with Parakeet
-                print(f"Transcribing {wav_file} with Parakeet")
+                logging.info(f"Transcribing {wav_file} with Parakeet")
                 transcription = parakeet_model.transcribe([wav_path])[0]
                 transcription_results[wav_file] = transcription
-                print(f"Done Transcribed {wav_file} with Parakeet")
+                logging.info(f"Done Transcribed {wav_file} with Parakeet")
                 # Remove file after successful transcription
                 os.remove(wav_path)
             except Exception as e:
-                print(f"Error transcribing {wav_file}: {str(e)}")
+                logging.error(f"Error transcribing {wav_file}: {str(e)}")
 
-        print(f"Number of files processed: {len(lang_results)}")
+        logging.info(f"Number of files processed: {len(lang_results)}")
         time.sleep(3)
 
     total_elapsed = time.time() - total_start_time
-    print(f"\nAll language results:")
-    print(lang_results)
-    print(f"\nTotal files processed: {processed_file_count}")
-    print(f"Total script runtime: {total_elapsed:.2f} seconds")
+    logging.info(f"\nAll language results:")
+    logging.info(lang_results)
+    logging.info(f"\nTotal files processed: {processed_file_count}")
+    logging.info(f"Total script runtime: {total_elapsed:.2f} seconds")
 
 if __name__ == "__main__":
     main()
