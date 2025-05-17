@@ -1,4 +1,5 @@
 import logging
+# Define a custom TRACE level (5) that's more detailed than DEBUG (10)
 logging.basicConfig(level=logging.INFO)
 import time
 import os
@@ -120,27 +121,17 @@ def get_existing_vcon_filenames(collection):
     
     return existing_filenames
 
-def maybe_add_vcons_to_mongo(target_dir):
+def build_vcon_dicts(wavs, existing_filenames):
     """
-    For each .wav file in target_dir (recursively), create a vCon referencing it and insert into MongoDB in bulk,
-    unless a vCon for that wav already exists.
+    Build vCon dictionaries for wav files that don't already have vCons.
+    
+    Args:
+        wavs: Dictionary mapping relative paths to absolute paths of wav files
+        existing_filenames: Set of filenames that already have vCons
+        
+    Returns:
+        List of vCon dictionaries and count of skipped files
     """
-    collection = get_mongo_collection()
-    
-    # Ensure we have an index on dialog filenames for faster lookups
-    collection.create_index([("dialog.filename", 1)])
-    
-    logging.info(f"Getting all wav files in {target_dir}")
-    start_time = time.time()
-    file_dict = get_all_filenames(target_dir)
-    logging.info(f"Got all filenames in {time.time() - start_time:.2f} seconds.")
-
-    wavs = filter_wav_files(file_dict)
-    logging.info(f"Found {len(wavs)} wav files in {target_dir}")
-
-    # Find which files already have vCons
-    existing_filenames = get_existing_vcon_filenames(collection)
-
     vcon_dicts = []
     skipped = 0
     loop_start_time = time.time()
@@ -161,7 +152,18 @@ def maybe_add_vcons_to_mongo(target_dir):
             last_print_time = now
     loop_elapsed = time.time() - loop_start_time
     logging.info(f"Finished building {len(vcon_dicts)} new vCons in {loop_elapsed:.2f} seconds. Skipped {skipped} files.")
+    
+    return vcon_dicts, skipped
 
+def insert_vcon_dicts_to_mongo(collection, vcon_dicts, skipped):
+    """
+    Insert vCon dictionaries into MongoDB in batches.
+    
+    Args:
+        collection: MongoDB collection to insert into
+        vcon_dicts: List of vCon dictionaries to insert
+        skipped: Count of skipped files for logging
+    """
     t3 = time.time()
     if vcon_dicts:
         batch_size = 10000
@@ -176,6 +178,31 @@ def maybe_add_vcons_to_mongo(target_dir):
         logging.info("No new vCons to insert.")
     if skipped:
         logging.info(f"Skipped {skipped} files that already had vCons.")
+
+def maybe_add_vcons_to_mongo(target_dir):
+    """
+    For each .wav file in target_dir (recursively), create a vCon referencing it and insert into MongoDB in bulk,
+    unless a vCon for that wav already exists.
+    """
+    collection = get_mongo_collection()
+    
+    # Ensure we have an index on dialog filenames for faster lookups
+    collection.create_index([("dialog.filename", 1)])
+    
+    logging.info(f"Getting all wav files in {target_dir}")
+    start_time = time.time()
+    file_dict = get_all_filenames(target_dir)
+    logging.info(f"Got all filenames in {time.time() - start_time:.2f} seconds.")
+    
+    wavs = filter_wav_files(file_dict)
+    logging.info(f"Found {len(wavs)} wav files in {target_dir}")
+
+    # Find which files already have vCons
+    existing_filenames = get_existing_vcon_filenames(collection)
+
+    vcon_dicts, skipped = build_vcon_dicts(wavs, existing_filenames)
+    
+    insert_vcon_dicts_to_mongo(collection, vcon_dicts, skipped)
 
 def main():
     total_start_time = time.time()
