@@ -102,6 +102,11 @@ def maybe_add_vcons_to_mongo(target_dir):
     t0 = time.time()
     logging.info(f"Load mongo collection.")
     collection = get_mongo_collection()
+    
+    # Ensure we have an index on attachment filenames and body for faster lookups
+    collection.create_index([("attachments.filename", 1)])
+    collection.create_index([("attachments.body", 1)])
+    
     t1 = time.time()
     logging.info(f"Loaded mongo collection in {t1 - t0:.2f} seconds.")
 
@@ -113,24 +118,47 @@ def maybe_add_vcons_to_mongo(target_dir):
     wavs = {rel: abs for rel, abs in file_dict.items() if rel.lower().endswith('.wav')}
     logging.info(f"Found {len(wavs)} wav files in {target_dir}")
 
-    # Find which files already have vCons
+    # Find which files already have vCons - build a comprehensive set of existing filenames
     existing_filenames = set()
     t_exist_start = time.time()
     count = 0
-    for doc in collection.find({}, {"attachments.filename": 1}):
+    
+    # Check attachments.filename
+    for doc in collection.find({"attachments.filename": {"$exists": True}}, {"attachments.filename": 1}):
         attachments = doc.get("attachments", [])
         for att in attachments:
-            fname = att.get("filename") or att.get("body")
+            fname = att.get("filename")
             if fname:
                 existing_filenames.add(fname)
         count += 1
         if count % 10000 == 0:
             print(f"Scanned {count} MongoDB documents for existing vCons...")
+    
+    # Also check attachments.body which may contain filenames
+    body_count = 0
+    for doc in collection.find({"attachments.body": {"$exists": True}}, {"attachments.body": 1}):
+        attachments = doc.get("attachments", [])
+        for att in attachments:
+            fname = att.get("body")
+            # Only add if it looks like a filename (has an extension)
+            if fname and isinstance(fname, str) and '.' in fname and fname.lower().endswith('.wav'):
+                existing_filenames.add(fname)
+        body_count += 1
+        if body_count % 10000 == 0:
+            print(f"Scanned {body_count} MongoDB documents for attachment bodies...")
+    
     t_exist_end = time.time()
-    print(f"Scanned {count} MongoDB documents for existing vCons in {t_exist_end - t_exist_start:.2f} seconds.")
+    print(f"Scanned {count + body_count} MongoDB documents for existing vCons in {t_exist_end - t_exist_start:.2f} seconds.")
+    print(f"Found {len(existing_filenames)} unique filenames in the database.")
+
+    # Log a sample of existing filenames for debugging
+    if existing_filenames:
+        sample = list(existing_filenames)[:5]
+        print(f"Sample of existing filenames: {sample}")
 
     vcon_dicts = []
     skipped = 0
+    duplicates_prevented = 0
     loop_start_time = time.time()
     last_print_time = loop_start_time
     processed = 0
@@ -138,17 +166,19 @@ def maybe_add_vcons_to_mongo(target_dir):
         file_start_time = time.time()
         if rel_path in existing_filenames:
             skipped += 1
+            duplicates_prevented += 1
             continue
         vcon_dicts.append(create_vcon_for_wav(rel_path, abs_path))
         processed += 1
         file_elapsed = time.time() - file_start_time
         now = time.time()
-        # Print every 10 files or every 5 seconds
+        # Print every 10000 files or every 5 seconds
         if processed % 10000 == 0 or (now - last_print_time) > 5:
-            print(f"Processed {processed} new vCons so far (skipped {skipped})")
+            print(f"Processed {processed} new vCons so far (skipped {skipped}, prevented {duplicates_prevented} duplicates)")
             last_print_time = now
     loop_elapsed = time.time() - loop_start_time
     print(f"Finished building {len(vcon_dicts)} new vCons in {loop_elapsed:.2f} seconds. Skipped {skipped} files.")
+    print(f"Prevented {duplicates_prevented} duplicate entries.")
 
     t3 = time.time()
     if vcon_dicts:
@@ -163,7 +193,7 @@ def maybe_add_vcons_to_mongo(target_dir):
     else:
         logging.info("No new vCons to insert.")
     if skipped:
-        logging.info(f"Skipped {skipped} files that already had vCons.")
+        logging.info(f"Skipped {skipped} files that already had vCons (including {duplicates_prevented} potential duplicates).")
 
 def main():
     total_start_time = time.time()
