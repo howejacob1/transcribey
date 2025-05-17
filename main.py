@@ -74,9 +74,11 @@ def create_and_insert_vcon_for_wav(collection, rel_path, abs_path):
     """
     Create a vCon for the given wav file and insert it into MongoDB if it doesn't already exist.
     """
-    print(f"Creating vCon for {rel_path}")
+    # Set logging to ERROR at the start
+    logging.getLogger().setLevel(logging.ERROR)
     existing = collection.find_one({"attachments.filename": rel_path})
     if existing:
+        # Still at ERROR level, so this info won't print
         logging.info(f"vCon for {rel_path} already exists in MongoDB, skipping.")
         return
 
@@ -97,6 +99,9 @@ def create_and_insert_vcon_for_wav(collection, rel_path, abs_path):
     vcon.add_dialog(dialog)
     vcon.add_attachment(type="audio", body=rel_path, encoding="none")
     collection.insert_one(vcon.to_dict())
+
+    # Re-enable INFO logging right before the final info print
+    logging.getLogger().setLevel(logging.INFO)
     logging.info(f"Inserted vCon for {rel_path} into MongoDB.")
 
 def maybe_add_vcons_to_mongo(target_dir):
@@ -104,7 +109,9 @@ def maybe_add_vcons_to_mongo(target_dir):
     For each .wav file in target_dir (recursively), create a vCon referencing it and insert into MongoDB,
     unless a vCon for that wav already exists.
     """
+    logging.info(f"Load mongo collection.")
     collection = get_mongo_collection()
+    logging.info(f"Getting all wav files in {target_dir}")
     file_dict = get_all_filenames(target_dir)
     wavs = {rel: abs for rel, abs in file_dict.items() if rel.lower().endswith('.wav')}
     logging.info(f"Found {len(wavs)} wav files in {target_dir}")
