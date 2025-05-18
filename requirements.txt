@@ -1,8 +1,6 @@
 openai
 toml
 # PyTorch with CUDA 12.0 support (installed via custom index)
-torchvision
-torchaudio
 librosa
 numpy
 soundfile
@@ -20,4 +18,4 @@ pyannote-audio
 # To install with CUDA 12.0, use:
 # pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu126
 pymongo
-python-vcon
+vcon
