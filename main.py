@@ -583,6 +583,7 @@ def main():
         
         # Load models while the vcon thread is running
         canary_model = transcription_models.load_nvidia_canary_1b_flash()
+        parakeet_model = transcription_models.load_nvidia_parakeet_tdt_06b_v2()
         whisper_tiny_model, whisper_tiny_processor, whisper_tiny_device = transcription_models.load_openai_whisper_tiny()
         
         # Wait for the vcon thread to complete
@@ -606,7 +607,7 @@ def main():
             whisper_tiny_processor, 
             whisper_tiny_device,
             batch_size=100,  # Smaller batch size for more reliability
-            max_vcons=1000,
+            max_vcons=128,
             threshold=settings.lang_detect_threshold
         )
         # Filter out corrupt files from vCon lists
@@ -624,10 +625,10 @@ def main():
         if english_vcons_to_process:
             transcribe_vcons(
                 collection,
-                "nvidia/canary-1b-flash",
-                canary_model,
+                "nvidia/parakeet-tdt-0.6b-v2",
+                parakeet_model,
                 english_vcons_to_process,
-                batch_size=500  # Smaller batch size for more reliability
+                batch_size=10  # Smaller batch size for more reliability
             )
         
         # Process non-English vCons with Canary (up to 1000)
@@ -639,7 +640,7 @@ def main():
                 "nvidia/canary-1b-flash",
                 canary_model,
                 non_english_vcons_to_process,
-                batch_size=500  # Smaller batch size for more reliability
+                batch_size=10  # Smaller batch size for more reliability
             )
         logging.info(f"Total time to process vCons: {time.time() - work_start_time:.2f} seconds")
 

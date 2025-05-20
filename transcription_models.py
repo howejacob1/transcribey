@@ -49,7 +49,6 @@ def load_nvidia_canary_1b_flash():
     logger.info(f"Finished loading nvidia/canary-1b-flash in {elapsed:.2f} seconds.")
     return model
 
-
 def load_openai_whisper_large_v2():
     """Load openai/whisper-large-v2 model and processor from HuggingFace for direct wav analysis."""
     logger.info("Starting to load openai/whisper-large-v2 ...")
