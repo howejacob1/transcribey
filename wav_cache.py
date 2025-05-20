@@ -78,3 +78,19 @@ def preload_wavs_threaded(source_dir, dest_dir, size_limit_bytes=1*1024*1024*102
     thread = threading.Thread(target=worker, daemon=True)
     thread.start()
     return thread
+
+def clear_wav_cache():
+    """
+    Remove all files and directories under working_memory.
+    """
+    logging.info("Starting to clear working_memory cache...")
+    start_time = time.time()
+    cache_dir = 'working_memory'
+    for entry in os.listdir(cache_dir):
+        path = os.path.join(cache_dir, entry)
+        if os.path.isfile(path) or os.path.islink(path):
+            os.remove(path)
+        elif os.path.isdir(path):
+            shutil.rmtree(path)
+    elapsed = time.time() - start_time
+    logging.info(f"Finished clearing working_memory cache in {elapsed:.2f} seconds.")

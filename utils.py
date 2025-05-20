@@ -3,6 +3,7 @@ import sys
 import logging
 import time
 from contextlib import contextmanager
+import torchaudio  # Removed to avoid ModuleNotFoundError
 
 def get_all_filenames(directory):
     """
@@ -51,4 +52,16 @@ def suppress_output(should_suppress=True):
                 os.close(old_stderr_fd)
     else:
         yield
+
+def get_audio_duration(wav_path):
+    """
+    Return the duration in seconds of a wav file using torchaudio.info.
+    Returns None if the file is corrupt or unreadable.
+    """
+    try:
+        info = torchaudio.info(wav_path)
+        return info.num_frames / info.sample_rate
+    except Exception as e:
+        logging.warning(f"Skipping corrupt or unreadable wav file: {wav_path} ({e})")
+        return None
 

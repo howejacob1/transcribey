@@ -34,7 +34,7 @@ def load_nvidia_parakeet_tdt_ctc_110m():
     logger.info("Starting to load nvidia/parakeet-tdt_ctc-110m ...")
     start_time = time.time()
     nemo_asr = importlib.import_module("nemo.collections.asr")
-    model = nemo_asr.models.ASRModel.from_pretrained(model_name="nvidia/parakeet-tdt_ctc-110m")
+    model =    nemo_asr.models.ASRModel.from_pretrained(model_name="nvidia/parakeet-tdt_ctc-110m")
     elapsed = time.time() - start_time
     logger.info(f"Finished loading nvidia/parakeet-tdt_ctc-110m in {elapsed:.2f} seconds.")
     return model
