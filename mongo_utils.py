@@ -41,4 +41,10 @@ if __name__ == '__main__':
 def print_all_vcons():
     collection = get_mongo_collection()
     for doc in collection.find():
-        print(doc) 
+        print(doc)
+
+# Add this function to delete all vcons in the collection
+def delete_all_vcons():
+    collection = get_mongo_collection()
+    result = collection.delete_many({})
+    print(f"Deleted {result.deleted_count} documents from the collection.") 
