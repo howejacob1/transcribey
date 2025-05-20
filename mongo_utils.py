@@ -1,11 +1,23 @@
 from pymongo import MongoClient
 import time
 import logging
+import toml
+import os
 
-# You can change the URI if you want to use a remote MongoDB or authentication
-MONGO_URI = 'mongodb://localhost:27017/'
-DB_NAME = 'transcribey'
-COLLECTION_NAME = 'vcons'
+# Load MongoDB config from .secrets.toml
+SECRETS_PATH = os.path.join(os.path.dirname(__file__), '.secrets.toml')
+if not os.path.exists(SECRETS_PATH):
+    SECRETS_PATH = os.path.join(os.getcwd(), '.secrets.toml')
+with open(SECRETS_PATH, 'r') as f:
+    secrets = toml.load(f)
+
+mongo_config = secrets.get('mongo_db', {})
+MONGO_URI = mongo_config.get('url')
+DB_NAME = mongo_config.get('db')
+COLLECTION_NAME = mongo_config.get('collection')
+
+if not MONGO_URI or not DB_NAME or not COLLECTION_NAME:
+    raise ValueError("Missing MongoDB configuration in .secrets.toml. Please provide 'url', 'db', and 'collection' under the 'mongo_db' section.")
 
 def get_mongo_collection(uri=MONGO_URI, db_name=DB_NAME, collection_name=COLLECTION_NAME):
     start_time = time.time()
