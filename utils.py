@@ -17,7 +17,7 @@ def get_all_filenames(directory):
             file_dict[rel_path] = abs_path
     return file_dict
 
-def filter_wav_files(file_dict):
+def get_wav_files(file_dict):
     """
     Filter a file dictionary to only include .wav files.
     Returns a dict mapping relative paths to absolute paths for wav files only.
@@ -53,7 +53,7 @@ def suppress_output(should_suppress=True):
     else:
         yield
 
-def get_audio_duration(wav_path):
+def get_wav_duration(wav_path):
     """
     Return the duration in seconds of a wav file using torchaudio.info.
     Returns None if the file is corrupt or unreadable.
@@ -65,3 +65,10 @@ def get_audio_duration(wav_path):
         logging.warning(f"Skipping corrupt or unreadable wav file: {wav_path} ({e})")
         return None
 
+def get_total_wav_size(directory):
+    total = 0
+    for root, _, files in os.walk(directory):
+        for f in files:
+            if f.endswith('.wav'):
+                total += os.path.getsize(os.path.join(root, f))
+    return total

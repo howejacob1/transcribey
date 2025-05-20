@@ -20,6 +20,24 @@ from vcon import Vcon
 from vcon.party import Party
 from vcon.dialog import Dialog
 
+#architecture
+#  transcribies are running.
+
+# Each transcribey has a unique name. 
+
+# If we use DHCPCD, IPs change all the time. 
+
+# slaves track changes in certain directories.
+# When the slave detects new wavs, it reports these files to the master.
+# When the slave has spare GPU power, it goes to the database and sees which ones have undetermined languages or lack of transcriptions locally, then over the network, prefering models already loaded.
+# The slave reserves these files. 
+# Then, the slave works on these files. 
+# Slaves attempt not to load another model as much as possible. 
+# Slaves report results to the master.
+# Slaves tell the database that they are still alive.
+# If a slave detects that the database has an entry of a slave that isn't alive, it will remove all locks in all database entries that have that entry. 
+# All slaves have some static IP. 
+# Report speed results to the database.
 
 def load_and_resample_waveforms(wav_paths, target_sample_rate=16000):
     """
@@ -370,7 +388,7 @@ def process_language_identification(collection, model, processor, device, batch_
     
     return english_vcons, non_english_vcons
 
-def transcribe_vcons(collection, model_name, model, vcons_to_transcribe, batch_size=20):
+def transcribe_vcons(collection, model_name, model, vcons_to_transcribe, batch_size=10):
     """
     Transcribe a list of vCons using the specified model.
     
@@ -564,7 +582,6 @@ def main():
         vcon_thread.start()
         
         # Load models while the vcon thread is running
-        parakeet_model = transcription_models.load_nvidia_parakeet_tdt_ctc_110m()
         canary_model = transcription_models.load_nvidia_canary_1b_flash()
         whisper_tiny_model, whisper_tiny_processor, whisper_tiny_device = transcription_models.load_openai_whisper_tiny()
         
@@ -588,7 +605,7 @@ def main():
             whisper_tiny_model, 
             whisper_tiny_processor, 
             whisper_tiny_device,
-            batch_size=50,  # Smaller batch size for more reliability
+            batch_size=100,  # Smaller batch size for more reliability
             max_vcons=1000,
             threshold=settings.lang_detect_threshold
         )
@@ -602,15 +619,15 @@ def main():
             english_vcons, non_english_vcons = find_vcons_pending_transcription(collection, max_vcons=1000)
         
         # Process English vCons with Parakeet (up to 1000)
-        logging.info(f"Processing {len(english_vcons)} English vCons with Parakeet model")
+        logging.info(f"Processing {len(english_vcons)} English vCons with Canary model")
         english_vcons_to_process = english_vcons[:1000]
         if english_vcons_to_process:
             transcribe_vcons(
                 collection,
-                "nvidia/parakeet-tdt_ctc-110m",
-                parakeet_model,
+                "nvidia/canary-1b-flash",
+                canary_model,
                 english_vcons_to_process,
-                batch_size=10  # Smaller batch size for more reliability
+                batch_size=500  # Smaller batch size for more reliability
             )
         
         # Process non-English vCons with Canary (up to 1000)
@@ -622,7 +639,7 @@ def main():
                 "nvidia/canary-1b-flash",
                 canary_model,
                 non_english_vcons_to_process,
-                batch_size=10  # Smaller batch size for more reliability
+                batch_size=500  # Smaller batch size for more reliability
             )
         logging.info(f"Total time to process vCons: {time.time() - work_start_time:.2f} seconds")
 

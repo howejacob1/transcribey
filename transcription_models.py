@@ -28,13 +28,12 @@ def load_nvidia_parakeet_tdt_06b_v2():
     logger.info(f"Finished loading nvidia/parakeet-tdt-0.6b-v2 in {elapsed:.2f} seconds.")
     return model
 
-
 def load_nvidia_parakeet_tdt_ctc_110m():
     """Load nvidia/parakeet-tdt_ctc-110m model using NVIDIA NeMo."""
     logger.info("Starting to load nvidia/parakeet-tdt_ctc-110m ...")
     start_time = time.time()
     nemo_asr = importlib.import_module("nemo.collections.asr")
-    model =    nemo_asr.models.ASRModel.from_pretrained(model_name="nvidia/parakeet-tdt_ctc-110m")
+    model = nemo_asr.models.EncDecHybridRNNTCTCBPEModel.from_pretrained(model_name="nvidia/parakeet-tdt_ctc-110m")
     elapsed = time.time() - start_time
     logger.info(f"Finished loading nvidia/parakeet-tdt_ctc-110m in {elapsed:.2f} seconds.")
     return model
