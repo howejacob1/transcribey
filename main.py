@@ -4,7 +4,7 @@ logging.basicConfig(level=logging.INFO)
 import time
 import os
 import transcription_models
-from utils import get_all_filenames, wav_file_generator, filter_wav_files, get_audio_duration
+from utils import get_all_filenames, wav_file_generator, get_wav_files, get_wav_duration
 from wav_cache import preload_wavs_threaded
 import shutil
 import numpy as np
@@ -20,21 +20,6 @@ from vcon import Vcon
 from vcon.party import Party
 from vcon.dialog import Dialog
 
-def clear_wav_cache():
-    """
-    Remove all files and directories under working_memory.
-    """
-    logging.info("Starting to clear working_memory cache...")
-    start_time = time.time()
-    cache_dir = 'working_memory'
-    for entry in os.listdir(cache_dir):
-        path = os.path.join(cache_dir, entry)
-        if os.path.isfile(path) or os.path.islink(path):
-            os.remove(path)
-        elif os.path.isdir(path):
-            shutil.rmtree(path)
-    elapsed = time.time() - start_time
-    logging.info(f"Finished clearing working_memory cache in {elapsed:.2f} seconds.")
 
 def load_and_resample_waveforms(wav_paths, target_sample_rate=16000):
     """
@@ -208,7 +193,7 @@ def maybe_add_vcons_to_mongo(target_dir):
     file_dict = get_all_filenames(target_dir)
     logging.info(f"Got all filenames in {time.time() - start_time:.2f} seconds.")
     
-    wavs = filter_wav_files(file_dict)
+    wavs = get_wav_files(file_dict)
     logging.info(f"Found {len(wavs)} wav files in {target_dir}")
 
     # Find which files already have vCons
@@ -264,14 +249,14 @@ def process_language_identification(collection, model, processor, device, batch_
     for file_path in all_files:
         try:
             total_bytes += os.path.getsize(file_path)
-            total_audio_seconds += get_audio_duration(file_path)
+            total_audio_seconds += get_wav_duration(file_path)
         except Exception as e:
             logging.warning(f"Could not get size/duration for {file_path}: {e}")
 
     # Input validation: only keep valid wav files
     def is_valid_wav(file_path):
         try:
-            duration = get_audio_duration(file_path)
+            duration = get_wav_duration(file_path)
             if duration is None or duration == 0:
                 return False
             waveform, sample_rate = torchaudio.load(file_path)
@@ -410,13 +395,13 @@ def transcribe_vcons(collection, model_name, model, vcons_to_transcribe, batch_s
     for file_path in all_files:
         try:
             total_bytes += os.path.getsize(file_path)
-            total_audio_seconds += get_audio_duration(file_path)
+            total_audio_seconds += get_wav_duration(file_path)
         except Exception as e:
             logging.warning(f"Could not get size/duration for {file_path}: {e}")
     
     def is_valid_wav(file_path):
         try:
-            duration = get_audio_duration(file_path)
+            duration = get_wav_duration(file_path)
             if duration is None or duration == 0:
                 return False
             waveform, sample_rate = torchaudio.load(file_path)
@@ -595,7 +580,7 @@ def main():
         # First, process language identification for vCons that don't have it yet
         # Filter out unreadable/corrupt wav files before language identification
         def is_readable_wav(file_path):
-            duration = get_audio_duration(file_path)
+            duration = get_wav_duration(file_path)
             return duration is not None
 
         english_vcons, non_english_vcons = process_language_identification(
@@ -648,134 +633,6 @@ def main():
 
     total_elapsed = time.time() - total_start_time
     logging.info(f"Total runtime: {total_elapsed:.2f} seconds")
-
-def old_main():
-    total_start_time = time.time()
-    # Clear the working_memory cache
-    clear_wav_cache()
-    # Start background thread to preload wavs
-    source_dir = settings.source_dir
-    dest_dir = settings.dest_dir
-    preload_thread = preload_wavs_threaded(source_dir, dest_dir, size_limit_bytes=settings.preload_size_limit_bytes)
-    # Remove print statements for model loading
-    parakeet_model = transcription_models.load_nvidia_parakeet_tdt_ctc_110m()
-    canary_model = transcription_models.load_nvidia_canary_1b_flash()
-    whisper_tiny_model, whisper_tiny_processor, whisper_tiny_device = transcription_models.load_openai_whisper_tiny()
- 
-    # After loading models, move up to 1GB of wavs to wavs_to_id in a loop until preload_thread exits
-    raw_wavs_dir = settings.dest_dir
-    wavs_processing_dir = settings.wavs_in_progress_dir
-    os.makedirs(wavs_processing_dir, exist_ok=True)
-    max_bytes = settings.max_bytes
-    
-    def start_processing_wavs():
-        wav_files = [f for f in os.listdir(raw_wavs_dir) if f.endswith('.wav')]
-        moved_bytes = 0
-        moved_files = 0
-        for wav_file in wav_files:
-            src = os.path.join(raw_wavs_dir, wav_file)
-            dst = os.path.join(wavs_processing_dir, wav_file)
-            file_size = os.path.getsize(src)
-            if moved_bytes + file_size > max_bytes:
-                break
-            shutil.move(src, dst)
-            moved_bytes += file_size
-            moved_files += 1
-        logging.info(f"Moved {moved_files} wav files totaling {moved_bytes / (1024*1024):.2f} MB to {wavs_processing_dir}")
-        return moved_files
-
-    vcons = {}
-    # Identify languages above threshold for each wav in wavs_to_id_dir
-    non_english_dir = settings.non_en_wavs_in_progress_dir
-    os.makedirs(non_english_dir, exist_ok=True)
-    processed_file_count = 0
-    def detect_langs_in_wavs_processing():
-        nonlocal processed_file_count
-        wav_files = [f for f in os.listdir(wavs_processing_dir) if f.endswith('.wav')]
-        wav_paths = [os.path.join(wavs_processing_dir, f) for f in wav_files]
-        if not wav_paths:
-            return {}
-        total_bytes = sum(os.path.getsize(p) for p in wav_paths)
-        start_time = time.time()
-        batch_results = batch_get_detected_languages(wav_paths, whisper_tiny_model, whisper_tiny_processor, whisper_tiny_device, threshold=settings.lang_detect_threshold)
-        elapsed = time.time() - start_time
-        logging.info(f"Processed {len(wav_files)} files, total size: {total_bytes/(1024*1024):.2f} MB, time taken: {elapsed:.2f} seconds")
-        lang_results = {}
-        for wav_file, detected_langs in zip(wav_files, batch_results):
-            lang_results[wav_file] = detected_langs
-            processed_file_count += 1
-            logging.info(f"{wav_file}: Detected languages (>=20%): {detected_langs}")
-            # If not exclusively English, move to non_english_dir
-            if any(lang != 'en' for lang in detected_langs):
-                dest_path = os.path.join(non_english_dir, wav_file)
-                shutil.move(os.path.join(wavs_processing_dir, wav_file), dest_path)
-                logging.info(f"Moved {wav_file} to {non_english_dir} (non-English detected)")
-        return lang_results
-    lang_results = {}
-    transcription_results = {}
-    last_time_there_were_files = time.time()
-    max_no_new_file_seconds = settings.max_no_new_file_seconds
-    MAX_FILES = settings.max_files
-    while True:
-        start_processing_wavs()
-        # Check for new wav files in raw_wavs_dir
-        current_raw_wavs = set(os.listdir(raw_wavs_dir))
-        if len(current_raw_wavs) != 0:
-            logging.info(f"New wav files detected: {current_raw_wavs}")
-            last_time_there_were_files = time.time()
-        else:
-            if time.time() - last_time_there_were_files >= max_no_new_file_seconds:
-                logging.info("No new wav files detected for 5 seconds. Exiting main loop.")
-                break
-
-        # First
-        lang_results.update(detect_langs_in_wavs_processing())
-        if processed_file_count >= MAX_FILES:
-            logging.info(f"Processed {processed_file_count} files, reached limit of {MAX_FILES}. Exiting main loop.")
-            break
-        # INSERT_YOUR_CODE
-        # Check if non_english_dir exceeds 100MB
-        non_english_wavs = [f for f in os.listdir(non_english_dir) if f.endswith('.wav')]
-        total_non_english_bytes = sum(os.path.getsize(os.path.join(non_english_dir, f)) for f in non_english_wavs)
-        if total_non_english_bytes > 100 * 1024 * 1024 and non_english_wavs:
-            logging.info(f"Non-English buffer exceeds 100MB ({total_non_english_bytes/(1024*1024):.2f} MB). Transcribing with canary-1b-flash.")
-            # Load canary-1b-flash model if not already loaded
-            if 'canary_model' not in globals():
-                canary_model = transcription_models.load_nvidia_canary_1b_flash()
-            for wav_file in non_english_wavs:
-                wav_path = os.path.join(non_english_dir, wav_file)
-                try:
-                    logging.info(f"Transcribing {wav_file} with canary-1b-flash")
-                    transcription = canary_model.transcribe([wav_path])[0]
-                    transcription_results[wav_file] = transcription
-                    logging.info(f"Done Transcribed {wav_file} with canary-1b-flash")
-                    os.remove(wav_path)
-                except Exception as e:
-                    logging.error(f"Error transcribing {wav_file} with canary-1b-flash: {str(e)}")
-        # Transcribe English files with Parakeet model
-        for wav_file in os.listdir(wavs_processing_dir):
-            if not wav_file.endswith('.wav'):
-                continue
-            wav_path = os.path.join(wavs_processing_dir, wav_file)
-            try:
-                # Transcribe with Parakeet
-                logging.info(f"Transcribing {wav_file} with Parakeet")
-                transcription = parakeet_model.transcribe([wav_path])[0]
-                transcription_results[wav_file] = transcription
-                logging.info(f"Done Transcribed {wav_file} with Parakeet")
-                # Remove file after successful transcription
-                os.remove(wav_path)
-            except Exception as e:
-                logging.error(f"Error transcribing {wav_file}: {str(e)}")
-
-        logging.info(f"Number of files processed: {len(lang_results)}")
-        time.sleep(3)
-
-    total_elapsed = time.time() - total_start_time
-    logging.info(f"\nAll language results:")
-    logging.info(lang_results)
-    logging.info(f"\nTotal files processed: {processed_file_count}")
-    logging.info(f"Total script runtime: {total_elapsed:.2f} seconds")
 
 if __name__ == "__main__":
     main()
