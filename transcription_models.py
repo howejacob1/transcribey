@@ -24,6 +24,7 @@ def load_nvidia_parakeet_tdt_06b_v2():
     start_time = time.time()
     nemo_asr = importlib.import_module("nemo.collections.asr")
     model = nemo_asr.models.ASRModel.from_pretrained(model_name="nvidia/parakeet-tdt-0.6b-v2")
+    logger.info("Moving to GPU")
     model.to("cuda")
     elapsed = time.time() - start_time
     logger.info(f"Finished loading nvidia/parakeet-tdt-0.6b-v2 in {elapsed:.2f} seconds.")
@@ -35,6 +36,7 @@ def load_nvidia_canary_1b_flash():
     start_time = time.time()
     nemo_asr = importlib.import_module("nemo.collections.asr")
     model = nemo_asr.models.ASRModel.from_pretrained(model_name="nvidia/canary-1b-flash")
+    logger.info("Moving to GPU")
     model.to("cuda")
     elapsed = time.time() - start_time
     logger.info(f"Finished loading nvidia/canary-1b-flash in {elapsed:.2f} seconds.")
@@ -48,9 +50,11 @@ def load_openai_whisper_tiny():
     from transformers import AutoModelForSpeechSeq2Seq, AutoProcessor
     import torch
     model_name = "openai/whisper-tiny"
+    logger.info("Loading OpenAI Whisper tiny model and processor")
     processor = AutoProcessor.from_pretrained(model_name)
     model = AutoModelForSpeechSeq2Seq.from_pretrained(model_name)
     device = "cuda" if torch.cuda.is_available() else "cpu"
+    logger.info("Moving to GPU")
     model = model.to(device)
     return model, processor, device
 

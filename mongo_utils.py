@@ -52,4 +52,34 @@ def delete_all_vcons():
 def delete_all_faqs():
     faqs_collection = get_mongo_collection(collection_name="faqs")
     result = faqs_collection.delete_many({})
-    print(f"Deleted {result.deleted_count} documents from the faqs collection.") 
+    print(f"Deleted {result.deleted_count} documents from the faqs collection.")
+
+def print_all_vcon_transcriptions():
+    """
+    Print all vCon transcriptions from the database. For each vCon, print the filename and all transcription texts.
+    """
+    collection = get_mongo_collection()
+    for doc in collection.find():
+        # Try to get filename from dialog or attachments
+        filename = None
+        if 'dialog' in doc and isinstance(doc['dialog'], list):
+            for dlg in doc['dialog']:
+                if isinstance(dlg, dict) and 'filename' in dlg:
+                    filename = dlg['filename']
+                    break
+        if not filename and 'attachments' in doc and isinstance(doc['attachments'], list):
+            for att in doc['attachments']:
+                if isinstance(att, dict) and att.get('type') == 'audio' and 'body' in att:
+                    filename = att['body']
+                    break
+        # Find all transcriptions in analysis
+        transcriptions = []
+        if 'analysis' in doc and isinstance(doc['analysis'], list):
+            for analysis in doc['analysis']:
+                if analysis.get('type') == 'transcription':
+                    transcriptions.append(analysis.get('body'))
+        if transcriptions:
+            print(f"Filename: {filename if filename else '[unknown]'}")
+            for t in transcriptions:
+                print(f"  Transcription: {t}")
+            print() 

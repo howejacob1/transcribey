@@ -270,8 +270,8 @@ def identify_languages(collection, wav_paths, max_vcons=10000):
                 if os.path.exists(abs_path) and os.path.isfile(abs_path):
                     all_files.append(abs_path)
     # Process in batches
-    for i in range(0, len(vcons_to_process), settings.transcription_batch_size):
-        batch = vcons_to_process[i:min(i+settings.transcription_batch_size, len(vcons_to_process))]
+    for i in range(0, len(vcons_to_process), settings.lang_detect_batch_size):
+        batch = vcons_to_process[i:min(i+settings.lang_detect_batch_size, len(vcons_to_process))]
         batch_files = []
         batch_ids = []
         file_id_map = {}  # Map file index to (vcon_id, file_path)
@@ -357,7 +357,7 @@ def identify_languages(collection, wav_paths, max_vcons=10000):
     return english_vcons, non_english_vcons
 
 
-def transcribe_vcons(collection, model, vcons_to_transcribe):
+def transcribe_vcons(collection, model, vcons_to_transcribe, batch_size):
     """
     Transcribe a list of vCons using the specified model.
     
@@ -365,6 +365,7 @@ def transcribe_vcons(collection, model, vcons_to_transcribe):
         collection: MongoDB collection containing vCons
         model: Loaded model instance (should have a .transcribe method)
         vcons_to_transcribe: List of (vcon_id, file_path) tuples to transcribe
+        batch_size: Number of files to process in each batch
     """
 
     if not vcons_to_transcribe:
@@ -380,7 +381,6 @@ def transcribe_vcons(collection, model, vcons_to_transcribe):
     total_bytes = get_total_wav_size(file_paths_only)
     total_audio_seconds = get_total_wav_duration(file_paths_only)
     all_files = file_paths_only
-    batch_size = settings.transcription_batch_size
     for i in range(0, total, batch_size):
         batch = vcons_to_transcribe[i:min(i+batch_size, total)]
         batch_ids = [vcon_id for vcon_id, _ in batch]
@@ -542,7 +542,8 @@ def main():
             transcribe_vcons(
                 collection,
                 parakeet_model,
-                english_vcons_to_process)
+                english_vcons_to_process,
+                settings.en_transcription_batch_size)
         del parakeet_model
         torch.cuda.empty_cache()
         # Process non-English vCons with Canary (up to 1000)
@@ -553,7 +554,8 @@ def main():
             transcribe_vcons(
                 collection,
                 canary_model,
-                non_english_vcons_to_process
+                non_english_vcons_to_process,
+                settings.non_en_transcription_batch_size
             )
         del canary_model
         torch.cuda.empty_cache()
