@@ -24,20 +24,10 @@ def load_nvidia_parakeet_tdt_06b_v2():
     start_time = time.time()
     nemo_asr = importlib.import_module("nemo.collections.asr")
     model = nemo_asr.models.ASRModel.from_pretrained(model_name="nvidia/parakeet-tdt-0.6b-v2")
+    model.to("cuda")
     elapsed = time.time() - start_time
     logger.info(f"Finished loading nvidia/parakeet-tdt-0.6b-v2 in {elapsed:.2f} seconds.")
     return model
-
-def load_nvidia_parakeet_tdt_ctc_110m():
-    """Load nvidia/parakeet-tdt_ctc-110m model using NVIDIA NeMo."""
-    logger.info("Starting to load nvidia/parakeet-tdt_ctc-110m ...")
-    start_time = time.time()
-    nemo_asr = importlib.import_module("nemo.collections.asr")
-    model = nemo_asr.models.EncDecHybridRNNTCTCBPEModel.from_pretrained(model_name="nvidia/parakeet-tdt_ctc-110m")
-    elapsed = time.time() - start_time
-    logger.info(f"Finished loading nvidia/parakeet-tdt_ctc-110m in {elapsed:.2f} seconds.")
-    return model
-
 
 def load_nvidia_canary_1b_flash():
     """Load nvidia/canary-1b-flash model using NVIDIA NeMo."""
@@ -45,33 +35,32 @@ def load_nvidia_canary_1b_flash():
     start_time = time.time()
     nemo_asr = importlib.import_module("nemo.collections.asr")
     model = nemo_asr.models.ASRModel.from_pretrained(model_name="nvidia/canary-1b-flash")
+    model.to("cuda")
     elapsed = time.time() - start_time
     logger.info(f"Finished loading nvidia/canary-1b-flash in {elapsed:.2f} seconds.")
     return model
 
-def load_openai_whisper_large_v2():
-    """Load openai/whisper-large-v2 model and processor from HuggingFace for direct wav analysis."""
-    logger.info("Starting to load openai/whisper-large-v2 ...")
-    start_time = time.time()
-    model = AutoModelForSpeechSeq2Seq.from_pretrained("openai/whisper-large-v2")
-    processor = AutoProcessor.from_pretrained("openai/whisper-large-v2")
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+def load_openai_whisper_tiny():
+    """
+    Load the OpenAI Whisper tiny model and processor.
+    Returns (model, processor, device)
+    """
+    from transformers import AutoModelForSpeechSeq2Seq, AutoProcessor
+    import torch
+    model_name = "openai/whisper-tiny"
+    processor = AutoProcessor.from_pretrained(model_name)
+    model = AutoModelForSpeechSeq2Seq.from_pretrained(model_name)
+    device = "cuda" if torch.cuda.is_available() else "cpu"
     model = model.to(device)
-    elapsed = time.time() - start_time
-    logger.info(f"Finished loading openai/whisper-large-v2 in {elapsed:.2f} seconds.")
     return model, processor, device
 
-def load_openai_whisper_tiny():
-    """Load openai/whisper-tiny model and processor from HuggingFace for direct wav analysis."""
-    logger.info("Starting to load openai/whisper-tiny ...")
-    start_time = time.time()
-    model = AutoModelForSpeechSeq2Seq.from_pretrained("openai/whisper-tiny")
-    processor = AutoProcessor.from_pretrained("openai/whisper-tiny")
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    model = model.to(device)
-    elapsed = time.time() - start_time
-    logger.info(f"Finished loading openai/whisper-tiny in {elapsed:.2f} seconds.")
-    return model, processor, device
+def load_model_by_name(model_name):
+    if model_name == "nvidia/parakeet-tdt-0.6b-v2":
+        return load_nvidia_parakeet_tdt_06b_v2()
+    elif model_name == "nvidia/canary-1b-flash":
+        return load_nvidia_canary_1b_flash()
+    else:
+        raise ValueError(f"Unknown model name: {model_name}")
 
 if __name__ == "__main__":
     import sys

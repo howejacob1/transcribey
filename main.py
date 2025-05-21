@@ -3,9 +3,8 @@ import logging
 logging.basicConfig(level=logging.INFO)
 import time
 import os
-import transcription_models
-from utils import get_all_filenames, wav_file_generator, get_wav_files, get_wav_duration
-from wav_cache import preload_wavs_threaded
+from transcription_models import load_model_by_name
+from utils import get_valid_wav_files, get_total_wav_size, get_total_wav_duration
 import shutil
 import numpy as np
 import torch
@@ -29,7 +28,9 @@ from vcon.dialog import Dialog
 
 # slaves track changes in certain directories.
 # When the slave detects new wavs, it reports these files to the master.
-# When the slave has spare GPU power, it goes to the database and sees which ones have undetermined languages or lack of transcriptions locally, then over the network, prefering models already loaded.
+# When the slave has spare GPU power, it goes to the database and sees 
+# which ones have undetermined languages or lack of transcriptions locally, 
+# then over the network, prefering models already loaded.
 # The slave reserves these files. 
 # Then, the slave works on these files. 
 # Slaves attempt not to load another model as much as possible. 
@@ -37,7 +38,8 @@ from vcon.dialog import Dialog
 # Slaves tell the database that they are still alive.
 # If a slave detects that the database has an entry of a slave that isn't alive, it will remove all locks in all database entries that have that entry. 
 # All slaves have some static IP. 
-# Report speed results to the database.
+
+import transcription_models
 
 def load_and_resample_waveforms(wav_paths, target_sample_rate=16000):
     """
@@ -207,12 +209,9 @@ def maybe_add_vcons_to_mongo(target_dir):
     collection.create_index([("dialog.filename", 1)])
     
     logging.info(f"Getting all wav files in {target_dir}")
-    start_time = time.time()
-    file_dict = get_all_filenames(target_dir)
-    logging.info(f"Got all filenames in {time.time() - start_time:.2f} seconds.")
-    
-    wavs = get_wav_files(file_dict)
-    logging.info(f"Found {len(wavs)} wav files in {target_dir}")
+    wavs = get_valid_wav_files(target_dir)
+    # Filter out unreadable wavs
+    logging.info(f"Found {len(wavs)} readable wav files in {target_dir}")
 
     # Find which files already have vCons
     existing_filenames = get_existing_vcon_filenames(collection)
@@ -221,7 +220,7 @@ def maybe_add_vcons_to_mongo(target_dir):
     
     insert_vcon_dicts_to_mongo(collection, vcon_dicts, skipped)
 
-def process_language_identification(collection, model, processor, device, batch_size=100, max_vcons=1000, threshold=0.2):
+def identify_languages(collection, wav_paths, max_vcons=10000):
     """
     Identify languages in wav files referenced in vCons using the Whisper model.
     
@@ -237,6 +236,7 @@ def process_language_identification(collection, model, processor, device, batch_
     Returns:
         Tuple of (english_vcons, non_english_vcons) lists with vCon IDs and their file paths
     """
+    whisper_tiny_model, whisper_tiny_processor, whisper_tiny_device = transcription_models.load_openai_whisper_tiny()
     logging.info(f"Starting language identification for up to {max_vcons} vCons")
     start_time = time.time()
     
@@ -254,8 +254,8 @@ def process_language_identification(collection, model, processor, device, batch_
     english_vcons = []
     non_english_vcons = []
     processed = 0
-    total_bytes = 0
-    total_audio_seconds = 0
+    total_bytes = get_total_wav_size(list(wav_paths.values()))
+    total_audio_seconds = get_total_wav_duration(list(wav_paths.values()))
     all_files = []
     for vcon in vcons_to_process:
         for attachment in vcon.get('attachments', []):
@@ -264,48 +264,9 @@ def process_language_identification(collection, model, processor, device, batch_
                 abs_path = os.path.join(settings.source_dir, rel_path)
                 if os.path.exists(abs_path) and os.path.isfile(abs_path):
                     all_files.append(abs_path)
-    for file_path in all_files:
-        try:
-            total_bytes += os.path.getsize(file_path)
-            total_audio_seconds += get_wav_duration(file_path)
-        except Exception as e:
-            logging.warning(f"Could not get size/duration for {file_path}: {e}")
-
-    # Input validation: only keep valid wav files
-    def is_valid_wav(file_path):
-        try:
-            duration = get_wav_duration(file_path)
-            if duration is None or duration == 0:
-                return False
-            waveform, sample_rate = torchaudio.load(file_path)
-            if waveform.numel() == 0 or not torch.isfinite(waveform).all():
-                return False
-            return True
-        except Exception as e:
-            logging.warning(f"Invalid wav file {file_path}: {e}")
-            return False
-
-    # Filter vcons_to_process to only those with valid wav files
-    filtered_vcons = []
-    for vcon in vcons_to_process:
-        valid = False
-        for attachment in vcon.get('attachments', []):
-            if attachment.get('type') == 'audio':
-                rel_path = attachment.get('body')
-                abs_path = os.path.join(settings.source_dir, rel_path)
-                if os.path.exists(abs_path) and os.path.isfile(abs_path) and is_valid_wav(abs_path):
-                    valid = True
-                    break
-        if valid:
-            filtered_vcons.append(vcon)
-    vcons_to_process = filtered_vcons
-
-    total_vcons = len(vcons_to_process)
-    logging.info(f"Found {total_vcons} vCons to process for language identification (after filtering invalid wavs)")
-    
     # Process in batches
-    for i in range(0, total_vcons, batch_size):
-        batch = vcons_to_process[i:min(i+batch_size, total_vcons)]
+    for i in range(0, len(vcons_to_process), settings.transcription_batch_size):
+        batch = vcons_to_process[i:min(i+settings.transcription_batch_size, len(vcons_to_process))]
         batch_files = []
         batch_ids = []
         file_id_map = {}  # Map file index to (vcon_id, file_path)
@@ -331,10 +292,10 @@ def process_language_identification(collection, model, processor, device, batch_
             # Detect languages
             detected_languages = batch_get_detected_languages(
                 batch_files, 
-                model, 
-                processor, 
-                device, 
-                threshold=threshold
+                whisper_tiny_model, 
+                whisper_tiny_processor, 
+                whisper_tiny_device, 
+                threshold=settings.lang_detect_threshold
             )
             
             batch_elapsed = time.time() - batch_start
@@ -377,111 +338,84 @@ def process_language_identification(collection, model, processor, device, batch_
         except Exception as e:
             logging.error(f"Error processing batch for language identification: {str(e)}")
     
-    # Filter out corrupt files from vCon lists
-    english_vcons = [(vid, fpath) for vid, fpath in english_vcons if is_valid_wav(fpath)]
-    non_english_vcons = [(vid, fpath) for vid, fpath in non_english_vcons if is_valid_wav(fpath)]
-    
     total_elapsed = time.time() - start_time
     logging.info(f"Completed language identification for {processed} vCons in {total_elapsed:.2f} seconds")
     logging.info(f"Total data: {total_bytes / (1024**3):.2f} GB, total length: {total_audio_seconds:.2f} seconds, real time factor: {total_audio_seconds / total_elapsed:.1f}x")
     logging.info(f"Found {len(english_vcons)} English vCons and {len(non_english_vcons)} non-English vCons")
     
+    # Unload the model to free up GPU memory
+    del whisper_tiny_model
+    del whisper_tiny_processor
+    del whisper_tiny_device
+    torch.cuda.empty_cache()
+    
     return english_vcons, non_english_vcons
 
-def transcribe_vcons(collection, model_name, model, vcons_to_transcribe, batch_size=10):
+
+def transcribe_vcons(collection, model, vcons_to_transcribe):
     """
     Transcribe a list of vCons using the specified model.
     
     Args:
         collection: MongoDB collection containing vCons
-        model_name: Name of the model being used (for logging)
-        model: The transcription model to use
+        model: Loaded model instance (should have a .transcribe method)
         vcons_to_transcribe: List of (vcon_id, file_path) tuples to transcribe
-        batch_size: Number of files to transcribe in each batch
     """
+
     if not vcons_to_transcribe:
-        logging.info(f"No vCons to transcribe with {model_name}")
+        logging.info(f"No vCons to transcribe with {getattr(model, 'name', getattr(model, '__class__', type(model)).__name__)}")
         return
         
     total = len(vcons_to_transcribe)
+    model_name = getattr(model, 'name', getattr(model, '__class__', type(model)).__name__)
     logging.info(f"Starting transcription of {total} vCons with {model_name}")
     start_time = time.time()
     processed = 0
-    total_bytes = 0
-    total_audio_seconds = 0
-    all_files = [file_path for _, file_path in vcons_to_transcribe]
-    for file_path in all_files:
-        try:
-            total_bytes += os.path.getsize(file_path)
-            total_audio_seconds += get_wav_duration(file_path)
-        except Exception as e:
-            logging.warning(f"Could not get size/duration for {file_path}: {e}")
-    
-    def is_valid_wav(file_path):
-        try:
-            duration = get_wav_duration(file_path)
-            if duration is None or duration == 0:
-                return False
-            waveform, sample_rate = torchaudio.load(file_path)
-            if waveform.numel() == 0 or not torch.isfinite(waveform).all():
-                return False
-            return True
-        except Exception as e:
-            logging.warning(f"Invalid wav file {file_path}: {e}")
-            return False
-    
-    # Process in batches
+    file_paths_only = [file_path for _, file_path in vcons_to_transcribe]
+    total_bytes = get_total_wav_size(file_paths_only)
+    total_audio_seconds = get_total_wav_duration(file_paths_only)
+    all_files = file_paths_only
+    batch_size = settings.transcription_batch_size
     for i in range(0, total, batch_size):
         batch = vcons_to_transcribe[i:min(i+batch_size, total)]
         batch_ids = [vcon_id for vcon_id, _ in batch]
         batch_files = [file_path for _, file_path in batch]
-        
-        # Check if all files exist and are valid
         valid_indices = []
         valid_files = []
         valid_ids = []
         for idx, file_path in enumerate(batch_files):
-            if os.path.exists(file_path) and os.path.isfile(file_path) and is_valid_wav(file_path):
+            if os.path.exists(file_path) and os.path.isfile(file_path):
                 valid_indices.append(idx)
                 valid_files.append(file_path)
                 valid_ids.append(batch_ids[idx])
             else:
                 logging.warning(f"File not found, not accessible, or invalid: {file_path}")
-        
         if not valid_files:
             logging.warning(f"No valid files in batch {i//batch_size + 1}")
             continue
-        
         batch_start = time.time()
         try:
-            # Transcribe all files in the batch
             print(f"Files to transcribe: {valid_files}")
             transcriptions = model.transcribe(valid_files)
             batch_elapsed = time.time() - batch_start
             logging.info(f"Transcribed batch of {len(valid_files)} files with {model_name} in {batch_elapsed:.2f} seconds")
-            
-            # Update each vCon with its transcription
             for vcon_id, file_path, transcription in zip(valid_ids, valid_files, transcriptions):
-                # Add transcription analysis to vCon
                 analysis = {
                     "type": "transcription",
-                    "dialog": [0],  # Assuming the first dialog contains the audio
+                    "dialog": [0],
                     "vendor": model_name,
                     "body": transcription.text if hasattr(transcription, 'text') else str(transcription),
                     "encoding": "none"
                 }
-                
                 try:
                     collection.update_one(
                         {"_id": vcon_id},
                         {"$push": {"analysis": analysis}}
                     )
-                    
                     logging.info(f"Transcribed {os.path.basename(file_path)} with {model_name}: {analysis['body']}")
                     processed += 1
                 except Exception as e:
                     logging.error(f"Error updating transcription for vCon {vcon_id}: {str(e)}")
-                
         except RuntimeError as e:
             if 'CUDA error' in str(e):
                 logging.error(f"CUDA error during transcription: {str(e)}. Clearing CUDA cache and continuing.")
@@ -490,13 +424,13 @@ def transcribe_vcons(collection, model_name, model, vcons_to_transcribe, batch_s
                 logging.error(f"Error transcribing batch with {model_name}: {str(e)}")
         except Exception as e:
             logging.error(f"Error transcribing batch with {model_name}: {str(e)}")
-            
         if processed % 100 == 0 or processed == total:
             logging.info(f"Progress: {processed}/{total} vCons transcribed with {model_name}")
-    
     total_elapsed = time.time() - start_time
     logging.info(f"Completed transcription of {processed} vCons with {model_name} in {total_elapsed:.2f} seconds")
     logging.info(f"Total data: {total_bytes / (1024**3):.2f} GB, total length: {total_audio_seconds:.2f} seconds, real time factor: {total_audio_seconds / total_elapsed:.1f}x")
+    del model
+    torch.cuda.empty_cache()
 
 def find_vcons_pending_transcription(collection, max_vcons=1000):
     """
@@ -572,64 +506,31 @@ def find_vcons_pending_transcription(collection, max_vcons=1000):
 
 def main():
     total_start_time = time.time()
-
-    # Create working_memory directory if it doesn't exist
-    os.makedirs("working_memory", exist_ok=True)
     
     try:
-        # Run maybe_add_vcons_to_mongo in a separate thread
-        vcon_thread = threading.Thread(target=maybe_add_vcons_to_mongo, args=(settings.source_dir,))
-        vcon_thread.start()
-        
-        # Load models while the vcon thread is running
-        canary_model = transcription_models.load_nvidia_canary_1b_flash()
-        parakeet_model = transcription_models.load_nvidia_parakeet_tdt_06b_v2()
-        whisper_tiny_model, whisper_tiny_processor, whisper_tiny_device = transcription_models.load_openai_whisper_tiny()
-        
-        # Wait for the vcon thread to complete
-        logging.info("Waiting for vCon loading thread to complete...")
-        vcon_thread.join()
-        logging.info("vCon loading thread completed")
 
+        maybe_add_vcons_to_mongo(settings.source_dir)
         # Get MongoDB connection
         collection = get_mongo_collection()
         work_start_time = time.time()
-        
-        # First, process language identification for vCons that don't have it yet
-        # Filter out unreadable/corrupt wav files before language identification
-        def is_readable_wav(file_path):
-            duration = get_wav_duration(file_path)
-            return duration is not None
 
-        english_vcons, non_english_vcons = process_language_identification(
-            collection, 
-            whisper_tiny_model, 
-            whisper_tiny_processor, 
-            whisper_tiny_device,
-            batch_size=100,  # Smaller batch size for more reliability
-            max_vcons=128,
-            threshold=settings.lang_detect_threshold
-        )
-        # Filter out corrupt files from vCon lists
-        english_vcons = [(vid, fpath) for vid, fpath in english_vcons if is_readable_wav(fpath)]
-        non_english_vcons = [(vid, fpath) for vid, fpath in non_english_vcons if is_readable_wav(fpath)]
-        
+        # First, process language identification for vCons that don't have it yet
+        english_vcons, non_english_vcons = identify_languages(collection, get_valid_wav_files(settings.source_dir), max_vcons=10000)
+            
         # If no vCons were found for language identification, check for ones that need transcription
         if len(english_vcons) == 0 and len(non_english_vcons) == 0:
             logging.info("No new vCons for language identification. Looking for vCons pending transcription...")
-            english_vcons, non_english_vcons = find_vcons_pending_transcription(collection, max_vcons=1000)
-        
+            english_vcons, non_english_vcons = find_vcons_pending_transcription(collection, max_vcons=10000)
+        canary_model = transcription_models.load_model_by_name("nvidia/canary-1b-flash")        
         # Process English vCons with Parakeet (up to 1000)
         logging.info(f"Processing {len(english_vcons)} English vCons with Canary model")
         english_vcons_to_process = english_vcons[:1000]
         if english_vcons_to_process:
+
             transcribe_vcons(
                 collection,
-                "nvidia/parakeet-tdt-0.6b-v2",
-                parakeet_model,
-                english_vcons_to_process,
-                batch_size=10  # Smaller batch size for more reliability
-            )
+                canary_model,
+                english_vcons_to_process)
         
         # Process non-English vCons with Canary (up to 1000)
         logging.info(f"Processing {len(non_english_vcons)} non-English vCons with Canary model")
@@ -637,10 +538,8 @@ def main():
         if non_english_vcons_to_process:
             transcribe_vcons(
                 collection,
-                "nvidia/canary-1b-flash",
                 canary_model,
-                non_english_vcons_to_process,
-                batch_size=10  # Smaller batch size for more reliability
+                non_english_vcons_to_process
             )
         logging.info(f"Total time to process vCons: {time.time() - work_start_time:.2f} seconds")
 
