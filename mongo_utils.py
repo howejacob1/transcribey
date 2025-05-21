@@ -47,4 +47,9 @@ def print_all_vcons():
 def delete_all_vcons():
     collection = get_mongo_collection()
     result = collection.delete_many({})
-    print(f"Deleted {result.deleted_count} documents from the collection.") 
+    print(f"Deleted {result.deleted_count} documents from the collection.")
+
+def delete_all_faqs():
+    faqs_collection = get_mongo_collection(collection_name="faqs")
+    result = faqs_collection.delete_many({})
+    print(f"Deleted {result.deleted_count} documents from the faqs collection.") 
