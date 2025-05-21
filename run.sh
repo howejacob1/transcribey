@@ -5,6 +5,7 @@ pip install torch torchvision torchaudio --index-url https://download.pytorch.or
 
 source venv/bin/activate
 python clear_mongo_collections.py
+python move_broken_wavs.py
 # python main.py 
 
 # pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu128 --force-reinstall --break-system-packages ; pip install -r /home/bantaim/conserver/transcribey/ --break-system-packages --force-reinstall; pip install nemo_toolkit['all'] --break-system-packages --force-reinstall ; source venv/bin/activate ; pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu128 --force-reinstall --break-system-packages ; pip install -r /home/bantaim/conserver/transcribey/ --break-system-packages --force-reinstall; pip install nemo_toolkit['all'] --break-system-packages --force-reinstall ; source venv/bin/activate ; pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu128 --force-reinstall --break-system-packages ; pip install -r /home/bantaim/conserver/transcribey/ --break-system-packages --force-reinstall; pip install nemo_toolkit['all'] --break-system-packages --force-reinstall ; source venv/bin/activate ; pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu128 --force-reinstall --break-system-packages ; pip install -r /home/bantaim/conserver/transcribey/ --break-system-packages --force-reinstall; pip install nemo_toolkit['all'] --break-system-packages --force-reinstall ;
