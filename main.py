@@ -1,5 +1,6 @@
+import traceback
 import logging
-
+import sys
 import time
 import os
 from transcription_models import load_model_by_name
@@ -9,10 +10,8 @@ import numpy as np
 import torch
 import torchaudio
 import settings
-from mongo_utils import get_mongo_collection, delete_all_vcons, delete_all_faqs
+from mongo_utils import get_mongo_collection, delete_all_vcons, delete_all_faqs, print_all_vcons
 import threading
-
-# Add vCon imports
 import datetime
 from vcon import Vcon
 from vcon.party import Party
@@ -510,7 +509,7 @@ def find_vcons_pending_transcription(collection, max_vcons=1000):
     return english_vcons, non_english_vcons
 
 def main():
-    import sys
+    
     # Check for debug=true in command-line arguments
     if any(arg.lower() == 'debug=true' for arg in sys.argv):
         print("Debug mode: clearing MongoDB collections...")
@@ -563,11 +562,14 @@ def main():
 
     except Exception as e:
         logging.error(f"Error in main function: {str(e)}")
-        import traceback
+        
         traceback.print_exc()
 
     total_elapsed = time.time() - total_start_time
     logging.info(f"Total runtime: {total_elapsed:.2f} seconds")
 
 if __name__ == "__main__":
-    main()
+    if "print_vcons" in sys.argv:
+        print_all_vcons()
+    else:
+        main()
