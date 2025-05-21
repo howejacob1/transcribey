@@ -6,3 +6,4 @@ venv/*
 *.pyc
 secrets.toml
 working_memory/*
+broken_wavs/
