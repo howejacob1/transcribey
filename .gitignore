@@ -1,5 +1,6 @@
 fake_wavs/*.wav .secrets.toml
 fake_wavs/
+fake_wavs_large/
 .secrets.toml
 venv/
 venv/*
