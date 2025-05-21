@@ -1,6 +1,5 @@
 import logging
-# Define a custom TRACE level (5) that's more detailed than DEBUG (10)
-logging.basicConfig(level=logging.INFO)
+
 import time
 import os
 from transcription_models import load_model_by_name
@@ -10,7 +9,7 @@ import numpy as np
 import torch
 import torchaudio
 import settings
-from mongo_utils import get_mongo_collection
+from mongo_utils import get_mongo_collection, delete_all_vcons, delete_all_faqs
 import threading
 
 # Add vCon imports
@@ -23,10 +22,16 @@ from vcon.dialog import Dialog
 #  transcribies are running.
 
 # Each transcribey has a unique name. 
+# Each hard drive partition has a unique UUID
 
-# If we use DHCPCD, IPs change all the time. 
+# When unloaded, slaves first check if there are new hard drives.
+# If there are, mount them if unmounted, and check if there are any new wavs. 
+# then, if there are new wavs, it will report these files to the database,
+# including UUID and slave name. 
+# Slaves additionally report their IPs regularly. 
+# Slaves additionally scan existing folders for new wavs.
+# Slaves only need to wake up and report every once in a while. 
 
-# slaves track changes in certain directories.
 # When the slave detects new wavs, it reports these files to the master.
 # When the slave has spare GPU power, it goes to the database and sees 
 # which ones have undetermined languages or lack of transcriptions locally, 
@@ -505,8 +510,16 @@ def find_vcons_pending_transcription(collection, max_vcons=1000):
     return english_vcons, non_english_vcons
 
 def main():
+    import sys
+    # Check for debug=true in command-line arguments
+    if any(arg.lower() == 'debug=true' for arg in sys.argv):
+        print("Debug mode: clearing MongoDB collections...")
+        delete_all_vcons()
+        delete_all_faqs()
+
     total_start_time = time.time()
-    
+    logging.basicConfig(level=logging.INFO)
+
     try:
 
         maybe_add_vcons_to_mongo(settings.source_dir)
@@ -521,19 +534,20 @@ def main():
         if len(english_vcons) == 0 and len(non_english_vcons) == 0:
             logging.info("No new vCons for language identification. Looking for vCons pending transcription...")
             english_vcons, non_english_vcons = find_vcons_pending_transcription(collection, max_vcons=10000)
-        canary_model = transcription_models.load_model_by_name("nvidia/canary-1b-flash")        
+        parakeet_model = transcription_models.load_model_by_name("nvidia/parakeet-tdt_ctc-110m")
         # Process English vCons with Parakeet (up to 1000)
         logging.info(f"Processing {len(english_vcons)} English vCons with Canary model")
         english_vcons_to_process = english_vcons[:1000]
         if english_vcons_to_process:
-
             transcribe_vcons(
                 collection,
-                canary_model,
+                parakeet_model,
                 english_vcons_to_process)
-        
+        del parakeet_model
+        torch.cuda.empty_cache()
         # Process non-English vCons with Canary (up to 1000)
         logging.info(f"Processing {len(non_english_vcons)} non-English vCons with Canary model")
+        canary_model = transcription_models.load_model_by_name("nvidia/canary-1b-flash")        
         non_english_vcons_to_process = non_english_vcons[:1000]
         if non_english_vcons_to_process:
             transcribe_vcons(
@@ -541,6 +555,8 @@ def main():
                 canary_model,
                 non_english_vcons_to_process
             )
+        del canary_model
+        torch.cuda.empty_cache()
         logging.info(f"Total time to process vCons: {time.time() - work_start_time:.2f} seconds")
 
     except Exception as e:

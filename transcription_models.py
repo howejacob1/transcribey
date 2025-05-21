@@ -54,11 +54,24 @@ def load_openai_whisper_tiny():
     model = model.to(device)
     return model, processor, device
 
+def load_nvidia_parakeet_tdt_ctc_110m():
+    """Load nvidia/parakeet-tdt_ctc-110m model using NVIDIA NeMo."""
+    logger.info("Starting to load nvidia/parakeet-tdt_ctc-110m ...")
+    start_time = time.time()
+    nemo_asr = importlib.import_module("nemo.collections.asr")
+    model = nemo_asr.models.ASRModel.from_pretrained(model_name="nvidia/parakeet-tdt_ctc-110m")
+    model.to("cuda")
+    elapsed = time.time() - start_time
+    logger.info(f"Finished loading nvidia/parakeet-tdt_ctc-110m in {elapsed:.2f} seconds.")
+    return model
+
 def load_model_by_name(model_name):
     if model_name == "nvidia/parakeet-tdt-0.6b-v2":
         return load_nvidia_parakeet_tdt_06b_v2()
     elif model_name == "nvidia/canary-1b-flash":
         return load_nvidia_canary_1b_flash()
+    elif model_name == "nvidia/parakeet-tdt_ctc-110m":
+        return load_nvidia_parakeet_tdt_ctc_110m()
     else:
         raise ValueError(f"Unknown model name: {model_name}")
 

@@ -1,37 +1,35 @@
 import subprocess
 import sys
-import transcription_models
-import torch
 
 def install_packages():
     packages = [
-        ["openai", "--break-system-packages", "--force-reinstall"],
-        ["toml", "--break-system-packages", "--force-reinstall"],
-        ["librosa", "--break-system-packages", "--force-reinstall"],
-        ["numpy", "--break-system-packages", "--force-reinstall"],
-        ["soundfile", "--break-system-packages", "--force-reinstall"],
-        ["transformers", "--break-system-packages", "--force-reinstall"],
-        ["matplotlib", "--break-system-packages", "--force-reinstall"],
-        ["scikit-learn", "--break-system-packages", "--force-reinstall"],
-        ["sentencepiece", "--break-system-packages", "--force-reinstall"],
-        ["nemo_toolkit[all]", "--break-system-packages", "--force-reinstall"],
-        ["huggingface_hub[hf_xet]", "--break-system-packages", "--force-reinstall"],
-        ["pydub", "--break-system-packages", "--force-reinstall"],
-        ["ffmpeg-python", "--break-system-packages", "--force-reinstall"],
-        ["jiwer", "--break-system-packages", "--force-reinstall"],
-        ["speechbrain", "--break-system-packages", "--force-reinstall"],
-        ["pyannote-audio", "--break-system-packages", "--force-reinstall"],
-        ["pymongo", "--break-system-packages", "--force-reinstall"],
-        ["vcon", "--break-system-packages", "--force-reinstall"],
-        ["cuda-python", "--break-system-packages", "--force-reinstall"],
-        ["nemo_toolkit['all']", "--break-system-packages", "--force-reinstall"],
-        ["torch", "--index-url", "https://download.pytorch.org/whl/cu128", "--force-reinstall", "--break-system-packages"],
-        ["torchvision", "--index-url", "https://download.pytorch.org/whl/cu128", "--force-reinstall", "--break-system-packages"],
-        ["torchaudio", "--index-url", "https://download.pytorch.org/whl/cu128", "--force-reinstall", "--break-system-packages"],
-        ["lightning", "--break-system-packages", "--force-reinstall"],
-        ["omegaconf", "--break-system-packages", "--force-reinstall"],
-        ["hydra-core", "--break-system-packages", "--force-reinstall"],
-        ["openai-whisper", "--break-system-packages", "--force-reinstall"],
+        ["numpy", "<2.0.0"],
+        ["torch", "--index-url", "https://download.pytorch.org/whl/cu128"],
+        ["torchvision", "--index-url", "https://download.pytorch.org/whl/cu128"],
+        ["torchaudio", "--index-url", "https://download.pytorch.org/whl/cu128"],
+        ["nemo_toolkit[all]"],
+        ["openai"],
+        ["toml"],
+        ["librosa"],
+        ["soundfile"],
+        ["transformers"],
+        ["matplotlib"],
+        ["scikit-learn"],
+        ["sentencepiece"],
+        ["huggingface_hub[hf_xet]"],
+        ["pydub"],
+        ["ffmpeg-python"],
+        ["jiwer"],
+        ["speechbrain"],
+        ["pyannote-audio"],
+        ["pymongo"],
+        ["vcon"],
+        ["cuda-python"],
+        ["nemo_toolkit['all']"],
+        ["lightning"],
+        ["omegaconf"],
+        ["hydra-core"],
+        ["openai-whisper"],
     ]
 
     for pkg in packages:
@@ -41,6 +39,9 @@ def install_packages():
 
 if __name__ == "__main__":
     install_packages()
+
+    import transcription_models
+    import torch
 
     # Cache all models by loading and deleting them in order
     model_names = [
