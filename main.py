@@ -17,6 +17,7 @@ from vcon import Vcon
 from vcon.party import Party
 from vcon.dialog import Dialog
 
+
 #architecture
 #  transcribies are running.
 
@@ -353,7 +354,11 @@ def identify_languages(collection, wav_paths, max_vcons=10000):
     del whisper_tiny_device
     torch.cuda.empty_cache()
     
-    return english_vcons, non_english_vcons
+    return english_vcons, non_english_vcons, {
+        'duration': total_audio_seconds,
+        'size': total_bytes,
+        'batch_size': settings.lang_detect_batch_size
+    }
 
 
 def transcribe_vcons(collection, model, vcons_to_transcribe, batch_size):
@@ -431,10 +436,19 @@ def transcribe_vcons(collection, model, vcons_to_transcribe, batch_size):
         if processed % 100 == 0 or processed == total:
             logging.info(f"Progress: {processed}/{total} vCons transcribed with {model_name}")
     total_elapsed = time.time() - start_time
+    rtf = None
+    if total_elapsed > 0 and total_audio_seconds > 0:
+        rtf = total_audio_seconds / total_elapsed
     logging.info(f"Completed transcription of {processed} vCons with {model_name} in {total_elapsed:.2f} seconds")
-    logging.info(f"Total data: {total_bytes / (1024**3):.2f} GB, total length: {total_audio_seconds:.2f} seconds, real time factor: {total_audio_seconds / total_elapsed:.1f}x")
+    logging.info(f"Total data: {total_bytes / (1024**3):.2f} GB, total length: {total_audio_seconds:.2f} seconds, real time factor: {rtf:.1f}x")
     del model
     torch.cuda.empty_cache()
+    return {
+        'rtf': rtf,
+        'duration': total_audio_seconds,
+        'size': total_bytes,
+        'batch_size': batch_size
+    }
 
 def find_vcons_pending_transcription(collection, max_vcons=1000):
     """
@@ -505,7 +519,7 @@ def find_vcons_pending_transcription(collection, max_vcons=1000):
     total_elapsed = time.time() - start_time
     logging.info(f"Processed {len(english_vcons) + len(non_english_vcons)} vCons in {total_elapsed:.2f} seconds")
     logging.info(f"Found {len(english_vcons)} English vCons and {len(non_english_vcons)} non-English vCons for transcription")
-    
+
     return english_vcons, non_english_vcons
 
 def main():
@@ -527,7 +541,7 @@ def main():
         work_start_time = time.time()
 
         # First, process language identification for vCons that don't have it yet
-        english_vcons, non_english_vcons = identify_languages(collection, get_valid_wav_files(settings.source_dir), max_vcons=10000)
+        english_vcons, non_english_vcons, lang_stats = identify_languages(collection, get_valid_wav_files(settings.source_dir), max_vcons=10000)
             
         # If no vCons were found for language identification, check for ones that need transcription
         if len(english_vcons) == 0 and len(non_english_vcons) == 0:
@@ -536,9 +550,9 @@ def main():
         parakeet_model = transcription_models.load_model_by_name("nvidia/parakeet-tdt_ctc-110m")
         # Process English vCons with Parakeet (up to 1000)
         logging.info(f"Processing {len(english_vcons)} English vCons with Canary model")
-        english_vcons_to_process = english_vcons[:1000]
+        english_vcons_to_process = english_vcons
         if english_vcons_to_process:
-            transcribe_vcons(
+            en_stats = transcribe_vcons(
                 collection,
                 parakeet_model,
                 english_vcons_to_process,
@@ -548,9 +562,9 @@ def main():
         # Process non-English vCons with Canary (up to 1000)
         logging.info(f"Processing {len(non_english_vcons)} non-English vCons with Canary model")
         canary_model = transcription_models.load_model_by_name("nvidia/canary-1b-flash")        
-        non_english_vcons_to_process = non_english_vcons[:1000]
+        non_english_vcons_to_process = non_english_vcons
         if non_english_vcons_to_process:
-            transcribe_vcons(
+            non_en_stats = transcribe_vcons(
                 collection,
                 canary_model,
                 non_english_vcons_to_process,
@@ -559,6 +573,26 @@ def main():
         del canary_model
         torch.cuda.empty_cache()
         logging.info(f"Total time to process vCons: {time.time() - work_start_time:.2f} seconds")
+
+        print(f"\nFinal Real Time Factors and Stats:")
+        if en_stats:
+            print(f"  English transcription RTF: {en_stats['rtf'] if en_stats['rtf'] is not None else 'N/A'}x")
+            print(f"    Total duration: {en_stats['duration']:.2f} seconds")
+            print(f"    Total size: {en_stats['size'] / (1024**3):.2f} GB")
+            print(f"    Batch size: {en_stats['batch_size']}")
+            print(f"    Total files processed: {len(english_vcons_to_process) if 'english_vcons_to_process' in locals() else 'N/A'}")
+        if non_en_stats:
+            print(f"  Non-English transcription RTF: {non_en_stats['rtf'] if non_en_stats['rtf'] is not None else 'N/A'}x")
+            print(f"    Total duration: {non_en_stats['duration']:.2f} seconds")
+            print(f"    Total size: {non_en_stats['size'] / (1024**3):.2f} GB")
+            print(f"    Batch size: {non_en_stats['batch_size']}")
+            print(f"    Total files processed: {len(non_english_vcons_to_process) if 'non_english_vcons_to_process' in locals() else 'N/A'}")
+        if lang_stats:
+            print(f"  Language detection:")
+            print(f"    Total duration: {lang_stats['duration']:.2f} seconds")
+            print(f"    Total size: {lang_stats['size'] / (1024**3):.2f} GB")
+            print(f"    Batch size: {lang_stats['batch_size']}")
+            print(f"    Total files processed: {len(get_valid_wav_files(settings.source_dir))}")
 
     except Exception as e:
         logging.error(f"Error in main function: {str(e)}")
