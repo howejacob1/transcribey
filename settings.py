@@ -8,3 +8,4 @@ lang_detect_threshold = 0.2
 lang_detect_batch_size = 64
 en_transcription_batch_size = 64+32
 non_en_transcription_batch_size = 20
+debug = False

@@ -5,4 +5,4 @@ def main():
     delete_all_faqs()
 
 if __name__ == "__main__":
-    main() 
+    main()

@@ -1,4 +1,4 @@
 #!/usr/bin/env bash
 set -e
 
-python main.py 
+python main.py debug=false

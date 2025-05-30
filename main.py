@@ -3,8 +3,7 @@ import logging
 import sys
 import time
 import os
-from transcription_models import load_model_by_name
-from utils import get_valid_wav_files, get_total_wav_size, get_total_wav_duration
+from wavs import get_valid_wav_files, get_total_wav_size, get_total_wav_duration
 import shutil
 import numpy as np
 import torch
@@ -30,7 +29,7 @@ from vcon.dialog import Dialog
 # including UUID and slave name. 
 # Slaves additionally report their IPs regularly. 
 # Slaves additionally scan existing folders for new wavs.
-# Slaves only need to wake up and report every once in a while. 
+# Slaves only need to wake up and report every once in a while.
 
 # When the slave detects new wavs, it reports these files to the master.
 # When the slave has spare GPU power, it goes to the database and sees 
