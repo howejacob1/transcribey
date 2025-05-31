@@ -59,6 +59,12 @@ def delete_all_faqs():
     result = faqs_collection.delete_many({})
     print(f"Deleted {result.deleted_count} documents from the faqs collection.")
 
+def delete_all_vcons_cache():
+    vcons_cache_collection = get_mongo_collection(collection_name=VCONS_CACHE_COLLECTION_NAME)
+    result = vcons_cache_collection.delete_many({})
+    print(f"Deleted {result.deleted_count} documents from the vcons-cache collection.")
+
+
 def print_all_vcon_transcriptions():
     """
     Print all vCon transcriptions from the database. For each vCon, print the filename and all transcription texts.

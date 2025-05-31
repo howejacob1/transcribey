@@ -1,4 +1,5 @@
 import sys
+import time
 import paramiko
 from utils import parse_sftp_url, get_all_filenames_from_sftp
 from mongo_utils import get_mongo_collection
@@ -26,19 +27,17 @@ def main():
         client.connect(hostname, port=port, username=username)
         sftp = client.open_sftp()
         collection = get_mongo_collection()
+        start_time = time.time()
         all_filenames = get_all_filenames_from_sftp(sftp, path)
+        print(f"Time taken to get all filenames: {time.time() - start_time:.2f} seconds")
         for filename in all_filenames:
             if is_wav_filename(filename):
                 # Construct the SFTP URL using settings and the filename
-                url = f"sftp://{username}@{hostname}:{port}{path}{filename}"
-                print(f"url is {url}")
+                url = f"sftp://{username}@{hostname}:{port}{filename}"
                 # Check if vCon already exists for this file using the top-level 'filename' field
                 if collection.count_documents({"filename": url}, limit=1) == 0:
-                    print(f"Creating vCon for: {url}")
                     vcon_doc = create_vcon_for_wav(url)
                     collection.insert_one(vcon_doc)
-                else:
-                    print(f"vCon already exists for: {url}")
         sftp.close()
         client.close()
     except Exception as e:
