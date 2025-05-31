@@ -9,3 +9,6 @@ lang_detect_batch_size = 64
 en_transcription_batch_size = 64+32
 non_en_transcription_batch_size = 20
 debug = False
+
+# SFTP connection settings for make_vcons_from_sftp.py
+sftp_url = "sftp://bantaim@192.168.1.100/mnt/2tbdrive/wavs/"

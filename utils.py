@@ -40,9 +40,29 @@ def get_device():
 def parse_sftp_url(sftp_url):
     parsed = urlparse(sftp_url)
     username_and_hostname_list = parsed.netloc.split("@")
+    print(f"username_and_hostname_list is {username_and_hostname_list}")
     username = username_and_hostname_list[0]
     hostname = username_and_hostname_list[1].split(":")[0]
+    print(f"username is {username}")
+    print(f"hostname is {hostname}")
+    print(f"port is {parsed.port}")
+    print(f"path is {parsed.path}")
     return {"username": username,
             "hostname": hostname,
             "port": parsed.port or 22,
             "path": parsed.path}
+
+def is_sftp_file_directory(entry):
+    return entry.st_mode & 0o040000
+
+def get_all_filenames_from_sftp(sftp_client, path):
+    filenames = []
+    for entry in sftp_client.listdir_attr(path):
+        entry_path = f"{path.rstrip('/')}/{entry.filename}"
+        print(f"Found path {entry_path}")
+        if is_sftp_file_directory(entry): 
+            filenames.extend(get_all_filenames_from_sftp(sftp_client, entry_path))
+        else:
+            filenames.append(entry_path)
+    return filenames
+

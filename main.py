@@ -12,7 +12,7 @@ import settings
 from mongo_utils import get_mongo_collection, delete_all_vcons, delete_all_faqs, print_all_vcons
 import threading
 import datetime
-from vcon import Vcon
+from vcon import Vcon, create_vcon_for_wav
 from vcon.party import Party
 from vcon.dialog import Dialog
 
@@ -92,30 +92,6 @@ def batch_get_detected_languages(wav_paths, model, processor, device, threshold=
         results[orig_idx] = detected_langs
         
     return results
-
-def create_vcon_for_wav(rel_path, abs_path):
-    """
-    Create a vCon for the given wav file and return it as a dict.
-    """
-    logging.getLogger().setLevel(logging.WARN)
-    vcon = Vcon.build_new()
-    party = Party(name="Unknown", role="participant")
-    vcon.add_party(party)
-    now = datetime.datetime.now(datetime.timezone.utc)
-    dialog = Dialog(
-        type="audio",
-        start=now.isoformat(),
-        parties=[0],
-        originator=0,
-        mimetype="audio/wav",
-        filename=rel_path,
-        body=None,
-        encoding=None
-    )
-    vcon.add_dialog(dialog)
-    vcon.add_attachment(type="audio", body=rel_path, encoding="none")
-    logging.getLogger().setLevel(logging.INFO)
-    return vcon.to_dict()
 
 def get_existing_vcon_filenames(collection):
     """

@@ -45,3 +45,6 @@ def get_total_wav_duration(wav_files):
         if duration is not None:
             total += duration
     return total
+
+def is_wav_filename(filename):
+    return filename.lower().endswith('.wav')
