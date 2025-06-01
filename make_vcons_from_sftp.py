@@ -56,7 +56,10 @@ def main():
                     if now - last_update >= update_interval:
                         rate = (processed - last_processed) / (now - last_update)
                         size_gb = total_size / (1024 ** 3)
-                        sys.stdout.write(f"\rProcessing: {rate:.2f} files/sec (total: {processed}), total size: {size_gb:.4f} GB")
+                        mb_delta = (total_size - last_size) / (1024 ** 2)
+                        time_delta = now - last_update
+                        mb_per_sec = mb_delta / time_delta if time_delta > 0 else 0.0
+                        sys.stdout.write(f"\rProcessing: {rate:.2f} files/sec (total: {processed}), total size: {size_gb:.4f} GB, {mb_per_sec:.4f} MB/s")
                         sys.stdout.flush()
                         last_update = now
                         last_processed = processed
@@ -65,7 +68,8 @@ def main():
         total_time = time.time() - start_time
         avg_rate = processed / total_time if total_time > 0 else 0.0
         size_gb = total_size / (1024 ** 3)
-        print(f"\nDone. Average rate: {avg_rate:.2f} files/sec, total processed: {processed}, total size: {size_gb:.4f} GB")
+        avg_mb_per_sec = (total_size / (1024 ** 2)) / total_time if total_time > 0 else 0.0
+        print(f"\nDone. Average rate: {avg_rate:.2f} files/sec, total processed: {processed}, total size: {size_gb:.4f} GB, average speed: {avg_mb_per_sec:.4f} MB/s")
 
         sftp.close()
         client.close()
