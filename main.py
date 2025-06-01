@@ -170,7 +170,7 @@ def load_vcons_in_background(vcons_to_process, sftp):
     thread.start()
     return thread
 
-def process_vcons(thread, vcons_to_process, loaded_ai, mode):
+def process_vcons(download_thread, vcons_to_process, loaded_ai, mode):
     # Map vcon_id to cache wav path
     cache_dir = settings.dest_dir
     vcon_id_to_cache_path = {}
@@ -220,7 +220,7 @@ def process_vcons(thread, vcons_to_process, loaded_ai, mode):
         # Get available files for this batch
         avail_ids = [vid for vid in available_vcon_ids() if vid not in processed_ids]
         if not avail_ids:
-            if not thread.is_alive():
+            if not download_thread.is_alive():
                 break  # Loader is done, nothing left
             time.sleep(1)
             continue
@@ -281,7 +281,7 @@ def process_vcons(thread, vcons_to_process, loaded_ai, mode):
         processed_ids.update(batch_ids)
 
         # If loader thread is dead and all processed, break
-        if not thread.is_alive() and len(processed_ids) == len(vcon_ids):
+        if not download_thread.is_alive() and len(processed_ids) == len(vcon_ids):
             break
     
     # Clean up any remaining files in cache directory at the end
