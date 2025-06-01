@@ -21,15 +21,9 @@ if not MONGO_URI or not DB_NAME or not VCONS_COLLECTION_NAME:
     raise ValueError("Missing MongoDB configuration in .secrets.toml. Please provide 'url', 'db', and 'vcons_collection' under the 'mongo_db' section.")
 
 def get_mongo_collection(uri=MONGO_URI, db_name=DB_NAME, collection_name=VCONS_COLLECTION_NAME):
-    start_time = time.time()
-    logging.info(f"Loading mongo collection '{collection_name}' from database '{db_name}' at '{uri}'")
-
     client = MongoClient(uri)
     db = client[db_name]
     collection = db[collection_name]
-    
-    elapsed = time.time() - start_time
-    logging.info(f"Loaded mongo collection in {elapsed:.4f} seconds.")
     return collection
 
 # For future use: get the vcons-cache collection
