@@ -3,7 +3,7 @@ import settings
 from transcription_models import AIModel, transcribe_vcons
 from mongo_utils import get_mongo_collection
 import settings
-
+import make_vcons_from_sftp
 from utils import get_hostname
 from wavs import is_wav_filename
 import os
@@ -305,6 +305,8 @@ def process_vcons(thread, vcons_to_process, loaded_ai, mode):
     print(f"\n{mode} processing completed: {total_bytes_processed/(1024*1024):.1f} MB in {total_time:.1f}s ({final_mb_per_sec:.1f} MB/s)")
 
 def main():
+    if settings.debug:
+        make_vcons_from_sftp.main()
     loaded_ai = AIModel()
     vcons_collection = get_mongo_collection()
     sftp = sftp_connect(settings.sftp_url)
@@ -318,7 +320,7 @@ def main():
         vcons_to_process, mode = reserve_vcons_for_processing(loaded_ai.loaded_model_mode(),
                                                               vcons_collection,
                                                               settings.total_vcon_filesize_to_process_gb)
-        print(f"Reserved {len(vcons_to_process)} vcons totaling {sum(vcon.get('size', 0) for vcon in vcons_to_process)/(1024*1024*1024)} bytes for processing in mode {mode}")
+        print(f"Reserved {len(vcons_to_process)} vcons totaling {sum(vcon.get('size', 0) for vcon in vcons_to_process)/(1024*1024):.2f} MB for processing in mode {mode}")
         
         # If no vcons were reserved or mode is None, wait and try again
         if not vcons_to_process or mode is None:
