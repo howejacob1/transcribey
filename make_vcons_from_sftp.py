@@ -37,7 +37,7 @@ def main():
                 url = f"sftp://{username}@{hostname}:{port}{filename}"
                 # Check if vCon already exists for this file using the top-level 'filename' field
                 if url not in known_filenames:
-                    vcon_doc = create_vcon_for_wav(url)
+                    vcon_doc = create_vcon_for_wav(url, sftp)
                     print(f"Creating vcon for {os.path.basename(filename)}")
                     collection.insert_one(vcon_doc)
         print(f"Time taken to process all files: {time.time() - start_time:.2f} seconds")
