@@ -14,6 +14,8 @@ from transformers import AutoModelForSpeechSeq2Seq, AutoProcessor
 import torch
 import torchaudio
 from settings import lang_detect_batch_size, lang_detect_threshold
+import os
+from wavs import is_readable_wav
 
 def load_whisper_tiny():
     """
@@ -82,9 +84,9 @@ class AIModel:
     def load_lang_detect(self):
         self.load(identify_languages_model_name)
 
-    def identify_languages(self, wav_files):
+    def identify_languages(self, wav_files, vcon_ids=None, vcon_collection=None):
         self.load(identify_languages_model_name)
-        return identify_languages(self.model, wav_files)
+        return identify_languages(wav_files, self.model, vcon_ids=vcon_ids, vcon_collection=vcon_collection)
 
     def transcribe(self, wav_files, english_only=False):
         if english_only:
@@ -119,15 +121,20 @@ def resample_wav_maybe(wav, sample_rate, target_sample_rate=16000):
 def load_and_resample_wavs(all_wav_paths, target_sample_rate=16000):
     """
     Loads and resamples a list of wav files to the target sample rate.
-    Returns a list of numpy arrays (waveforms) and a list of valid indices.
+    Returns a tuple: (list of numpy arrays (waveforms), list of valid indices, list of unreadable file paths)
     """
     wavs = []
-    for wav_path in all_wav_paths:
-        raw_wav, sample_rate = torchaudio.load(wav_path)
-        wav = resample_wav_maybe(raw_wav, sample_rate)
-        wavs.append(wav)
-    
-    return wavs
+    valid_indices = []
+    unreadable_files = []
+    for idx, wav_path in enumerate(all_wav_paths):
+        if is_readable_wav(wav_path):
+            raw_wav, sample_rate = torchaudio.load(wav_path)
+            wav = resample_wav_maybe(raw_wav, sample_rate)
+            wavs.append(wav)
+            valid_indices.append(idx)
+        else:
+            unreadable_files.append(wav_path)
+    return wavs, valid_indices, unreadable_files
 
 def split_wavs_into_batches(wavs, batch_size):
     """
@@ -145,7 +152,7 @@ whisper_start_transcription_token_id = 50258
 def whisper_token_to_language(token):
     return whisper_token_languages[whisper_token_ids.index(token)]
 
-def identify_languages(all_wav_paths, model_and_processor, threshold=None):
+def identify_languages(all_wav_paths, model_and_processor, threshold=None, vcon_ids=None, vcon_collection=None):
     model, processor = model_and_processor
     if threshold is None:
         threshold = lang_detect_threshold
@@ -154,19 +161,39 @@ def identify_languages(all_wav_paths, model_and_processor, threshold=None):
     all_wav_paths_batched = split_wavs_into_batches(all_wav_paths, lang_detect_batch_size)
 
     all_wav_languages_detected = []
-    for wav_paths in all_wav_paths_batched:
-        wavs = load_and_resample_wavs(wav_paths, target_sample_rate=16000)
+    corrupt_indices = []
+    for batch_idx, wav_paths in enumerate(all_wav_paths_batched):
+        wavs, valid_indices, unreadable_files = load_and_resample_wavs(wav_paths, target_sample_rate=16000)
+        # Mark corrupt files in DB
+        if vcon_ids and vcon_collection is not None and unreadable_files:
+            for idx, wav_path in enumerate(wav_paths):
+                if wav_path in unreadable_files:
+                    vcon_id = vcon_ids[batch_idx * lang_detect_batch_size + idx]
+                    analysis = {
+                        "type": "corrupt",
+                        "body": "Unreadable or corrupt audio file",
+                        "encoding": "none"
+                    }
+                    vcon_collection.update_one({"_id": vcon_id}, {"$push": {"analysis": analysis}})
+        if not wavs:
+            all_wav_languages_detected.extend([[] for _ in wav_paths])
+            continue
         input_features = processor(wavs, sampling_rate=16000, return_tensors="pt").input_features.to(device)
 
         with torch.no_grad():
             logits = model(input_features, decoder_input_ids=torch.tensor([[whisper_start_transcription_token_id]] * len(wavs), device=device)).logits
         logits = logits[:, 0, :]  # (batch, vocab_size)
 
-        for index in range(len(wavs)):
-            lang_logits = logits[index, whisper_token_ids]
-            lang_probs = torch.softmax(lang_logits, dim=-1).cpu().numpy()
-            wav_languages_detected = [whisper_token_languages[j] for j, prob in enumerate(lang_probs) if prob >= threshold]
-            all_wav_languages_detected.append(wav_languages_detected)
+        valid_counter = 0
+        for index in range(len(wav_paths)):
+            if index in valid_indices:
+                lang_logits = logits[valid_counter, whisper_token_ids]
+                lang_probs = torch.softmax(lang_logits, dim=-1).cpu().numpy()
+                wav_languages_detected = [whisper_token_languages[j] for j, prob in enumerate(lang_probs) if prob >= threshold]
+                all_wav_languages_detected.append(wav_languages_detected)
+                valid_counter += 1
+            else:
+                all_wav_languages_detected.append([])
     assert len(all_wav_languages_detected) == len(all_wav_paths)
     return all_wav_languages_detected
 
@@ -191,8 +218,6 @@ def transcribe_vcons(collection, model, vcons_to_transcribe, batch_size):
     start_time = time.time()
     processed = 0
     file_paths_only = [file_path for _, file_path in vcons_to_transcribe]
-    total_bytes = get_total_wav_size(file_paths_only)
-    total_audio_seconds = get_total_wav_duration(file_paths_only)
     all_files = file_paths_only
     for i in range(0, total, batch_size):
         batch = vcons_to_transcribe[i:min(i+batch_size, total)]
@@ -245,9 +270,6 @@ def transcribe_vcons(collection, model, vcons_to_transcribe, batch_size):
         if processed % 100 == 0 or processed == total:
             logging.info(f"Progress: {processed}/{total} vCons transcribed with {model_name}")
     total_elapsed = time.time() - start_time
-    rtf = None
-    if total_elapsed > 0 and total_audio_seconds > 0:
-        rtf = total_audio_seconds / total_elapsed
     logging.info(f"Completed transcription of {processed} vCons with {model_name} in {total_elapsed:.2f} seconds")
     logging.info(f"Total data: {total_bytes / (1024**3):.2f} GB, total length: {total_audio_seconds:.2f} seconds, real time factor: {rtf:.1f}x")
     del model
