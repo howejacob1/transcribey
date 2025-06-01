@@ -250,6 +250,11 @@ def process_vcons(download_thread, vcons_to_process, loaded_ai, mode):
                     vcon_collection.update_one({"_id": vcon["_id"]}, {"$push": {"analysis": analysis}})
                 except Exception as e:
                     print(f"Error updating language identification for vCon {vcon['_id']}: {e}")
+                # Remove being_processed_by after processing
+                try:
+                    vcon_collection.update_one({"_id": vcon["_id"]}, {"$unset": {"being_processed_by": ""}})
+                except Exception as e:
+                    print(f"Error unsetting being_processed_by for vCon {vcon['_id']}: {e}")
         else:
             # Transcription (en or non_en)
             vcon_file_tuples = [(vid, vcon_id_to_cache_path[vid]) for vid in batch_ids]
@@ -257,6 +262,13 @@ def process_vcons(download_thread, vcons_to_process, loaded_ai, mode):
                 transcribe_vcons(vcon_collection, loaded_ai, vcon_file_tuples, batch_size)
             except Exception as e:
                 print(f"Error in transcription batch: {e}")
+            finally:
+                # Remove being_processed_by after processing, regardless of success or failure
+                for vid in batch_ids:
+                    try:
+                        vcon_collection.update_one({"_id": vid}, {"$unset": {"being_processed_by": ""}})
+                    except Exception as e:
+                        print(f"Error unsetting being_processed_by for vCon {vid}: {e}")
 
         # Update progress tracking
         total_bytes_processed += batch_bytes
