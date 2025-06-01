@@ -42,13 +42,8 @@ def get_device():
 def parse_sftp_url(sftp_url):
     parsed = urlparse(sftp_url)
     username_and_hostname_list = parsed.netloc.split("@")
-    print(f"username_and_hostname_list is {username_and_hostname_list}")
     username = username_and_hostname_list[0]
     hostname = username_and_hostname_list[1].split(":")[0]
-    print(f"username is {username}")
-    print(f"hostname is {hostname}")
-    print(f"port is {parsed.port}")
-    print(f"path is {parsed.path}")
     return {"username": username,
             "hostname": hostname,
             "port": parsed.port or 22,
