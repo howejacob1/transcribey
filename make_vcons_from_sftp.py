@@ -31,16 +31,27 @@ def main():
         vcons_cache_collection = get_vcons_cache_collection()
         known_filenames = set(all_vcon_urls(collection))
         
+        processed = 0
+        last_update = time.time()
+        last_processed = 0
+        update_interval = 0.5  # seconds
+        rate = 0.0
         for filename in get_all_filenames_from_sftp(sftp, path):
             if is_wav_filename(filename):
-                # Construct the SFTP URL using settings and the filename
                 url = f"sftp://{username}@{hostname}:{port}{filename}"
-                # Check if vCon already exists for this file using the top-level 'filename' field
                 if url not in known_filenames:
                     vcon_doc = create_vcon_for_wav(url, sftp)
-                    print(f"Creating vcon for {os.path.basename(filename)}")
                     collection.insert_one(vcon_doc)
-        print(f"Time taken to process all files: {time.time() - start_time:.2f} seconds")
+                    processed += 1
+                    now = time.time()
+                    if now - last_update >= update_interval:
+                        rate = (processed - last_processed) / (now - last_update)
+                        sys.stdout.write(f"\rProcessing: {rate:.2f} files/sec (total: {processed})")
+                        sys.stdout.flush()
+                        last_update = now
+                        last_processed = processed
+        # Print final rate and total
+        print(f"\nDone. Final rate: {rate:.2f} files/sec, total processed: {processed}")
 
         sftp.close()
         client.close()
