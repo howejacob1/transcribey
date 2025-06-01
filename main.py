@@ -179,9 +179,17 @@ def process_vcons(thread, vcons_to_process, loaded_ai, mode):
     # List of vcon_ids to process
     vcon_ids = list(vcon_id_to_cache_path.keys())
     processed_ids = set()
+    
+    # Progress tracking
+    total_bytes_to_process = sum(vcon_id_to_vcon[vid].get('size', 0) for vid in vcon_ids)
+    total_bytes_processed = 0
+    start_time = time.time()
+    batch_count = 0
 
     def available_vcon_ids():
         return [vid for vid in vcon_ids if os.path.exists(vcon_id_to_cache_path[vid])]
+
+    print(f"Starting {mode} processing for {len(vcon_ids)} vcons ({total_bytes_to_process / (1024*1024):.1f} MB total)")
 
     while True:
         # Get available files for this batch
@@ -194,6 +202,13 @@ def process_vcons(thread, vcons_to_process, loaded_ai, mode):
         batch_ids = avail_ids[:batch_size]
         batch_files = [vcon_id_to_cache_path[vid] for vid in batch_ids]
         batch_vcons = [vcon_id_to_vcon[vid] for vid in batch_ids]
+        
+        # Calculate batch size in bytes
+        batch_bytes = sum(vcon_id_to_vcon[vid].get('size', 0) for vid in batch_ids)
+        batch_count += 1
+        
+        print(f"Processing batch {batch_count} with {len(batch_ids)} files ({batch_bytes / (1024*1024):.1f} MB)...")
+        batch_start_time = time.time()
 
         if mode == 'lang_detect':
             # Run language identification
@@ -218,6 +233,19 @@ def process_vcons(thread, vcons_to_process, loaded_ai, mode):
             except Exception as e:
                 print(f"Error in transcription batch: {e}")
 
+        # Update progress tracking
+        total_bytes_processed += batch_bytes
+        batch_time = time.time() - batch_start_time
+        total_time = time.time() - start_time
+        
+        # Calculate speeds
+        batch_mb_per_sec = (batch_bytes / (1024*1024)) / batch_time if batch_time > 0 else 0
+        overall_mb_per_sec = (total_bytes_processed / (1024*1024)) / total_time if total_time > 0 else 0
+        progress_pct = (total_bytes_processed / total_bytes_to_process) * 100 if total_bytes_to_process > 0 else 0
+        
+        print(f"Batch completed in {batch_time:.1f}s ({batch_mb_per_sec:.1f} MB/s) | "
+              f"Overall: {progress_pct:.1f}% ({total_bytes_processed/(1024*1024):.1f}/{total_bytes_to_process/(1024*1024):.1f} MB, {overall_mb_per_sec:.1f} MB/s)")
+
         # Delete processed wav files
         for file_path in batch_files:
             try:
@@ -230,6 +258,11 @@ def process_vcons(thread, vcons_to_process, loaded_ai, mode):
         # If loader thread is dead and all processed, break
         if not thread.is_alive() and len(processed_ids) == len(vcon_ids):
             break
+    
+    # Final summary
+    total_time = time.time() - start_time
+    final_mb_per_sec = (total_bytes_processed / (1024*1024)) / total_time if total_time > 0 else 0
+    print(f"\n{mode} processing completed: {total_bytes_processed/(1024*1024):.1f} MB in {total_time:.1f}s ({final_mb_per_sec:.1f} MB/s)")
 
 def main():
     loaded_ai = AIModel()
@@ -252,6 +285,13 @@ def main():
                                                               vcons_collection,
                                                               settings.total_vcon_filesize_to_process_gb)
         print(f"Reserved {len(vcons_to_process)} vcons totaling {sum(vcon.get('size', 0) for vcon in vcons_to_process)/(1024*1024*1024)} bytes for processing in mode {mode}")
+        
+        # If no vcons were reserved or mode is None, wait and try again
+        if not vcons_to_process or mode is None:
+            print("No work available, waiting 10 seconds...")
+            time.sleep(10)
+            continue
+            
         thread = load_vcons_in_background(vcons_to_process, sftp)
         process_vcons(thread, vcons_to_process, loaded_ai, mode)
 
