@@ -17,27 +17,47 @@ from settings import lang_detect_batch_size, lang_detect_threshold
 import os
 from wavs import is_readable_wav
 
+def load_whisper_tiny_raw():
+    with suppress_output(should_suppress=True):
+        model_name = "openai/whisper-tiny"
+        processor = AutoProcessor.from_pretrained(model_name)
+        model = AutoModelForSpeechSeq2Seq.from_pretrained(model_name)
+        return (model, processor)
+
 def load_whisper_tiny():
     """
     Load the OpenAI Whisper tiny model and processor.
     Returns (model, processor, device)
     """
-    print("Loading whisper tiny")
-    with suppress_output(should_suppress=True):
-        model_name = "openai/whisper-tiny"
-        processor = AutoProcessor.from_pretrained(model_name)
-        model = AutoModelForSpeechSeq2Seq.from_pretrained(model_name)
-        model = model.to(get_device())
-        return (model, processor)
+    total_start_time = time.time()
+    print("Loading whisper tiny.")
+    model, processor = load_whisper_tiny_raw()
+    print(f"Whisper tiny loaded into RAM in {time.time() - total_start_time:.2f} seconds")
+    print(f"Putting whisper tiny on GPU.")
+    start_time = time.time()
+    model = model.to(get_device())
+    print(f"Whisper tiny loaded on GPU in {time.time() - start_time:.2f} seconds")
+    print(f"Whisper tiny loaded in {time.time() - total_start_time:.2f} seconds total")
+    return (model, processor)
 
-def load_nvidia(model_name):
-    """Load nvidia model using NVIDIA NeMo."""
-    print(f"Loading model {model_name}")
+def load_nvidia_raw(model_name):
     with suppress_output(should_suppress=True):
         nemo_asr = importlib.import_module("nemo.collections.asr")
         model = nemo_asr.models.ASRModel.from_pretrained(model_name=model_name)
-        model.to(get_device())
         return model
+
+def load_nvidia(model_name):
+    """Load nvidia model using NVIDIA NeMo."""
+    total_start_time = time.time()
+    print(f"Loading model {model_name}.")
+    model = load_nvidia_raw(model_name)
+    print(f"Model {model_name} loaded into RAM in {time.time() - total_start_time:.2f} seconds")
+    print(f"Putting model {model_name} on GPU.")
+    start_time = time.time()
+    model.to(get_device())
+    print(f"Model {model_name} loaded on GPU in {time.time() - start_time:.2f} seconds")
+    print(f"Model {model_name} loaded in {time.time() - total_start_time:.2f} seconds total")
+    return model
 
 transcribe_english_model_name = "nvidia/parakeet-tdt-0.6b-v2"
 transcribe_nonenglish_model_name = "nvidia/canary-1b-flash"
@@ -96,12 +116,19 @@ class AIModel:
         return self.transcribe(wav_files)
 
     def loaded_model_mode(self):
+        print(f"DEBUG: loaded_model_mode called, self.model_name = {self.model_name}")
+        print(f"DEBUG: transcribe_english_model_name = {transcribe_english_model_name}")
+        print(f"DEBUG: transcribe_nonenglish_model_name = {transcribe_nonenglish_model_name}")
+        print(f"DEBUG: identify_languages_model_name = {identify_languages_model_name}")
         if self.model_name == transcribe_english_model_name:
             return "en"
         elif self.model_name == transcribe_nonenglish_model_name:
             return "non_en"
         elif self.model_name == identify_languages_model_name:
             return "lang_detect"
+        else:
+            print(f"DEBUG: No model loaded (model_name: {self.model_name}), returning None")
+            return None  # Return None when no model is loaded - let the system determine what to load
         
     def load_by_mode(self, mode):
         if mode == "en":
