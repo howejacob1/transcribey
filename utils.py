@@ -56,13 +56,10 @@ def is_sftp_file_directory(entry):
     return entry.st_mode & 0o040000
 
 def get_all_filenames_from_sftp(sftp_client, path):
-    filenames = []
     for entry in sftp_client.listdir_attr(path):
         entry_path = f"{path.rstrip('/')}/{entry.filename}"
-        print(f"Found path {entry_path}")
         if is_sftp_file_directory(entry): 
-            filenames.extend(get_all_filenames_from_sftp(sftp_client, entry_path))
+            yield from get_all_filenames_from_sftp(sftp_client, entry_path)
         else:
-            filenames.append(entry_path)
-    return filenames
+            yield entry_path
 
