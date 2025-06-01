@@ -138,3 +138,13 @@ def download_sftp_file(sftp_url, local_path, sftp_client=None):
             sftp_client.close()
             ssh.close()
 
+def sftp_connect(sftp_url):
+    client = paramiko.SSHClient()
+    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    sftp_url_parsed = parse_sftp_url(sftp_url)
+    hostname = sftp_url_parsed["hostname"]
+    port = sftp_url_parsed["port"]
+    username = sftp_url_parsed["username"]
+    client.connect(hostname, port=port, username=username)
+    sftp = client.open_sftp()
+    return sftp
