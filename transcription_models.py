@@ -82,7 +82,7 @@ class AIModel:
             self.load(transcribe_english_model_name)
         else:
             self.load(transcribe_nonenglish_model_name)
-        return transcribe(self.model, wav_files)
+        return self.transcribe(wav_files)
 
 def resample_wav_maybe(wav, sample_rate, target_sample_rate=16000):
     if sample_rate != target_sample_rate:
