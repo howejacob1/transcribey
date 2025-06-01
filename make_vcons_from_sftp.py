@@ -3,8 +3,9 @@ import sys
 import time
 import paramiko
 import os
+import settings
 from utils import parse_sftp_url, get_all_filenames_from_sftp
-from mongo_utils import get_mongo_collection, get_vcons_cache_collection
+from mongo_utils import get_mongo_collection, get_vcons_cache_collection, clear_mongo_collections, all_vcon_urls
 from vcon_utils import create_vcon_for_wav
 from wavs import is_wav_filename
 from settings import sftp_url, dest_dir
@@ -77,22 +78,30 @@ def main():
         sftp = client.open_sftp()
         collection = get_mongo_collection()
         start_time = time.time()
-        print(f"Time taken to get all filenames: {time.time() - start_time:.2f} seconds")
+        
         vcons_cache_collection = get_vcons_cache_collection()
+        known_filenames = set(all_vcon_urls(collection))
+        
         for filename in get_all_filenames_from_sftp(sftp, path):
             if is_wav_filename(filename):
                 # Construct the SFTP URL using settings and the filename
                 url = f"sftp://{username}@{hostname}:{port}{filename}"
                 # Check if vCon already exists for this file using the top-level 'filename' field
-                if collection.count_documents({"filename": url}, limit=1) == 0:
+                if url not in known_filenames:
                     vcon_doc = create_vcon_for_wav(url)
                     print(f"Creating vcon for {os.path.basename(filename)}")
                     collection.insert_one(vcon_doc)
-                
+        print(f"Time taken to process all files: {time.time() - start_time:.2f} seconds")
+
         sftp.close()
         client.close()
     except Exception as e:
         print(f"Failed to connect or list directory: {e}")
 
 if __name__ == "__main__":
+    if settings.debug:
+        print("Clearing mongo collections")
+        start_time = time.time()
+        clear_mongo_collections()
+        print(f"Time taken to clear mongo collections: {time.time() - start_time:.2f} seconds")
     main()

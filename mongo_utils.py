@@ -94,3 +94,11 @@ def print_all_vcon_transcriptions():
             for t in transcriptions:
                 print(f"  Transcription: {t}")
             print() 
+
+def all_vcon_urls(collection):
+    return [doc["filename"] for doc in collection.find({}, {"filename": 1})]
+
+def clear_mongo_collections():
+    delete_all_vcons()
+    delete_all_vcons_cache()
+    delete_all_faqs()

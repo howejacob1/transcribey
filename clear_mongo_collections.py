@@ -1,9 +1,4 @@
-from mongo_utils import delete_all_vcons, delete_all_vcons_cache, delete_all_faqs
-
-def main():
-    delete_all_vcons()
-    delete_all_vcons_cache()
-    delete_all_faqs()
+from mongo_utils import clear_mongo_collections
     
 if __name__ == "__main__":
-    main()
+    clear_mongo_collections()
