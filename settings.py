@@ -12,4 +12,4 @@ debug = True
 total_vcon_filesize_to_process_gb = 1
 
 # SFTP connection settings for make_vcons_from_sftp.py
-sftp_url = "sftp://bantaim@192.168.1.100:/home/bantaim/conserver/transcribey/fake_wavs/"
+sftp_url = "sftp://bantaim@192.168.1.100:/home/bantaim/conserver/fake_wavs/"

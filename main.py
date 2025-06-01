@@ -3,7 +3,7 @@ import settings
 from transcription_models import AIModel, transcribe_vcons
 from mongo_utils import get_mongo_collection
 import settings
-from utils import get_hostname, download_sftp_file, parse_sftp_url
+from utils import get_hostname, download_sftp_file, parse_sftp_url, sftp_connect
 from wavs import is_wav_filename
 import os
 import shutil
@@ -305,16 +305,7 @@ def process_vcons(thread, vcons_to_process, loaded_ai, mode):
 def main():
     loaded_ai = AIModel()
     vcons_collection = get_mongo_collection()
-    client = paramiko.SSHClient()
-    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-    sftp_url_parsed = parse_sftp_url(settings.sftp_url)
-    username = sftp_url_parsed["username"]
-    hostname = sftp_url_parsed["hostname"]
-    port = sftp_url_parsed["port"]
-    path = sftp_url_parsed["path"]
-
-    client.connect(hostname, port=port, username=username)
-    sftp = client.open_sftp()
+    sftp = sftp_connect(settings.sftp_url)
     collection = get_mongo_collection()
 
     # Clean up any leftover files from previous runs
