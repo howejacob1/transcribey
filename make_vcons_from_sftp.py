@@ -50,8 +50,10 @@ def main():
                         sys.stdout.flush()
                         last_update = now
                         last_processed = processed
-        # Print final rate and total
-        print(f"\nDone. Final rate: {rate:.2f} files/sec, total processed: {processed}")
+        # Print final average rate and total
+        total_time = time.time() - start_time
+        avg_rate = processed / total_time if total_time > 0 else 0.0
+        print(f"\nDone. Average rate: {avg_rate:.2f} files/sec, total processed: {processed}")
 
         sftp.close()
         client.close()
