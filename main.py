@@ -137,6 +137,29 @@ def _download_vcons_to_cache(vcons_to_process, sftp):
                         os.remove(temp_path)
                     print(f"Failed to download {wav_url} to cache: {e}")
 
+def cleanup_cache_directory():
+    """Clean up any leftover files in the cache directory from previous runs."""
+    cache_dir = settings.dest_dir
+    if not os.path.exists(cache_dir):
+        return
+    
+    files_removed = 0
+    total_size_removed = 0
+    
+    for filename in os.listdir(cache_dir):
+        file_path = os.path.join(cache_dir, filename)
+        if os.path.isfile(file_path):
+            try:
+                file_size = os.path.getsize(file_path)
+                os.remove(file_path)
+                files_removed += 1
+                total_size_removed += file_size
+            except Exception as e:
+                print(f"Failed to clean up {file_path}: {e}")
+    
+    if files_removed > 0:
+        print(f"Cleaned up {files_removed} leftover files ({total_size_removed / (1024*1024):.1f} MB) from cache directory")
+
 def load_vcons_in_background(vcons_to_process, sftp):
     """
     Start a background thread to download all wav files referenced in the vcons' attachments into the cache folder.
@@ -259,6 +282,21 @@ def process_vcons(thread, vcons_to_process, loaded_ai, mode):
         if not thread.is_alive() and len(processed_ids) == len(vcon_ids):
             break
     
+    # Clean up any remaining files in cache directory at the end
+    remaining_files = []
+    for filename in os.listdir(cache_dir):
+        file_path = os.path.join(cache_dir, filename)
+        if os.path.isfile(file_path):
+            remaining_files.append(file_path)
+    
+    if remaining_files:
+        print(f"Cleaning up {len(remaining_files)} remaining files from cache...")
+        for file_path in remaining_files:
+            try:
+                os.remove(file_path)
+            except Exception as e:
+                print(f"Failed to clean up remaining file {file_path}: {e}")
+    
     # Final summary
     total_time = time.time() - start_time
     final_mb_per_sec = (total_bytes_processed / (1024*1024)) / total_time if total_time > 0 else 0
@@ -278,6 +316,9 @@ def main():
     client.connect(hostname, port=port, username=username)
     sftp = client.open_sftp()
     collection = get_mongo_collection()
+
+    # Clean up any leftover files from previous runs
+    cleanup_cache_directory()
 
     while True:
         print("Reserving vcons for processing...")
