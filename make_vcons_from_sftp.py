@@ -5,7 +5,7 @@ import paramiko
 import os
 import settings
 from utils import parse_sftp_url, get_all_filenames_from_sftp
-from mongo_utils import get_mongo_collection, get_vcons_cache_collection, clear_mongo_collections, all_vcon_urls
+from mongo_utils import get_mongo_collection, get_vcons_cache_collection, delete_all_vcons, all_vcon_urls
 from vcon_utils import create_vcon_for_wav
 from wavs import is_wav_filename
 from settings import sftp_url, dest_dir
@@ -78,8 +78,5 @@ def main():
 
 if __name__ == "__main__":
     if settings.debug:
-        print("Clearing mongo collections")
-        start_time = time.time()
-        clear_mongo_collections()
-        print(f"Time taken to clear mongo collections: {time.time() - start_time:.2f} seconds")
+        delete_all_vcons()
     main()
