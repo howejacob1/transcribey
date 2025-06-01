@@ -30,12 +30,6 @@ def get_mongo_collection(uri=MONGO_URI, db_name=DB_NAME, collection_name=VCONS_C
 def get_vcons_cache_collection():
     return get_mongo_collection(collection_name=VCONS_CACHE_COLLECTION_NAME)
 
-if __name__ == '__main__':
-    # Test connection and insert a test document
-    collection = get_mongo_collection()
-    result = collection.insert_one({'test': 'hello world'})
-    print(f'Inserted test document with id: {result.inserted_id}')
-
 # Add this function to print all vcons in the collection
 def print_all_vcons():
     collection = get_mongo_collection()
@@ -96,3 +90,7 @@ def clear_mongo_collections():
     delete_all_vcons()
     delete_all_vcons_cache()
     delete_all_faqs()
+
+if __name__ == '__main__':
+    # Print all vCons in the collection
+    print_all_vcons()

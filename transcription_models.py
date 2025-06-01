@@ -116,10 +116,6 @@ class AIModel:
         return self.transcribe(wav_files)
 
     def loaded_model_mode(self):
-        print(f"DEBUG: loaded_model_mode called, self.model_name = {self.model_name}")
-        print(f"DEBUG: transcribe_english_model_name = {transcribe_english_model_name}")
-        print(f"DEBUG: transcribe_nonenglish_model_name = {transcribe_nonenglish_model_name}")
-        print(f"DEBUG: identify_languages_model_name = {identify_languages_model_name}")
         if self.model_name == transcribe_english_model_name:
             return "en"
         elif self.model_name == transcribe_nonenglish_model_name:
@@ -127,7 +123,6 @@ class AIModel:
         elif self.model_name == identify_languages_model_name:
             return "lang_detect"
         else:
-            print(f"DEBUG: No model loaded (model_name: {self.model_name}), returning None")
             return None  # Return None when no model is loaded - let the system determine what to load
         
     def load_by_mode(self, mode):
