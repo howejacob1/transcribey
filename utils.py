@@ -2,6 +2,8 @@ import os
 from contextlib import contextmanager
 import torch
 from urllib.parse import urlparse
+import paramiko
+import socket
 
 def get_all_filenames(directory):
     """
@@ -62,4 +64,82 @@ def get_all_filenames_from_sftp(sftp_client, path):
             yield from get_all_filenames_from_sftp(sftp_client, entry_path)
         else:
             yield entry_path
+
+def get_file_size(path_or_url, sftp_client=None):
+    """ 
+    Return the size of a file given a local path or SFTP URL.
+    If sftp_client is provided, it will be used for SFTP URLs.
+    """
+    if path_or_url.startswith("sftp://"):
+        parsed = urlparse(path_or_url)
+        username_and_hostname = parsed.netloc.split("@")
+        username = username_and_hostname[0]
+        host_and_port = username_and_hostname[1].split(":")
+        hostname = host_and_port[0]
+        port = int(host_and_port[1]) if len(host_and_port) > 1 else 22
+        sftp_path = parsed.path
+        close_client = False
+        if sftp_client is None:
+            ssh = paramiko.SSHClient()
+            ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+            ssh.connect(hostname, port=port, username=username)
+            sftp_client = ssh.open_sftp()
+            close_client = True
+        try:
+            size = sftp_client.stat(sftp_path).st_size
+        finally:
+            if close_client:
+                sftp_client.close()
+                ssh.close()
+        return size
+    else:
+        return os.path.getsize(path_or_url)
+
+def get_hostname():
+    """
+    Returns the hostname of the current machine.
+    """
+    return socket.gethostname()
+
+def get_ipv4_address():
+    """
+    Returns the primary IPv4 address of the current machine.
+    """
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        # Doesn't need to be reachable
+        s.connect(('8.8.8.8', 80))
+        ip = s.getsockname()[0]
+    except Exception:
+        ip = '127.0.0.1'
+    finally:
+        s.close()
+    return ip
+
+def download_sftp_file(sftp_url, local_path, sftp_client=None):
+    """
+    Download a file from an SFTP URL to a local path. If sftp_client is not provided, creates a new connection.
+    """
+    from urllib.parse import urlparse
+    import paramiko
+    parsed = urlparse(sftp_url)
+    username_and_hostname = parsed.netloc.split("@")
+    username = username_and_hostname[0]
+    host_and_port = username_and_hostname[1].split(":")
+    hostname = host_and_port[0]
+    port = int(host_and_port[1]) if len(host_and_port) > 1 else 22
+    sftp_path = parsed.path
+    close_client = False
+    if sftp_client is None:
+        ssh = paramiko.SSHClient()
+        ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        ssh.connect(hostname, port=port, username=username)
+        sftp_client = ssh.open_sftp()
+        close_client = True
+    try:
+        sftp_client.get(sftp_path, local_path)
+    finally:
+        if close_client:
+            sftp_client.close()
+            ssh.close()
 
