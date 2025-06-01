@@ -10,7 +10,7 @@ import os
 import shutil
 import threading
 import time
-from ssh_sftp_utils import download_sftp_file, sftp_connect, get_sftp_file_size, parse_sftp_url
+from sftp_utils import download_sftp_file, sftp_connect, get_sftp_file_size, parse_sftp_url
 
 def reserve_vcons_for_lang_detect(vcons_collection, max_total_size_gb):
     hostname = get_hostname()
