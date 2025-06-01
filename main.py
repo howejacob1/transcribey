@@ -3,7 +3,8 @@ import settings
 from transcription_models import AIModel, transcribe_vcons
 from mongo_utils import get_mongo_collection
 import settings
-from utils import get_hostname, download_sftp_file, is_wav_filename, parse_sftp_url
+from utils import get_hostname, download_sftp_file, parse_sftp_url
+from wavs import is_wav_filename
 import os
 import shutil
 import threading
@@ -16,7 +17,8 @@ def reserve_vcons_for_lang_detect(vcons_collection, max_total_size_gb):
     query = {
         "being_processed_by": None,
         "analysis": {"$not": {"$elemMatch": {"type": "language_identification"}}},
-        "attachments": {"$elemMatch": {"type": "audio"}}
+        "attachments": {"$elemMatch": {"type": "audio"}},
+        "analysis.type": {"$ne": "corrupt"}
     }
     vcons = list(vcons_collection.find(query))
     # Reserve up to max_total_size_bytes worth of vcons
@@ -40,7 +42,8 @@ def reserve_vcons_for_en_transcription(vcons_collection, max_total_size_gb):
         "being_processed_by": None,
         "analysis": {"$elemMatch": {"type": "language_identification", "body": ["en"]}},
         "analysis.type": {"$ne": "transcription"},
-        "attachments": {"$elemMatch": {"type": "audio"}}
+        "attachments": {"$elemMatch": {"type": "audio"}},
+        "analysis.type": {"$ne": "corrupt"}
     }
     vcons = list(vcons_collection.find(query))
     reserved = []
@@ -63,7 +66,8 @@ def reserve_vcons_for_non_en_transcription(vcons_collection, max_total_size_gb):
         "being_processed_by": None,
         "analysis": {"$elemMatch": {"type": "language_identification"}},
         "analysis.type": {"$ne": "transcription"},
-        "attachments": {"$elemMatch": {"type": "audio"}}
+        "attachments": {"$elemMatch": {"type": "audio"}},
+        "analysis.type": {"$ne": "corrupt"}
     }
     vcons = list(vcons_collection.find(query))
     reserved = []
@@ -193,7 +197,7 @@ def process_vcons(thread, vcons_to_process, loaded_ai, mode):
 
         if mode == 'lang_detect':
             # Run language identification
-            results = loaded_ai.identify_languages(batch_files)
+            results = loaded_ai.identify_languages(batch_files, vcon_ids=batch_ids, vcon_collection=vcon_collection)
             for vcon, langs in zip(batch_vcons, results):
                 analysis = {
                     "type": "language_identification",
@@ -229,7 +233,6 @@ def process_vcons(thread, vcons_to_process, loaded_ai, mode):
 
 def main():
     loaded_ai = AIModel()
-    print(loaded_ai.model)
     vcons_collection = get_mongo_collection()
     client = paramiko.SSHClient()
     client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
