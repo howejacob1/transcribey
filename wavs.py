@@ -11,7 +11,7 @@ def get_wav_duration(wav_path):
         info = torchaudio.info(wav_path)
         return info.num_frames / info.sample_rate
     except Exception as e:
-        logging.warning(f"Skipping corrupt or unreadable wav file: {wav_path} ({e})")
+        # logging.warning(f"Skipping corrupt or unreadable wav file: {wav_path} ({e})")
         return None
 
 def is_readable_wav(file_path):
