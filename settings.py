@@ -11,4 +11,4 @@ transcribe_nonenglish_model_name = "nvidia/canary-1b-flash"
 identify_languages_model_name = "openai/whisper-tiny"
 
 # SFTP connection settings for make_vcons_from_sftp.py
-sftp_url = "sftp://bantaim@192.168.1.103:/home/bantaim/conserver/fake_wavs_large/"
+sftp_url = "sftp://bantaim@192.168.1.100:/home/bantaim/conserver/fake_wavs_large/"
