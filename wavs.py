@@ -57,7 +57,7 @@ def wavs_to_bin_packing_items(all_wav_files):
     return wav_files_binpacking
 
 def bin_packing_items_to_wav_batches(bin_packing_items, batch_bytes):
-    all_bins = binpacking.to_best_fit(bin_packing_items, batch_bytes, size_key="size")
+    all_bins = binpacking.to_constant_volume(bin_packing_items, batch_bytes, key=lambda x: x["size"])
     all_batches = []
     for bin in all_bins:
         batch = []
