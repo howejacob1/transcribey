@@ -148,3 +148,9 @@ def sftp_connect(sftp_url):
     client.connect(hostname, port=port, username=username)
     sftp = client.open_sftp()
     return sftp
+
+def gpu_ram_bytes():
+    if torch.cuda.is_available():
+        props = torch.cuda.get_device_properties(torch.cuda.current_device())
+        return props.total_memory
+    return None
