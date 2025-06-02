@@ -18,7 +18,7 @@ import os
 from wavs import is_readable_wav
 
 def load_whisper_tiny_raw():
-    with suppress_output(should_suppress=False):
+    with suppress_output(should_suppress=True):
         model_name = "openai/whisper-tiny"
         processor = AutoProcessor.from_pretrained(model_name)
         model = AutoModelForSpeechSeq2Seq.from_pretrained(model_name)
@@ -41,7 +41,7 @@ def load_whisper_tiny():
     return (model, processor)
 
 def load_nvidia_raw(model_name):
-    with suppress_output(should_suppress=False):
+    with suppress_output(should_suppress=True):
         nemo_asr = importlib.import_module("nemo.collections.asr")
         model = nemo_asr.models.ASRModel.from_pretrained(model_name=model_name)
         return model
