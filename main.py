@@ -1,5 +1,4 @@
 import paramiko
-import settings
 from transcription_models import AIModel
 from mongo_utils import get_mongo_collection, delete_all_vcons
 import settings
@@ -13,9 +12,8 @@ import time
 from sftp_utils import download_sftp_file, sftp_connect, get_sftp_file_size, parse_sftp_url
 import argparse
 
-def reserve_vcons_for_lang_detect(vcons_collection):
-    hostname = get_hostname()
-    max_total_size_bytes = 2 * (1024**3)
+def reserve_vcons_for_lang_detect(vcons_collection, size_bytes):
+    hostname = get_hostname()   
     # Find vCons needing language detection and not being processed
     query = {
         "being_processed_by": None,
@@ -25,11 +23,12 @@ def reserve_vcons_for_lang_detect(vcons_collection):
     }
     vcons = list(vcons_collection.find(query))
     # Reserve up to max_total_size_bytes worth of vcons
+    print(f"Reserving vcons for language detection: {size_bytes / (1024**2):.2f} MB")
     reserved = []
     total_size = 0
     for vcon in vcons:
         size = vcon.get("size", 0)
-        if total_size + size > max_total_size_bytes:
+        if total_size + size > size_bytes:
             break
         result = vcons_collection.update_one({"_id": vcon["_id"], "being_processed_by": None}, {"$set": {"being_processed_by": hostname}})
         if result.modified_count == 1:
@@ -37,9 +36,8 @@ def reserve_vcons_for_lang_detect(vcons_collection):
             total_size += size
     return reserved
 
-def reserve_vcons_for_en_transcription(vcons_collection, max_total_size_gb):
+def reserve_vcons_for_en_transcription(vcons_collection, size_bytes):
     hostname = get_hostname()
-    max_total_size_bytes = max_total_size_gb * (1024**3)
     # Find vCons with language_identification == ["en"] and no transcription, not being processed
     query = {
         "being_processed_by": None,
@@ -53,7 +51,7 @@ def reserve_vcons_for_en_transcription(vcons_collection, max_total_size_gb):
     total_size = 0
     for vcon in vcons:
         size = vcon.get("size", 0)
-        if total_size + size > max_total_size_bytes:
+        if total_size + size > size_bytes:
             break
         result = vcons_collection.update_one({"_id": vcon["_id"], "being_processed_by": None}, {"$set": {"being_processed_by": hostname}})
         if result.modified_count == 1:
@@ -61,9 +59,8 @@ def reserve_vcons_for_en_transcription(vcons_collection, max_total_size_gb):
             total_size += size
     return reserved
 
-def reserve_vcons_for_non_en_transcription(vcons_collection, max_total_size_gb):
+def reserve_vcons_for_non_en_transcription(vcons_collection, size_bytes):
     hostname = get_hostname()
-    max_total_size_bytes = max_total_size_gb * (1024**3)
     # Find vCons with language_identification != ["en"] and no transcription, not being processed
     query = {
         "being_processed_by": None,
@@ -80,7 +77,7 @@ def reserve_vcons_for_non_en_transcription(vcons_collection, max_total_size_gb):
         lang_analysis = next((a for a in vcon.get('analysis', []) if a.get('type') == 'language_identification'), None)
         if lang_analysis and (not all(l == 'en' for l in lang_analysis.get('body', []))):
             size = vcon.get("size", 0)
-            if total_size + size > max_total_size_bytes:
+            if total_size + size > size_bytes:
                 break
             result = vcons_collection.update_one({"_id": vcon["_id"], "being_processed_by": None}, {"$set": {"being_processed_by": hostname}})
             if result.modified_count == 1:
@@ -96,21 +93,21 @@ def make_modes_to_try(model_mode):
     else:
         return all_modes
 
-def reserve_vcons_for_processing(model_mode, vcons_collection, max_total_size_gb):
+def reserve_vcons_for_processing(model_mode, vcons_collection, size_bytes):
     # Try to reserve for the current model mode
     modes_to_try = make_modes_to_try(model_mode)
     reserved = []
     for mode in modes_to_try:
         if mode == "lang_detect":
-            reserved = reserve_vcons_for_lang_detect(vcons_collection)
+            reserved = reserve_vcons_for_lang_detect(vcons_collection, size_bytes)
             if reserved:
                 return reserved, mode
         elif mode == "en":
-            reserved = reserve_vcons_for_en_transcription(vcons_collection, max_total_size_gb)
+            reserved = reserve_vcons_for_en_transcription(vcons_collection, size_bytes)
             if reserved:
                 return reserved, mode
         elif mode == "non_en":
-            reserved = reserve_vcons_for_non_en_transcription(vcons_collection, max_total_size_gb)
+            reserved = reserve_vcons_for_non_en_transcription(vcons_collection, size_bytes)
             if reserved:
                 return reserved, mode
     return [], None
@@ -302,7 +299,7 @@ def main(sftp_url):
         print("Reserving vcons for processing...")
         vcons_to_process, mode = reserve_vcons_for_processing(loaded_ai.loaded_model_mode(),
                                                               vcons_collection,
-                                                              calculate_batch_bytes()*4)
+                                                              settings.total_vcon_filesize_to_process_bytes)
         print(f"Reserved {len(vcons_to_process)} vcons totaling {sum(vcon.get('size', 0) for vcon in vcons_to_process)/(1024*1024):.2f} MB for processing in mode {mode}")
         
         # If no vcons were reserved or mode is None, wait and try again
