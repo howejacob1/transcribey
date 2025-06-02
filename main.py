@@ -330,7 +330,6 @@ if __name__ == "__main__":
             setattr(settings, "debug", False)
 
     if args.mode == "head":
-        from mongo_utils import delete_all_vcons
         if getattr(settings, "debug", False):
             print("[HEAD] Debug mode: deleting all vcons from the database...")
             delete_all_vcons()
