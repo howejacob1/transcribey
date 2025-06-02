@@ -2,6 +2,7 @@ import os
 import torchaudio
 import logging
 import binpacking
+import settings
 
 def get_wav_duration(wav_path):
     """

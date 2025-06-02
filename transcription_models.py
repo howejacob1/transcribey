@@ -102,13 +102,10 @@ class AIModel:
 
         all_transcriptions = []
         for batch in batches:
-            try:
-                transcriptions = self.model.transcribe(batch)
-                all_transcriptions.extend(transcriptions)
-            finally:
-                # Clear GPU cache after each batch to prevent memory accumulation
-                if torch.cuda.is_available():
-                    torch.cuda.empty_cache()
+            transcriptions = self.model.transcribe(batch)
+            all_transcriptions.extend(transcriptions)
+
+
         return all_transcriptions
 
     def loaded_model_mode(self):

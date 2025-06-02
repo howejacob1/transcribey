@@ -159,10 +159,9 @@ def gpu_ram_bytes():
 def calculate_batch_bytes():
     gpu_ram_bytes_cur = gpu_ram_bytes()
     if gpu_ram_bytes_cur is None:
-        return psutil.virtual_memory().total // 8
+        return psutil.virtual_memory().total // 64
     else:
-        # Use 1/16 of GPU RAM to be very conservative and prevent OOM errors
-        return gpu_ram_bytes_cur // 8
+        return gpu_ram_bytes_cur // 64
 
 def max_gpu_memory_usage():
     if torch.cuda.is_available():

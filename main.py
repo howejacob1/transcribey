@@ -4,7 +4,7 @@ from mongo_utils import get_mongo_collection, delete_all_vcons
 import settings
 import make_vcons_from_sftp
 from utils import get_hostname, calculate_batch_bytes, print_gpu_memory_usage, reset_gpu_memory_stats, max_gpu_memory_usage
-from wavs import is_wav_filename
+from wavs import is_wav_filename, clear_cache_directory, is_readable_wav
 import os
 import shutil
 import threading
@@ -29,9 +29,12 @@ def reserve_vcons(vcons, vcons_collection, size_bytes):
 def find_vcons_lang_detect(vcons_collection):
     query = {
         "being_processed_by": None,
-        "analysis": {"$not": {"$elemMatch": {"type": "language_identification"}}},
+        "$and": [
+            {"analysis": {"$not": {"$elemMatch": {"type": "language_identification"}}}},
+            {"analysis": {"$not": {"$elemMatch": {"type": "corrupt"}}}}
+        ],
         "attachments": {"$elemMatch": {"type": "audio"}},
-        "analysis.type": {"$ne": "corrupt"}
+        "corrupt": {"$ne": True}
     }
     vcons = list(vcons_collection.find(query))
     return vcons
@@ -44,10 +47,13 @@ def reserve_vcons_for_lang_detect(vcons_collection, size_bytes):
 def find_vcons_en_transcription(vcons_collection):
     query = {
         "being_processed_by": None,
-        "analysis": {"$elemMatch": {"type": "language_identification", "body": ["en"]}},
-        "analysis.type": {"$ne": "transcription"},
+        "$and": [
+            {"analysis": {"$elemMatch": {"type": "language_identification", "body": ["en"]}}},
+            {"analysis": {"$not": {"$elemMatch": {"type": "transcription"}}}},
+            {"analysis": {"$not": {"$elemMatch": {"type": "corrupt"}}}}
+        ],
         "attachments": {"$elemMatch": {"type": "audio"}},
-        "analysis.type": {"$ne": "corrupt"}
+        "corrupt": {"$ne": True}
     }
     vcons = list(vcons_collection.find(query))
     return vcons
@@ -60,10 +66,13 @@ def reserve_vcons_for_en_transcription(vcons_collection, size_bytes):
 def find_vcons_non_en_transcription(vcons_collection):
     query = {
         "being_processed_by": None,
-        "analysis": {"$elemMatch": {"type": "language_identification", "body": {"$ne": ["en"]}}},
-        "analysis.type": {"$ne": "transcription"},
+        "$and": [
+            {"analysis": {"$elemMatch": {"type": "language_identification", "body": {"$ne": ["en"]}}}},
+            {"analysis": {"$not": {"$elemMatch": {"type": "transcription"}}}},
+            {"analysis": {"$not": {"$elemMatch": {"type": "corrupt"}}}}
+        ],
         "attachments": {"$elemMatch": {"type": "audio"}},
-        "analysis.type": {"$ne": "corrupt"}
+        "corrupt": {"$ne": True}
     }
     vcons = list(vcons_collection.find(query))
     return vcons
@@ -100,8 +109,10 @@ def reserve_vcons_for_processing(model_mode, vcons_collection, size_bytes):
     return [], None
 
 def _download_vcons_to_cache(vcons_to_process, sftp):
-    cache_dir = settings.dest_dir
+    cache_dir = settings.cache_directory
     os.makedirs(cache_dir, exist_ok=True)
+    vcon_collection = get_mongo_collection()
+    
     for vcon in vcons_to_process:
         for attachment in vcon.get('attachments', []):
             if attachment.get('type') == 'audio':
@@ -119,25 +130,60 @@ def _download_vcons_to_cache(vcons_to_process, sftp):
                     else:
                         shutil.copy2(wav_url, temp_path)
                     os.rename(temp_path, cache_path)
+                    
+                    # Validate the downloaded WAV file
+                    if not is_readable_wav(cache_path):
+                        print(f"Downloaded WAV file is corrupt: {wav_url}")
+                        # Mark as corrupt in database
+                        analysis = {
+                            "type": "corrupt",
+                            "body": "Corrupt or unreadable audio file",
+                            "encoding": "none"
+                        }
+                        try:
+                            result = vcon_collection.update_one(
+                                {"_id": vcon["_id"]},
+                                {"$push": {"analysis": analysis}, "$set": {"corrupt": True}, "$unset": {"being_processed_by": ""}}
+                            )
+                            if result.modified_count == 1:
+                                print(f"Marked vCon {vcon['_id']} as corrupt in database")
+                            else:
+                                print(f"Failed to mark vCon {vcon['_id']} as corrupt")
+                        except Exception as e:
+                            print(f"Error marking vCon {vcon['_id']} as corrupt: {e}")
+                        
+                        # Remove the corrupt file from cache
+                        if os.path.exists(cache_path):
+                            os.remove(cache_path)
+                        
                 except Exception as e:
                     if os.path.exists(temp_path):
                         os.remove(temp_path)
                     print(f"Failed to download {wav_url} to cache: {e}")
+    print(f"Downloaded {len(vcons_to_process)} vcons to cache")
 
 def cleanup_cache_directory():
     """Clean up any leftover files in the cache directory from previous runs."""
-    cache_dir = settings.dest_dir
+    cache_dir = settings.cache_directory
     if not os.path.exists(cache_dir):
         return
     
     files_removed = 0
     total_size_removed = 0
+    corrupt_files_removed = 0
     
     for filename in os.listdir(cache_dir):
         file_path = os.path.join(cache_dir, filename)
         if os.path.isfile(file_path):
             try:
                 file_size = os.path.getsize(file_path)
+                
+                # Check if it's a WAV file and validate it
+                if is_wav_filename(filename):
+                    if not is_readable_wav(file_path):
+                        print(f"Found corrupt WAV file in cache during cleanup: {file_path}")
+                        corrupt_files_removed += 1
+                
                 os.remove(file_path)
                 files_removed += 1
                 total_size_removed += file_size
@@ -146,6 +192,8 @@ def cleanup_cache_directory():
     
     if files_removed > 0:
         print(f"Cleaned up {files_removed} leftover files ({total_size_removed / (1024*1024):.1f} MB) from cache directory")
+        if corrupt_files_removed > 0:
+            print(f"  - {corrupt_files_removed} of these were corrupt WAV files")
 
 def load_vcons_in_background(vcons_to_process, sftp):
     """
@@ -159,7 +207,7 @@ def process_vcons(download_thread, vcons_to_process, loaded_ai, mode):
     # Reset GPU memory stats for accurate tracking
     
     # Map vcon_id to cache wav path
-    cache_dir = settings.dest_dir
+    cache_dir = settings.cache_directory
     vcon_id_to_cache_path = {}
     vcon_id_to_vcon = {}
     for vcon in vcons_to_process:
@@ -184,7 +232,39 @@ def process_vcons(download_thread, vcons_to_process, loaded_ai, mode):
     start_time = time.time()
 
     def available_vcon_ids():
-        return [vid for vid in vcon_ids if os.path.exists(vcon_id_to_cache_path[vid])]
+        valid_ids = []
+        for vid in vcon_ids:
+            cache_path = vcon_id_to_cache_path[vid]
+            if os.path.exists(cache_path):
+                # Additional validation: check if the WAV file is readable
+                if is_readable_wav(cache_path):
+                    valid_ids.append(vid)
+                else:
+                    print(f"Found corrupt WAV file in cache: {cache_path}")
+                    # Mark as corrupt in database
+                    analysis = {
+                        "type": "corrupt",
+                        "body": "Corrupt or unreadable audio file",
+                        "encoding": "none"
+                    }
+                    try:
+                        result = vcon_collection.update_one(
+                            {"_id": vid},
+                            {"$push": {"analysis": analysis}, "$set": {"corrupt": True}, "$unset": {"being_processed_by": ""}}
+                        )
+                        if result.modified_count == 1:
+                            print(f"Marked vCon {vid} as corrupt in database")
+                        else:
+                            print(f"Failed to mark vCon {vid} as corrupt")
+                    except Exception as e:
+                        print(f"Error marking vCon {vid} as corrupt: {e}")
+                    
+                    # Remove the corrupt file from cache
+                    try:
+                        os.remove(cache_path)
+                    except Exception as e:
+                        print(f"Failed to remove corrupt file {cache_path}: {e}")
+        return valid_ids
 
     print(f"Starting {mode} processing for {len(vcon_ids)} vcons ({total_bytes_to_process / (1024*1024):.1f} MB total)")
 
@@ -209,15 +289,26 @@ def process_vcons(download_thread, vcons_to_process, loaded_ai, mode):
                     "body": langs,
                     "encoding": "none"
                 }
+                update_success = False
                 try:
-                    vcon_collection.update_one({"_id": vcon["_id"]}, {"$push": {"analysis": analysis}})
+                    result = vcon_collection.update_one({"_id": vcon["_id"]}, {"$push": {"analysis": analysis}})
+                    if result.modified_count == 1:
+                        update_success = True
+                    else:
+                        print(f"Warning: Language identification update for vCon {vcon['_id']} did not modify any document")
                 except Exception as e:
                     print(f"Error updating language identification for vCon {vcon['_id']}: {e}")
-                try:
-                    vcon_collection.update_one({"_id": vcon["_id"]}, {"$unset": {"being_processed_by": ""}})
-                except Exception as e:
-                    print(f"Error unsetting being_processed_by for vCon {vcon['_id']}: {e}")
+                
+                # Only release the vcon if the update was successful
+                if update_success:
+                    try:
+                        vcon_collection.update_one({"_id": vcon["_id"]}, {"$unset": {"being_processed_by": ""}})
+                    except Exception as e:
+                        print(f"Error unsetting being_processed_by for vCon {vcon['_id']}: {e}")
+                else:
+                    print(f"Keeping vCon {vcon['_id']} reserved due to failed language identification update")
         else:
+            successful_vcon_ids = []
             try:
                 transcriptions = loaded_ai.transcribe(batch_files, english_only=(mode == "en"))
                 for vcon, transcription in zip(batch_vcons, transcriptions):
@@ -229,17 +320,33 @@ def process_vcons(download_thread, vcons_to_process, loaded_ai, mode):
                         "encoding": "none"
                     }
                     try:
-                        vcon_collection.update_one({"_id": vcon["_id"]}, {"$push": {"analysis": analysis}})
+                        result = vcon_collection.update_one({"_id": vcon["_id"]}, {"$push": {"analysis": analysis}})
+                        if result.modified_count == 1:
+                            successful_vcon_ids.append(vcon["_id"])
+                        else:
+                            print(f"Warning: Transcription update for vCon {vcon['_id']} did not modify any document")
                     except Exception as e:
                         print(f"Error updating transcription for vCon {vcon['_id']}: {e}")
             except Exception as e:
                 print(f"Error in transcription batch: {e}")
             finally:
-                for vid in avail_ids:
+                # Only release vcons that were successfully updated
+                for vid in successful_vcon_ids:
                     try:
                         vcon_collection.update_one({"_id": vid}, {"$unset": {"being_processed_by": ""}})
                     except Exception as e:
                         print(f"Error unsetting being_processed_by for vCon {vid}: {e}")
+                
+                # For failed vcons, keep them reserved but log them
+                failed_vcon_ids = [vid for vid in avail_ids if vid not in successful_vcon_ids]
+                if failed_vcon_ids:
+                    print(f"Keeping {len(failed_vcon_ids)} vCons reserved due to failed transcription updates: {failed_vcon_ids}")
+                    # Release them anyway to avoid blocking indefinitely
+                    # for vid in failed_vcon_ids:
+                    #     try:
+                    #         vcon_collection.update_one({"_id": vid}, {"$unset": {"being_processed_by": ""}})
+                    #     except Exception as e:
+                    #         print(f"Error unsetting being_processed_by for failed vCon {vid}: {e}")
 
         total_bytes_processed += batch_bytes
         processed_ids.update(avail_ids)
@@ -259,20 +366,7 @@ def process_vcons(download_thread, vcons_to_process, loaded_ai, mode):
 
         if not download_thread.is_alive() and len(processed_ids) == len(vcon_ids):
             break
-
-    remaining_files = []
-    for filename in os.listdir(cache_dir):
-        file_path = os.path.join(cache_dir, filename)
-        if os.path.isfile(file_path):
-            remaining_files.append(file_path)
-
-    if remaining_files:
-        print(f"Cleaning up {len(remaining_files)} remaining files from cache...")
-        for file_path in remaining_files:
-            try:
-                os.remove(file_path)
-            except Exception as e:
-                print(f"Failed to clean up remaining file {file_path}: {e}")
+    clear_cache_directory()
 
     total_time = time.time() - start_time
     final_mb_per_sec = (total_bytes_processed / (1024*1024)) / total_time if total_time > 0 else 0

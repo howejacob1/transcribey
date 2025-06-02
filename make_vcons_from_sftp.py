@@ -8,7 +8,7 @@ from sftp_utils import parse_sftp_url, get_all_filenames_from_sftp
 from mongo_utils import get_mongo_collection, get_vcons_cache_collection, delete_all_vcons, all_vcon_urls
 from vcon_utils import create_vcon_for_wav
 from wavs import is_wav_filename
-from settings import sftp_url, dest_dir
+from settings import sftp_url
 
 def main(sftp_url):
     # Build SFTP URL from settings.py
