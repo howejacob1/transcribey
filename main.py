@@ -290,12 +290,11 @@ def main(sftp_url):
         print(f"Reserved {len(vcons_to_process)} vcons totaling {sum(vcon.get('size', 0) for vcon in vcons_to_process)/(1024*1024):.2f} MB for processing in mode {mode}")
         
         # If no vcons were reserved or mode is None, wait and try again
-        if not vcons_to_process or mode is None:
+        if vcons_to_process:
+            thread = load_vcons_in_background(vcons_to_process, sftp)
+            process_vcons(thread, vcons_to_process, loaded_ai, mode)
+        else:
             time.sleep(1)
-            continue
-            
-        thread = load_vcons_in_background(vcons_to_process, sftp)
-        process_vcons(thread, vcons_to_process, loaded_ai, mode)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Transcribey main entry point")
