@@ -335,8 +335,7 @@ def main():
         
         # If no vcons were reserved or mode is None, wait and try again
         if not vcons_to_process or mode is None:
-            print("No work available, waiting 10 seconds...")
-            time.sleep(10)
+            time.sleep(1)
             continue
             
         thread = load_vcons_in_background(vcons_to_process, sftp)
@@ -346,7 +345,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Transcribey main entry point")
     parser.add_argument("mode", choices=["head", "worker"], help="Run as head or worker")
     parser.add_argument("--sftp_url", type=str, default=None, help="Override SFTP URL (applies to both head and worker)")
-    parser.add_argument("--debug", type=str, default=None, help="Override debug mode (debug=True or debug=False, applies to both head and worker)")
+    parser.add_argument("--debug", type=str, default=False, help="Override debug mode (debug=True or debug=False, applies to both head and worker)")
     args = parser.parse_args()
 
     # Allow overrides from command line (applies to both head and worker)
