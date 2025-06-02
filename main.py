@@ -299,7 +299,7 @@ def main(sftp_url):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Transcribey main entry point")
-    parser.add_argument("mode", choices=["head", "worker"], help="Run as head or worker")
+    parser.add_argument("mode", choices=["head", "worker", "slurp"], help="Run as head or worker")
     parser.add_argument("--sftp_url", type=str, default=settings.sftp_url, help="Override SFTP URL (applies to both head and worker)")
     parser.add_argument("--debug", action="store_true", default=False, help="Enable debug mode (applies to both head and worker)")
     args = parser.parse_args()
@@ -311,4 +311,10 @@ if __name__ == "__main__":
             delete_all_vcons()
         sftp_thread = threading.Thread(target=make_vcons_from_sftp.main, args=(args.sftp_url,), daemon=True)
         sftp_thread.start()
-    main(args.sftp_url)
+        main(args.sftp_url)
+    elif args.mode == "worker":
+        main(args.sftp_url)
+    elif args.mode == "slurp":
+        if settings.debug:
+            delete_all_vcons()
+        make_vcons_from_sftp.main(args.sftp_url)
