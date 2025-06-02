@@ -12,18 +12,8 @@ import time
 from sftp_utils import download_sftp_file, sftp_connect, get_sftp_file_size, parse_sftp_url
 import argparse
 
-def reserve_vcons_for_lang_detect(vcons_collection, size_bytes):
-    hostname = get_hostname()   
-    # Find vCons needing language detection and not being processed
-    query = {
-        "being_processed_by": None,
-        "analysis": {"$not": {"$elemMatch": {"type": "language_identification"}}},
-        "attachments": {"$elemMatch": {"type": "audio"}},
-        "analysis.type": {"$ne": "corrupt"}
-    }
-    vcons = list(vcons_collection.find(query))
-    # Reserve up to max_total_size_bytes worth of vcons
-    print(f"Reserving vcons for language detection: {size_bytes / (1024**2):.2f} MB")
+def reserve_vcons(vcons, vcons_collection, size_bytes):
+    hostname = get_hostname()
     reserved = []
     total_size = 0
     for vcon in vcons:
@@ -36,9 +26,22 @@ def reserve_vcons_for_lang_detect(vcons_collection, size_bytes):
             total_size += size
     return reserved
 
-def reserve_vcons_for_en_transcription(vcons_collection, size_bytes):
-    hostname = get_hostname()
-    # Find vCons with language_identification == ["en"] and no transcription, not being processed
+def find_vcons_lang_detect(vcons_collection):
+    query = {
+        "being_processed_by": None,
+        "analysis": {"$not": {"$elemMatch": {"type": "language_identification"}}},
+        "attachments": {"$elemMatch": {"type": "audio"}},
+        "analysis.type": {"$ne": "corrupt"}
+    }
+    vcons = list(vcons_collection.find(query))
+    return vcons
+
+def reserve_vcons_for_lang_detect(vcons_collection, size_bytes):
+    # Find vCons needing language detection and not being processed
+    vcons = find_vcons_lang_detect(vcons_collection)
+    return reserve_vcons(vcons, vcons_collection, size_bytes)
+
+def find_vcons_en_transcription(vcons_collection):
     query = {
         "being_processed_by": None,
         "analysis": {"$elemMatch": {"type": "language_identification", "body": ["en"]}},
@@ -47,43 +50,27 @@ def reserve_vcons_for_en_transcription(vcons_collection, size_bytes):
         "analysis.type": {"$ne": "corrupt"}
     }
     vcons = list(vcons_collection.find(query))
-    reserved = []
-    total_size = 0
-    for vcon in vcons:
-        size = vcon.get("size", 0)
-        if total_size + size > size_bytes:
-            break
-        result = vcons_collection.update_one({"_id": vcon["_id"], "being_processed_by": None}, {"$set": {"being_processed_by": hostname}})
-        if result.modified_count == 1:
-            reserved.append(vcon)
-            total_size += size
-    return reserved
+    return vcons
 
-def reserve_vcons_for_non_en_transcription(vcons_collection, size_bytes):
-    hostname = get_hostname()
-    # Find vCons with language_identification != ["en"] and no transcription, not being processed
+def reserve_vcons_for_en_transcription(vcons_collection, size_bytes):
+    # Find vCons with language_identification == ["en"] and no transcription, not being processed
+    vcons = find_vcons_en_transcription(vcons_collection)
+    return reserve_vcons(vcons, vcons_collection, size_bytes)
+
+def find_vcons_non_en_transcription(vcons_collection):
     query = {
         "being_processed_by": None,
-        "analysis": {"$elemMatch": {"type": "language_identification"}},
+        "analysis": {"$elemMatch": {"type": "language_identification", "body": {"$ne": ["en"]}}},
         "analysis.type": {"$ne": "transcription"},
         "attachments": {"$elemMatch": {"type": "audio"}},
         "analysis.type": {"$ne": "corrupt"}
     }
     vcons = list(vcons_collection.find(query))
-    reserved = []
-    total_size = 0
-    for vcon in vcons:
-        # Only reserve if not all langs are 'en'
-        lang_analysis = next((a for a in vcon.get('analysis', []) if a.get('type') == 'language_identification'), None)
-        if lang_analysis and (not all(l == 'en' for l in lang_analysis.get('body', []))):
-            size = vcon.get("size", 0)
-            if total_size + size > size_bytes:
-                break
-            result = vcons_collection.update_one({"_id": vcon["_id"], "being_processed_by": None}, {"$set": {"being_processed_by": hostname}})
-            if result.modified_count == 1:
-                reserved.append(vcon)
-                total_size += size
-    return reserved
+    return vcons
+
+def reserve_vcons_for_non_en_transcription(vcons_collection, size_bytes):
+    vcons = find_vcons_non_en_transcription(vcons_collection)
+    return reserve_vcons(vcons, vcons_collection, size_bytes)
 
 def make_modes_to_try(model_mode):
     all_modes = ["lang_detect", "en", "non_en"]
