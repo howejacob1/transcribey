@@ -1,6 +1,7 @@
 import os
 import torchaudio
 import logging
+import binpacking
 
 def get_wav_duration(wav_path):
     """
@@ -48,3 +49,23 @@ def get_total_wav_duration(wav_files):
 
 def is_wav_filename(filename):
     return filename.lower().endswith('.wav')
+
+def wavs_to_bin_packing_items(wav_files):
+    wav_files_binpacking = []
+    for wav_file in all_wav_files:
+        wav_files_binpacking.append({"id": wav_file, "size": os.path.getsize(wav_file)})
+    return wav_files_binpacking
+
+def bin_packing_items_to_wav_batches(bin_packing_items, batch_bytes):
+    all_bins = binpacking.to_best_fit(bin_packing_items, batch_bytes, size_key="size")
+    all_batches = []
+    for bin in all_bins:
+        batch = []
+        for item in bin:
+            batch.append(item["id"])
+        all_batches.append(batch)
+    return all_batches
+
+def make_wav_batches(all_wav_files, batch_bytes):
+    wav_files_binpacking = wavs_to_bin_packing_items(all_wav_files)
+    return bin_packing_items_to_wav_batches(wav_files_binpacking, batch_bytes)
