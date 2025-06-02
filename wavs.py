@@ -68,4 +68,9 @@ def bin_packing_items_to_wav_batches(bin_packing_items, batch_bytes):
 
 def make_wav_batches(all_wav_files, batch_bytes):
     wav_files_binpacking = wavs_to_bin_packing_items(all_wav_files)
-    return bin_packing_items_to_wav_batches(wav_files_binpacking, batch_bytes)
+    wav_batches = bin_packing_items_to_wav_batches(wav_files_binpacking, batch_bytes)
+    return wav_batches
+
+def clear_cache_directory():
+    for file in os.listdir(settings.cache_directory):
+        os.remove(os.path.join(settings.cache_directory, file))
