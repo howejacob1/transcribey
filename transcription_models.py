@@ -13,7 +13,7 @@ import logging
 from transformers import AutoModelForSpeechSeq2Seq, AutoProcessor
 import torch
 import torchaudio
-from settings import lang_detect_batch_size, lang_detect_threshold
+from settings import lang_detect_batch_size, lang_detect_threshold, default_batch_bytes
 import os
 from wavs import is_readable_wav
 
@@ -115,69 +115,12 @@ class AIModel:
         else:
             self.load(transcribe_nonenglish_model_name)
 
-        # If this is a Whisper model, use the batching logic as well
-        if self.model_name == identify_languages_model_name or (
-            isinstance(self.model, tuple) and self.model_name.startswith("openai/whisper")
-        ):
-            model, processor = self.model
-            gpu_ram = gpu_ram_bytes()
-            if gpu_ram is not None:
-                batch_bytes = gpu_ram // 4
-            else:
-                batch_bytes = 2 * 1024 * 1024 * 1024  # Default to 2GB if no GPU
-
-            # Prepare batches
-            batches = []
-            current_batch = []
-            current_batch_size = 0
-            for wav_path in wav_files:
-                try:
-                    file_size = os.path.getsize(wav_path)
-                except Exception:
-                    file_size = 0
-                # If file is larger than batch_bytes, process it alone
-                if file_size >= batch_bytes:
-                    if current_batch:
-                        batches.append(current_batch)
-                        current_batch = []
-                        current_batch_size = 0
-                    batches.append([wav_path])
-                else:
-                    if current_batch_size + file_size > batch_bytes and current_batch:
-                        batches.append(current_batch)
-                        current_batch = []
-                        current_batch_size = 0
-                    current_batch.append(wav_path)
-                    current_batch_size += file_size
-            if current_batch:
-                batches.append(current_batch)
-
-            all_transcriptions = []
-            device = get_device()
-            import torchaudio
-            for batch in batches:
-                wavs = []
-                for wav_path in batch:
-                    waveform, sample_rate = torchaudio.load(wav_path)
-                    if sample_rate != 16000:
-                        resampler = torchaudio.transforms.Resample(orig_freq=sample_rate, new_freq=16000)
-                        waveform = resampler(waveform)
-                    wavs.append(waveform.squeeze().numpy())
-                # Process batch
-                inputs = processor(wavs, sampling_rate=16000, return_tensors="pt", padding=True)
-                input_features = inputs.input_features.to(device)
-                with torch.no_grad():
-                    predicted_ids = model.generate(input_features)
-                transcriptions = processor.batch_decode(predicted_ids, skip_special_tokens=True)
-                all_transcriptions.extend(transcriptions)
-            return all_transcriptions
-
         # NVIDIA NeMo model: batch by total file size, using 1/4 GPU RAM
         gpu_ram = gpu_ram_bytes()
         if gpu_ram is not None:
             batch_bytes = gpu_ram // 4
         else:
-            batch_bytes = 2 * 1024 * 1024 * 1024  # Default to 2GB if no GPU
+            batch_bytes = default_batch_bytes  # Default to 2GB if no GPU
 
         # Prepare batches
         batches = []

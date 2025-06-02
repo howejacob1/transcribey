@@ -7,6 +7,7 @@ en_transcription_batch_size = 64+32
 non_en_transcription_batch_size = 20
 debug = True
 total_vcon_filesize_to_process_gb = 0.1
+default_batch_bytes = 100 * 1024 * 1024 # 100MB
 
 # SFTP connection settings for make_vcons_from_sftp.py
 sftp_url = "sftp://bantaim@192.168.1.100:/home/bantaim/conserver/fake_wavs/"
