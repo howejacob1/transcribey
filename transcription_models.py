@@ -204,7 +204,14 @@ def identify_languages(all_wav_paths, model_and_processor, threshold=None, vcon_
             if index in valid_indices:
                 lang_logits = logits[valid_counter, whisper_token_ids]
                 lang_probs = torch.softmax(lang_logits, dim=-1).cpu().numpy()
-                wav_languages_detected = [whisper_token_languages[j] for j, prob in enumerate(lang_probs) if prob >= threshold]
+                # Convert whisper language tokens to simplified language codes
+                wav_languages_detected = [whisper_tokens[j] for j, prob in enumerate(lang_probs) if prob >= threshold]
+                
+                # If no languages meet the threshold, use the highest probability language
+                if not wav_languages_detected:
+                    max_prob_idx = lang_probs.argmax()
+                    wav_languages_detected = [whisper_tokens[max_prob_idx]]
+                
                 all_wav_languages_detected.append(wav_languages_detected)
                 valid_counter += 1
             else:
