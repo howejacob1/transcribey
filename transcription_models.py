@@ -7,7 +7,7 @@ This module provides functions to load and manage all ASR models used in the pro
 # Actual implementation will depend on the model frameworks/APIs used (e.g., HuggingFace, NVIDIA, Microsoft, etc.)
 
 import importlib
-from utils import suppress_output, get_device
+from utils import suppress_output, get_device, gpu_ram_bytes
 import time
 import logging
 from transformers import AutoModelForSpeechSeq2Seq, AutoProcessor
@@ -104,11 +104,7 @@ class AIModel:
     def load_lang_detect(self):
         self.load(identify_languages_model_name)
 
-    def identify_languages(self, wav_files, vcon_ids=None, vcon_collection=None):
-        self.load(identify_languages_model_name)
-        return identify_languages(wav_files, self.model, vcon_ids=vcon_ids, vcon_collection=vcon_collection)
-
-    def _get_gpu_ram_bytes(self):
+    def gpu_ram_bytes(self):
         if torch.cuda.is_available():
             props = torch.cuda.get_device_properties(torch.cuda.current_device())
             return props.total_memory
@@ -125,10 +121,8 @@ class AIModel:
         if self.model_name == identify_languages_model_name or (
             isinstance(self.model, tuple) and self.model_name.startswith("openai/whisper")
         ):
-            # Whisper model, not NVIDIA
             model, processor = self.model
-            # Use GPU RAM if available, else default
-            gpu_ram = self._get_gpu_ram_bytes()
+            gpu_ram = self.gpu_ram_bytes()
             if gpu_ram is not None:
                 batch_bytes = gpu_ram // 4
             else:
@@ -181,7 +175,7 @@ class AIModel:
             return all_transcriptions
 
         # NVIDIA NeMo model: batch by total file size, using 1/4 GPU RAM
-        gpu_ram = self._get_gpu_ram_bytes()
+        gpu_ram = self.gpu_ram_bytes()
         if gpu_ram is not None:
             batch_bytes = gpu_ram // 4
         else:
