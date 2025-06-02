@@ -1,6 +1,6 @@
 import paramiko
 import settings
-from transcription_models import AIModel, transcribe_vcons
+from transcription_models import AIModel
 from mongo_utils import get_mongo_collection
 import settings
 import make_vcons_from_sftp
@@ -258,9 +258,20 @@ def process_vcons(download_thread, vcons_to_process, loaded_ai, mode):
                     print(f"Error unsetting being_processed_by for vCon {vcon['_id']}: {e}")
         else:
             # Transcription (en or non_en)
-            vcon_file_tuples = [(vid, vcon_id_to_cache_path[vid]) for vid in batch_ids]
             try:
-                transcribe_vcons(vcon_collection, loaded_ai, vcon_file_tuples, batch_size)
+                transcriptions = loaded_ai.transcribe(batch_files, english_only=(mode == "en"))
+                for vcon, transcription in zip(batch_vcons, transcriptions):
+                    analysis = {
+                        "type": "transcription",
+                        "dialog": [0],
+                        "vendor": loaded_ai.model_name if hasattr(loaded_ai, 'model_name') else "unknown",
+                        "body": transcription,
+                        "encoding": "none"
+                    }
+                    try:
+                        vcon_collection.update_one({"_id": vcon["_id"]}, {"$push": {"analysis": analysis}})
+                    except Exception as e:
+                        print(f"Error updating transcription for vCon {vcon['_id']}: {e}")
             except Exception as e:
                 print(f"Error in transcription batch: {e}")
             finally:

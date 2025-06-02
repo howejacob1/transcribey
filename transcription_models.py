@@ -175,7 +175,9 @@ def identify_languages(all_wav_paths, model_and_processor, threshold=None, vcon_
         threshold = lang_detect_threshold
     device = get_device()
 
-    all_wav_paths_batched = split_wavs_into_batches(all_wav_paths, lang_detect_batch_size)
+    # Use make_wav_batches for batching by file size
+    batch_bytes = default_batch_bytes
+    all_wav_paths_batched = make_wav_batches(all_wav_paths, batch_bytes)
 
     all_wav_languages_detected = []
     corrupt_indices = []
@@ -185,7 +187,7 @@ def identify_languages(all_wav_paths, model_and_processor, threshold=None, vcon_
         if vcon_ids and vcon_collection is not None and unreadable_files:
             for idx, wav_path in enumerate(wav_paths):
                 if wav_path in unreadable_files:
-                    vcon_id = vcon_ids[batch_idx * lang_detect_batch_size + idx]
+                    vcon_id = vcon_ids[batch_idx * len(wav_paths) + idx]
                     analysis = {
                         "type": "corrupt",
                         "body": "Unreadable or corrupt audio file",
@@ -213,92 +215,3 @@ def identify_languages(all_wav_paths, model_and_processor, threshold=None, vcon_
                 all_wav_languages_detected.append([])
     assert len(all_wav_languages_detected) == len(all_wav_paths)
     return all_wav_languages_detected
-
-def transcribe_vcons(collection, model, vcons_to_transcribe, batch_size):
-    """
-    Transcribe a list of vCons using the specified model.
-    
-    Args:
-        collection: MongoDB collection containing vCons
-        model: Loaded model instance (should have a .transcribe method)
-        vcons_to_transcribe: List of (vcon_id, file_path) tuples to transcribe
-        batch_size: Number of files to process in each batch
-    """
-
-    if not vcons_to_transcribe:
-        logging.info(f"No vCons to transcribe with {getattr(model, 'name', getattr(model, '__class__', type(model)).__name__)}")
-        return
-        
-    total = len(vcons_to_transcribe)
-    model_name = getattr(model, 'name', getattr(model, '__class__', type(model)).__name__)
-    logging.info(f"Starting transcription of {total} vCons with {model_name}")
-    start_time = time.time()
-    processed = 0
-    file_paths_only = [file_path for _, file_path in vcons_to_transcribe]
-    all_files = file_paths_only
-    for i in range(0, total, batch_size):
-        batch = vcons_to_transcribe[i:min(i+batch_size, total)]
-        batch_ids = [vcon_id for vcon_id, _ in batch]
-        batch_files = [file_path for _, file_path in batch]
-        valid_indices = []
-        valid_files = []
-        valid_ids = []
-        for idx, file_path in enumerate(batch_files):
-            if os.path.exists(file_path) and os.path.isfile(file_path):
-                valid_indices.append(idx)
-                valid_files.append(file_path)
-                valid_ids.append(batch_ids[idx])
-            else:
-                logging.warning(f"File not found, not accessible, or invalid: {file_path}")
-        if not valid_files:
-            logging.warning(f"No valid files in batch {i//batch_size + 1}")
-            continue
-        batch_start = time.time()
-        try:
-            print(f"Files to transcribe: {valid_files}")
-            transcriptions = model.transcribe(valid_files)
-            batch_elapsed = time.time() - batch_start
-            logging.info(f"Transcribed batch of {len(valid_files)} files with {model_name} in {batch_elapsed:.2f} seconds")
-            for vcon_id, file_path, transcription in zip(valid_ids, valid_files, transcriptions):
-                analysis = {
-                    "type": "transcription",
-                    "dialog": [0],
-                    "vendor": model_name,
-                    "body": transcription.text if hasattr(transcription, 'text') else str(transcription),
-                    "encoding": "none"
-                }
-                try:
-                    collection.update_one(
-                        {"_id": vcon_id},
-                        {"$push": {"analysis": analysis}}
-                    )
-                    logging.info(f"Transcribed {os.path.basename(file_path)} with {model_name}: {analysis['body']}")
-                    processed += 1
-                except Exception as e:
-                    logging.error(f"Error updating transcription for vCon {vcon_id}: {str(e)}")
-        except RuntimeError as e:
-            if 'CUDA error' in str(e):
-                logging.error(f"CUDA error during transcription: {str(e)}. Clearing CUDA cache and continuing.")
-                torch.cuda.empty_cache()
-            else:
-                logging.error(f"Error transcribing batch with {model_name}: {str(e)}")
-        except Exception as e:
-            logging.error(f"Error transcribing batch with {model_name}: {str(e)}")
-        if processed % 100 == 0 or processed == total:
-            logging.info(f"Progress: {processed}/{total} vCons transcribed with {model_name}")
-    total_elapsed = time.time() - start_time
-    logging.info(f"Completed transcription of {processed} vCons with {model_name} in {total_elapsed:.2f} seconds")
-    logging.info(f"Total data: {total_bytes / (1024**3):.2f} GB, total length: {total_audio_seconds:.2f} seconds, real time factor: {rtf:.1f}x")
-    del model
-    torch.cuda.empty_cache()
-    return {
-        'rtf': rtf,
-        'duration': total_audio_seconds,
-        'size': total_bytes,
-        'batch_size': batch_size
-    }
-
-if __name__ == "__main__":
-    import sys
-    import traceback
-    preinstall_all_models()
