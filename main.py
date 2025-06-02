@@ -1,7 +1,7 @@
 import paramiko
 import settings
 from transcription_models import AIModel
-from mongo_utils import get_mongo_collection
+from mongo_utils import get_mongo_collection, delete_all_vcons
 import settings
 import make_vcons_from_sftp
 from utils import get_hostname, calculate_batch_bytes
