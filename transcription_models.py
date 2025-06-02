@@ -104,12 +104,6 @@ class AIModel:
     def load_lang_detect(self):
         self.load(identify_languages_model_name)
 
-    def gpu_ram_bytes(self):
-        if torch.cuda.is_available():
-            props = torch.cuda.get_device_properties(torch.cuda.current_device())
-            return props.total_memory
-        return None
-
     def transcribe(self, wav_files, english_only=False):
         # Load the correct model if needed
         if english_only:
@@ -122,7 +116,7 @@ class AIModel:
             isinstance(self.model, tuple) and self.model_name.startswith("openai/whisper")
         ):
             model, processor = self.model
-            gpu_ram = self.gpu_ram_bytes()
+            gpu_ram = gpu_ram_bytes()
             if gpu_ram is not None:
                 batch_bytes = gpu_ram // 4
             else:
@@ -175,7 +169,7 @@ class AIModel:
             return all_transcriptions
 
         # NVIDIA NeMo model: batch by total file size, using 1/4 GPU RAM
-        gpu_ram = self.gpu_ram_bytes()
+        gpu_ram = gpu_ram_bytes()
         if gpu_ram is not None:
             batch_bytes = gpu_ram // 4
         else:
