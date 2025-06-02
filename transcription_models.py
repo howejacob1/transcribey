@@ -104,6 +104,10 @@ class AIModel:
     def load_lang_detect(self):
         self.load(identify_languages_model_name)
 
+    def identify_languages(self, wav_files, vcon_ids=None, vcon_collection=None):
+        self.load(identify_languages_model_name)
+        return identify_languages(wav_files, self.model, vcon_ids=vcon_ids, vcon_collection=vcon_collection)
+
     def transcribe(self, wav_files, english_only=False):
         # Load the correct model if needed
         if english_only:
