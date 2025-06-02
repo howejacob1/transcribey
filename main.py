@@ -3,7 +3,7 @@ from transcription_models import AIModel
 from mongo_utils import get_mongo_collection, delete_all_vcons
 import settings
 import make_vcons_from_sftp
-from utils import get_hostname, calculate_batch_bytes
+from utils import get_hostname, calculate_batch_bytes, print_gpu_memory_usage, reset_gpu_memory_stats, max_gpu_memory_usage
 from wavs import is_wav_filename
 import os
 import shutil
@@ -156,6 +156,8 @@ def load_vcons_in_background(vcons_to_process, sftp):
     return thread
 
 def process_vcons(download_thread, vcons_to_process, loaded_ai, mode):
+    # Reset GPU memory stats for accurate tracking
+    
     # Map vcon_id to cache wav path
     cache_dir = settings.dest_dir
     vcon_id_to_cache_path = {}
@@ -243,7 +245,10 @@ def process_vcons(download_thread, vcons_to_process, loaded_ai, mode):
         processed_ids.update(avail_ids)
         batch_time = time.time() - start_time
         progress_pct = (total_bytes_processed / total_bytes_to_process) * 100 if total_bytes_to_process > 0 else 0
-        print(f"Processed {len(avail_ids)} files, {progress_pct:.1f}% complete")
+        print(f"Processed {len(avail_ids)} files, {progress_pct:.1f}% complete, max GPU memory usage: {max_gpu_memory_usage()/(1024**3):.2f} GB")
+        
+        # Monitor GPU memory usage after each batch
+        #print_gpu_memory_usage()
 
         for file_path in batch_files:
             try:

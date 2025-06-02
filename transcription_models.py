@@ -102,8 +102,13 @@ class AIModel:
 
         all_transcriptions = []
         for batch in batches:
-            transcriptions = self.model.transcribe(batch)
-            all_transcriptions.extend(transcriptions)
+            try:
+                transcriptions = self.model.transcribe(batch)
+                all_transcriptions.extend(transcriptions)
+            finally:
+                # Clear GPU cache after each batch to prevent memory accumulation
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
         return all_transcriptions
 
     def loaded_model_mode(self):
@@ -141,10 +146,16 @@ def load_and_resample_wavs(all_wav_paths, target_sample_rate=16000):
     unreadable_files = []
     for idx, wav_path in enumerate(all_wav_paths):
         if is_readable_wav(wav_path):
-            raw_wav, sample_rate = torchaudio.load(wav_path)
-            wav = resample_wav_maybe(raw_wav, sample_rate)
-            wavs.append(wav)
-            valid_indices.append(idx)
+            try:
+                raw_wav, sample_rate = torchaudio.load(wav_path)
+                wav = resample_wav_maybe(raw_wav, sample_rate)
+                wavs.append(wav)
+                valid_indices.append(idx)
+                # Explicitly delete the raw tensor to free memory
+                del raw_wav
+            except Exception as e:
+                unreadable_files.append(wav_path)
+                logging.warning(f"Failed to load wav file {wav_path}: {e}")
         else:
             unreadable_files.append(wav_path)
     return wavs, valid_indices, unreadable_files
@@ -177,13 +188,17 @@ def identify_languages(all_wav_paths, model_and_processor, threshold=None, vcon_
 
     all_wav_languages_detected = []
     corrupt_indices = []
+
+    # Keep track of the global index across all batches
+    global_idx = 0
+
     for batch_idx, wav_paths in enumerate(all_wav_paths_batched):
         wavs, valid_indices, unreadable_files = load_and_resample_wavs(wav_paths, target_sample_rate=16000)
         # Mark corrupt files in DB
         if vcon_ids and vcon_collection is not None and unreadable_files:
             for idx, wav_path in enumerate(wav_paths):
                 if wav_path in unreadable_files:
-                    vcon_id = vcon_ids[batch_idx * len(wav_paths) + idx]
+                    vcon_id = vcon_ids[global_idx + idx]
                     analysis = {
                         "type": "corrupt",
                         "body": "Unreadable or corrupt audio file",
@@ -192,11 +207,16 @@ def identify_languages(all_wav_paths, model_and_processor, threshold=None, vcon_
                     vcon_collection.update_one({"_id": vcon_id}, {"$push": {"analysis": analysis}})
         if not wavs:
             all_wav_languages_detected.extend([[] for _ in wav_paths])
+            global_idx += len(wav_paths)
             continue
+            
         input_features = processor(wavs, sampling_rate=16000, return_tensors="pt").input_features.to(device)
-
+        decoder_input_ids = None
+        other_model = None
         with torch.no_grad():
-            logits = model(input_features, decoder_input_ids=torch.tensor([[whisper_start_transcription_token_id]] * len(wavs), device=device)).logits
+            decoder_input_ids = torch.tensor([[whisper_start_transcription_token_id]] * len(wavs)).to(device)
+            other_model = model(input_features, decoder_input_ids=decoder_input_ids)
+            logits = other_model.logits
         logits = logits[:, 0, :]  # (batch, vocab_size)
 
         valid_counter = 0
@@ -216,5 +236,16 @@ def identify_languages(all_wav_paths, model_and_processor, threshold=None, vcon_
                 valid_counter += 1
             else:
                 all_wav_languages_detected.append([])
+        
+        global_idx += len(wav_paths)
+        
+        del input_features
+        del logits
+        del wavs
+        del other_model
+        del decoder_input_ids
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+    
     assert len(all_wav_languages_detected) == len(all_wav_paths)
     return all_wav_languages_detected

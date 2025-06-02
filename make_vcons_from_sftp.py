@@ -44,7 +44,7 @@ def main(sftp_url):
                     try:
                         file_size = sftp.stat(filename).st_size
                     except Exception as e:
-                        print(f"\nFailed to get size for {filename}: {e}")
+                        #print(f"\nFailed to get size for {filename}: {e}")
                         file_size = 0
                     total_size += file_size
                     vcon_doc = create_vcon_for_wav(url, sftp)
@@ -57,8 +57,8 @@ def main(sftp_url):
                         mb_delta = (total_size - last_size) / (1024 ** 2)
                         time_delta = now - last_update
                         mb_per_sec = mb_delta / time_delta if time_delta > 0 else 0.0
-                        sys.stdout.write(f"\rProcessing: {rate:.2f} files/sec (total: {processed}), total size: {size_gb:.4f} GB, {mb_per_sec:.4f} MB/s")
-                        sys.stdout.flush()
+                        #sys.stdout.write(f"\rProcessing: {rate:.2f} files/sec (total: {processed}), total size: {size_gb:.4f} GB, {mb_per_sec:.4f} MB/s")
+                        #sys.stdout.flush()
                         last_update = now
                         last_processed = processed
                         last_size = total_size
@@ -67,7 +67,7 @@ def main(sftp_url):
         avg_rate = processed / total_time if total_time > 0 else 0.0
         size_gb = total_size / (1024 ** 3)
         avg_mb_per_sec = (total_size / (1024 ** 2)) / total_time if total_time > 0 else 0.0
-        print(f"\nDone. Average rate: {avg_rate:.2f} files/sec, total processed: {processed}, total size: {size_gb:.4f} GB, average speed: {avg_mb_per_sec:.4f} MB/s")
+        #print(f"\nDone. Average rate: {avg_rate:.2f} files/sec, total processed: {processed}, total size: {size_gb:.4f} GB, average speed: {avg_mb_per_sec:.4f} MB/s")
 
         sftp.close()
         client.close()

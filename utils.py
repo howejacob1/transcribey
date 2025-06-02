@@ -159,6 +159,34 @@ def gpu_ram_bytes():
 def calculate_batch_bytes():
     gpu_ram_bytes_cur = gpu_ram_bytes()
     if gpu_ram_bytes_cur is None:
-        return psutil.virtual_memory().total // 4
+        return psutil.virtual_memory().total // 8
     else:
-        return gpu_ram_bytes_cur // 4
+        # Use 1/16 of GPU RAM to be very conservative and prevent OOM errors
+        return gpu_ram_bytes_cur // 8
+
+def max_gpu_memory_usage():
+    if torch.cuda.is_available():
+        current_device = torch.cuda.current_device()
+        max_allocated = torch.cuda.max_memory_allocated(current_device)
+        return max_allocated
+    return None
+
+def print_gpu_memory_usage():
+    """Print current GPU memory usage for debugging."""
+    if torch.cuda.is_available():
+        current_device = torch.cuda.current_device()
+        allocated = torch.cuda.memory_allocated(current_device)
+        reserved = torch.cuda.memory_reserved(current_device)
+        max_allocated = torch.cuda.max_memory_allocated(current_device)
+        max_reserved = torch.cuda.max_memory_reserved(current_device)
+        total = torch.cuda.get_device_properties(current_device).total_memory
+        
+        print(f"Peak - Allocated: {max_allocated/(1024**3):.2f} GB, Reserved: {max_reserved/(1024**3):.2f} GB")
+    else:
+        print("CUDA not available")
+
+def reset_gpu_memory_stats():
+    """Reset peak GPU memory statistics for more accurate tracking."""
+    if torch.cuda.is_available():
+        torch.cuda.reset_peak_memory_stats()
+        print("GPU memory peak statistics reset")

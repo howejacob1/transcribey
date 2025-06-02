@@ -3,7 +3,7 @@
 dest_dir = "working_memory/raw_wavs_cache/"
 lang_detect_threshold = 0.2
 debug = True
-total_vcon_filesize_to_process_bytes = 2 * (1024**3)
+total_vcon_filesize_to_process_bytes = 500 * (1024**2)
 
 transcribe_english_model_name = "nvidia/parakeet-tdt-0.6b-v2"
 transcribe_nonenglish_model_name = "nvidia/canary-1b-flash"
