@@ -4,6 +4,7 @@ import torch
 from urllib.parse import urlparse
 import paramiko
 import socket
+import psutil
 
 def get_all_filenames(directory):
     """
@@ -154,3 +155,10 @@ def gpu_ram_bytes():
         props = torch.cuda.get_device_properties(torch.cuda.current_device())
         return props.total_memory
     return None
+
+def calculate_batch_bytes():
+    gpu_ram_bytes_cur = gpu_ram_bytes()
+    if gpu_ram_bytes_cur is None:
+        return psutil.virtual_memory().total // 4
+    else:
+        return gpu_ram_bytes_cur // 4

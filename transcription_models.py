@@ -7,13 +7,13 @@ This module provides functions to load and manage all ASR models used in the pro
 # Actual implementation will depend on the model frameworks/APIs used (e.g., HuggingFace, NVIDIA, Microsoft, etc.)
 
 import importlib
-from utils import suppress_output, get_device, gpu_ram_bytes
+from utils import suppress_output, get_device, calculate_batch_bytes
 import time
 import logging
 from transformers import AutoModelForSpeechSeq2Seq, AutoProcessor
 import torch
 import torchaudio
-from settings import lang_detect_batch_size, lang_detect_threshold, default_batch_bytes, transcribe_english_model_name, transcribe_nonenglish_model_name, identify_languages_model_name
+from settings import lang_detect_threshold, transcribe_english_model_name, transcribe_nonenglish_model_name, identify_languages_model_name
 import os
 from wavs import is_readable_wav, make_wav_batches
 
@@ -97,11 +97,7 @@ class AIModel:
             self.load(transcribe_nonenglish_model_name)
 
         # NVIDIA NeMo model: batch by total file size, using 1/4 GPU RAM
-        gpu_ram = gpu_ram_bytes()
-        if gpu_ram is not None:
-            batch_bytes = gpu_ram // 4
-        else:
-            batch_bytes = default_batch_bytes  # Default to 2GB if no GPU
+        batch_bytes = calculate_batch_bytes()
         batches = make_wav_batches(wav_files, batch_bytes)
 
         all_transcriptions = []
@@ -176,7 +172,7 @@ def identify_languages(all_wav_paths, model_and_processor, threshold=None, vcon_
     device = get_device()
 
     # Use make_wav_batches for batching by file size
-    batch_bytes = default_batch_bytes
+    batch_bytes = calculate_batch_bytes()
     all_wav_paths_batched = make_wav_batches(all_wav_paths, batch_bytes)
 
     all_wav_languages_detected = []

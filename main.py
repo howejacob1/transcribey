@@ -4,7 +4,7 @@ from transcription_models import AIModel
 from mongo_utils import get_mongo_collection
 import settings
 import make_vcons_from_sftp
-from utils import get_hostname
+from utils import get_hostname, calculate_batch_bytes
 from wavs import is_wav_filename
 import os
 import shutil
@@ -188,29 +188,14 @@ def process_vcons(download_thread, vcons_to_process, loaded_ai, mode):
                     vcon_id_to_cache_path[vcon_id] = cache_path
                     break
 
-    # Choose batch size
-    if mode == 'lang_detect':
-        batch_size = settings.lang_detect_batch_size
-    elif mode == 'en':
-        batch_size = settings.en_transcription_batch_size
-    elif mode == 'non_en':
-        batch_size = settings.non_en_transcription_batch_size
-    else:
-        print(f"Unknown mode: {mode}")
-        return
-
     vcon_collection = get_mongo_collection()
     loaded_ai.load_by_mode(mode)
 
-    # List of vcon_ids to process
     vcon_ids = list(vcon_id_to_cache_path.keys())
     processed_ids = set()
-    
-    # Progress tracking
     total_bytes_to_process = sum(vcon_id_to_vcon[vid].get('size', 0) for vid in vcon_ids)
     total_bytes_processed = 0
     start_time = time.time()
-    batch_count = 0
 
     def available_vcon_ids():
         return [vid for vid in vcon_ids if os.path.exists(vcon_id_to_cache_path[vid])]
@@ -218,27 +203,18 @@ def process_vcons(download_thread, vcons_to_process, loaded_ai, mode):
     print(f"Starting {mode} processing for {len(vcon_ids)} vcons ({total_bytes_to_process / (1024*1024):.1f} MB total)")
 
     while True:
-        # Get available files for this batch
         avail_ids = [vid for vid in available_vcon_ids() if vid not in processed_ids]
         if not avail_ids:
             if not download_thread.is_alive():
-                break  # Loader is done, nothing left
+                break
             time.sleep(1)
             continue
-        batch_ids = avail_ids[:batch_size]
-        batch_files = [vcon_id_to_cache_path[vid] for vid in batch_ids]
-        batch_vcons = [vcon_id_to_vcon[vid] for vid in batch_ids]
-        
-        # Calculate batch size in bytes
-        batch_bytes = sum(vcon_id_to_vcon[vid].get('size', 0) for vid in batch_ids)
-        batch_count += 1
-        
-        print(f"Processing batch {batch_count} with {len(batch_ids)} files ({batch_bytes / (1024*1024):.1f} MB)...")
-        batch_start_time = time.time()
+        batch_files = [vcon_id_to_cache_path[vid] for vid in avail_ids]
+        batch_vcons = [vcon_id_to_vcon[vid] for vid in avail_ids]
+        batch_bytes = sum(vcon_id_to_vcon[vid].get('size', 0) for vid in avail_ids)
 
         if mode == 'lang_detect':
-            # Run language identification
-            results = loaded_ai.identify_languages(batch_files, vcon_ids=batch_ids, vcon_collection=vcon_collection)
+            results = loaded_ai.identify_languages(batch_files, vcon_ids=avail_ids, vcon_collection=vcon_collection)
             for vcon, langs in zip(batch_vcons, results):
                 analysis = {
                     "type": "language_identification",
@@ -251,13 +227,11 @@ def process_vcons(download_thread, vcons_to_process, loaded_ai, mode):
                     vcon_collection.update_one({"_id": vcon["_id"]}, {"$push": {"analysis": analysis}})
                 except Exception as e:
                     print(f"Error updating language identification for vCon {vcon['_id']}: {e}")
-                # Remove being_processed_by after processing
                 try:
                     vcon_collection.update_one({"_id": vcon["_id"]}, {"$unset": {"being_processed_by": ""}})
                 except Exception as e:
                     print(f"Error unsetting being_processed_by for vCon {vcon['_id']}: {e}")
         else:
-            # Transcription (en or non_en)
             try:
                 transcriptions = loaded_ai.transcribe(batch_files, english_only=(mode == "en"))
                 for vcon, transcription in zip(batch_vcons, transcriptions):
@@ -275,46 +249,34 @@ def process_vcons(download_thread, vcons_to_process, loaded_ai, mode):
             except Exception as e:
                 print(f"Error in transcription batch: {e}")
             finally:
-                # Remove being_processed_by after processing, regardless of success or failure
-                for vid in batch_ids:
+                for vid in avail_ids:
                     try:
                         vcon_collection.update_one({"_id": vid}, {"$unset": {"being_processed_by": ""}})
                     except Exception as e:
                         print(f"Error unsetting being_processed_by for vCon {vid}: {e}")
 
-        # Update progress tracking
         total_bytes_processed += batch_bytes
-        batch_time = time.time() - batch_start_time
-        total_time = time.time() - start_time
-        
-        # Calculate speeds
-        batch_mb_per_sec = (batch_bytes / (1024*1024)) / batch_time if batch_time > 0 else 0
-        overall_mb_per_sec = (total_bytes_processed / (1024*1024)) / total_time if total_time > 0 else 0
+        processed_ids.update(avail_ids)
+        batch_time = time.time() - start_time
         progress_pct = (total_bytes_processed / total_bytes_to_process) * 100 if total_bytes_to_process > 0 else 0
-        
-        print(f"Batch completed in {batch_time:.1f}s ({batch_mb_per_sec:.1f} MB/s) | "
-              f"Overall: {progress_pct:.1f}% ({total_bytes_processed/(1024*1024):.1f}/{total_bytes_to_process/(1024*1024):.1f} MB, {overall_mb_per_sec:.1f} MB/s)")
+        print(f"Processed {len(avail_ids)} files, {progress_pct:.1f}% complete")
 
-        # Delete processed wav files
         for file_path in batch_files:
             try:
                 if os.path.exists(file_path):
                     os.remove(file_path)
             except Exception as e:
                 print(f"Failed to delete {file_path}: {e}")
-        processed_ids.update(batch_ids)
 
-        # If loader thread is dead and all processed, break
         if not download_thread.is_alive() and len(processed_ids) == len(vcon_ids):
             break
-    
-    # Clean up any remaining files in cache directory at the end
+
     remaining_files = []
     for filename in os.listdir(cache_dir):
         file_path = os.path.join(cache_dir, filename)
         if os.path.isfile(file_path):
             remaining_files.append(file_path)
-    
+
     if remaining_files:
         print(f"Cleaning up {len(remaining_files)} remaining files from cache...")
         for file_path in remaining_files:
@@ -322,8 +284,7 @@ def process_vcons(download_thread, vcons_to_process, loaded_ai, mode):
                 os.remove(file_path)
             except Exception as e:
                 print(f"Failed to clean up remaining file {file_path}: {e}")
-    
-    # Final summary
+
     total_time = time.time() - start_time
     final_mb_per_sec = (total_bytes_processed / (1024*1024)) / total_time if total_time > 0 else 0
     print(f"\n{mode} processing completed: {total_bytes_processed/(1024*1024):.1f} MB in {total_time:.1f}s ({final_mb_per_sec:.1f} MB/s)")
@@ -341,7 +302,7 @@ def main():
         print("Reserving vcons for processing...")
         vcons_to_process, mode = reserve_vcons_for_processing(loaded_ai.loaded_model_mode(),
                                                               vcons_collection,
-                                                              settings.total_vcon_filesize_to_process_gb)
+                                                              calculate_batch_bytes()*4)
         print(f"Reserved {len(vcons_to_process)} vcons totaling {sum(vcon.get('size', 0) for vcon in vcons_to_process)/(1024*1024):.2f} MB for processing in mode {mode}")
         
         # If no vcons were reserved or mode is None, wait and try again
