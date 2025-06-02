@@ -11,6 +11,9 @@ import threading
 import time
 from sftp_utils import download_sftp_file, sftp_connect, get_sftp_file_size, parse_sftp_url
 import argparse
+import vcon as vcon_library_module
+import json
+import logging
 
 def reserve_vcons(vcons, vcons_collection, size_bytes):
     hostname = get_hostname()
@@ -310,25 +313,87 @@ def process_vcons(download_thread, vcons_to_process, loaded_ai, mode):
         else:
             successful_vcon_ids = []
             try:
-                transcriptions = loaded_ai.transcribe(batch_files, english_only=(mode == "en"))
-                for vcon, transcription in zip(batch_vcons, transcriptions):
-                    analysis = {
-                        "type": "transcription",
-                        "dialog": [0],
-                        "vendor": loaded_ai.model_name if hasattr(loaded_ai, 'model_name') else "unknown",
-                        "body": transcription,
-                        "encoding": "none"
-                    }
+                print(f"DEBUG main.py: About to call loaded_ai.transcribe for {len(batch_files)} files in mode '{mode}'. First file: {batch_files[0] if batch_files else 'N/A'}")
+                transcriptions_result = loaded_ai.transcribe(batch_files, english_only=(mode == "en"))
+                print(f"DEBUG main.py: loaded_ai.transcribe returned: {transcriptions_result}")
+
+                if not isinstance(transcriptions_result, list) or len(transcriptions_result) != len(batch_vcons):
+                    print(f"ERROR main.py: Transcription result is not a list or length mismatch. Got: {len(transcriptions_result) if isinstance(transcriptions_result, list) else type(transcriptions_result)}, Expected: {len(batch_vcons)}. Skipping this batch.")
+                    # To prevent further errors with zip, we should probably skip this batch or handle it carefully.
+                    # For now, an empty list will make the loop not run.
+                    transcriptions_for_loop = [] 
+                else:
+                    transcriptions_for_loop = transcriptions_result
+
+                for vcon_dict_from_batch, transcription_text in zip(batch_vcons, transcriptions_for_loop):
+                    if not transcription_text:
+                        print(f"INFO main.py: Skipping empty transcription for vCon {vcon_dict_from_batch.get('_id')}")
+                        continue
+
+                    original_bson_id = vcon_dict_from_batch["_id"]
+                    print(f"DEBUG main.py: Processing transcription for vCon BSON ID {original_bson_id}")
+
                     try:
-                        result = vcon_collection.update_one({"_id": vcon["_id"]}, {"$push": {"analysis": analysis}})
-                        if result.modified_count == 1:
-                            successful_vcon_ids.append(vcon["_id"])
+                        current_vcon_doc_from_db = vcon_collection.find_one({"_id": original_bson_id})
+                        if not current_vcon_doc_from_db:
+                            print(f"ERROR main.py: Could not re-fetch vCon {original_bson_id} for Vcon object creation.")
+                            continue
+
+                        dict_for_vcon_load = current_vcon_doc_from_db.copy()
+                        dict_for_vcon_load.pop('_id', None) 
+
+                        try:
+                            v_obj = vcon_library_module.Vcon(dict_for_vcon_load)
+                            logging.info(f"Loaded vCon {v_obj.uuid} from dict using constructor for transcription processing.")
+                        except Exception as e:
+                            logging.error(f"Error initializing Vcon from dict for {dict_for_vcon_load.get('uuid', 'Unknown UUID')} (transcription part): {e}")
+                            continue
+                        
+                        # print(f"DEBUG main.py: vCon {v_obj.uuid} analysis BEFORE add: {v_obj.analysis}")
+
+                        dialog_index_to_attach = 0
+                        if not v_obj.dialog or len(v_obj.dialog) == 0:
+                            print(f"Warning main.py: No dialogs found in vCon {v_obj.uuid}. Attempting vCon-level analysis (dialog=-1).")
+                            dialog_index_to_attach = -1
+                        
+                        # If transcription_text is a Hypothesis object, extract the .text attribute
+                        body_text = transcription_text.text if hasattr(transcription_text, 'text') else transcription_text
+                        analysis_result_index = v_obj.add_analysis(
+                            dialog=dialog_index_to_attach,
+                            type="transcription", # This must match what print_vcon_info.py looks for
+                            body=body_text,
+                            vendor=loaded_ai.model_name if hasattr(loaded_ai, 'model_name') else "unknown",
+                            encoding="none"
+                        )
+                        print(f"DEBUG main.py: v_obj.add_analysis for transcription returned: {analysis_result_index} for vCon UUID {v_obj.uuid}")
+                        print(f"DEBUG main.py: vCon {v_obj.uuid} analysis AFTER add: {v_obj.analysis}")
+                        
+                        if analysis_result_index is None: # Should not be None if add_analysis is successful
+                            print(f"WARNING main.py: add_analysis for transcription on vCon {v_obj.uuid} returned None. Transcription may not be saved.")
+                            # continue # Optional: skip saving if add_analysis didn't confirm addition.
+
+                        save_dict = v_obj.to_dict()
+                        # print(f"DEBUG main.py: Dictionary to save for {v_obj.uuid}: {json.dumps(save_dict, indent=2)}")
+
+                        update_result = vcon_collection.replace_one(
+                            {"_id": original_bson_id}, 
+                            save_dict 
+                        )
+                        print(f"DEBUG main.py: MongoDB replace_one result for UUID {v_obj.uuid} (BSON ID {original_bson_id}): Matched={update_result.matched_count}, Modified={update_result.modified_count}")
+
+                        if update_result.modified_count == 1:
+                            successful_vcon_ids.append(original_bson_id)
+                        elif update_result.matched_count == 1 and update_result.modified_count == 0:
+                            print(f"WARNING main.py: Transcription update for vCon {original_bson_id} matched but did not modify document (data might be identical).")
+                            successful_vcon_ids.append(original_bson_id) # Still consider it successful if data was identical
                         else:
-                            print(f"Warning: Transcription update for vCon {vcon['_id']} did not modify any document")
+                            print(f"ERROR main.py: Transcription update for vCon {original_bson_id} failed. Matched: {update_result.matched_count}, Modified: {update_result.modified_count}")
                     except Exception as e:
-                        print(f"Error updating transcription for vCon {vcon['_id']}: {e}")
+                        print(f"Error processing/saving transcription for vCon {original_bson_id} using vcon library: {e}")
+                        import traceback
+                        print(traceback.format_exc())
             except Exception as e:
-                print(f"Error in transcription batch: {e}")
+                print(f"Error in transcription batch with vcon library: {e}")
             finally:
                 # Only release vcons that were successfully updated
                 for vid in successful_vcon_ids:
