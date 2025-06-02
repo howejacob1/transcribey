@@ -10,11 +10,8 @@ from vcon_utils import create_vcon_for_wav
 from wavs import is_wav_filename
 from settings import sftp_url, dest_dir
 
-def main():
+def main(sftp_url):
     # Build SFTP URL from settings.py
-    if settings.debug:
-        delete_all_vcons()
-    # Connect using paramiko and public key authentication
     try:
         client = paramiko.SSHClient()
         client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
@@ -76,6 +73,3 @@ def main():
         client.close()
     except Exception as e:
         print(f"Failed to connect or list directory: {e}")
-
-if __name__ == "__main__":
-    main()

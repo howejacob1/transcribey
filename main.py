@@ -289,10 +289,10 @@ def process_vcons(download_thread, vcons_to_process, loaded_ai, mode):
     final_mb_per_sec = (total_bytes_processed / (1024*1024)) / total_time if total_time > 0 else 0
     print(f"\n{mode} processing completed: {total_bytes_processed/(1024*1024):.1f} MB in {total_time:.1f}s ({final_mb_per_sec:.1f} MB/s)")
 
-def main():
+def main(sftp_url):
     loaded_ai = AIModel()
     vcons_collection = get_mongo_collection()
-    sftp = sftp_connect(settings.sftp_url)
+    sftp = sftp_connect(sftp_url)
     collection = get_mongo_collection()
 
     # Clean up any leftover files from previous runs
@@ -316,28 +316,15 @@ def main():
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Transcribey main entry point")
     parser.add_argument("mode", choices=["head", "worker"], help="Run as head or worker")
-    parser.add_argument("--sftp_url", type=str, default=None, help="Override SFTP URL (applies to both head and worker)")
-    parser.add_argument("--debug", type=str, default=False, help="Override debug mode (debug=True or debug=False, applies to both head and worker)")
+    parser.add_argument("--sftp_url", type=str, default=settings.sftp_url, help="Override SFTP URL (applies to both head and worker)")
+    parser.add_argument("--debug", action="store_true", default=False, help="Enable debug mode (applies to both head and worker)")
     args = parser.parse_args()
 
-    # Allow overrides from command line (applies to both head and worker)
-    if args.sftp_url and args.sftp_url.startswith("sftp://"):
-        setattr(settings, "sftp_url", args.sftp_url)
-    if args.debug is not None:
-        if args.debug.lower() == "true" or args.debug.lower() == "debug=true":
-            setattr(settings, "debug", True)
-        elif args.debug.lower() == "false" or args.debug.lower() == "debug=false":
-            setattr(settings, "debug", False)
+    settings.debug = args.debug
 
     if args.mode == "head":
-        if getattr(settings, "debug", False):
-            print("[HEAD] Debug mode: deleting all vcons from the database...")
+        if settings.debug:
             delete_all_vcons()
-        print("[HEAD] Starting make_vcons_from_sftp in a background thread...")
-        sftp_thread = threading.Thread(target=make_vcons_from_sftp.main, daemon=True)
+        sftp_thread = threading.Thread(target=make_vcons_from_sftp.main, args=(args.sftp_url,), daemon=True)
         sftp_thread.start()
-        print("[HEAD] Running main loop in main thread...")
-        main()
-    elif args.mode == "worker":
-        print("[WORKER] Running main loop...")
-        main()
+    main(args.sftp_url)
