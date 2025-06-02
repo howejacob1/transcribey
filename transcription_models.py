@@ -13,7 +13,7 @@ import logging
 from transformers import AutoModelForSpeechSeq2Seq, AutoProcessor
 import torch
 import torchaudio
-from settings import lang_detect_batch_size, lang_detect_threshold, default_batch_bytes
+from settings import lang_detect_batch_size, lang_detect_threshold, default_batch_bytes, transcribe_english_model_name, transcribe_nonenglish_model_name, identify_languages_model_name
 import os
 from wavs import is_readable_wav
 
@@ -32,11 +32,7 @@ def load_whisper_tiny():
     total_start_time = time.time()
     print("Loading whisper tiny.")
     model, processor = load_whisper_tiny_raw()
-    print(f"Whisper tiny loaded into RAM in {time.time() - total_start_time:.2f} seconds")
-    print(f"Putting whisper tiny on GPU.")
-    start_time = time.time()
     model = model.to(get_device())
-    print(f"Whisper tiny loaded on GPU in {time.time() - start_time:.2f} seconds")
     print(f"Whisper tiny loaded in {time.time() - total_start_time:.2f} seconds total")
     return (model, processor)
 
@@ -51,30 +47,15 @@ def load_nvidia(model_name):
     total_start_time = time.time()
     print(f"Loading model {model_name}.")
     model = load_nvidia_raw(model_name)
-    print(f"Model {model_name} loaded into RAM in {time.time() - total_start_time:.2f} seconds")
-    print(f"Putting model {model_name} on GPU.")
-    start_time = time.time()
     model.to(get_device())
-    print(f"Model {model_name} loaded on GPU in {time.time() - start_time:.2f} seconds")
     print(f"Model {model_name} loaded in {time.time() - total_start_time:.2f} seconds total")
     return model
-
-transcribe_english_model_name = "nvidia/parakeet-tdt-0.6b-v2"
-transcribe_nonenglish_model_name = "nvidia/canary-1b-flash"
-identify_languages_model_name = "openai/whisper-tiny"
 
 def load_model(model_name):
     if model_name == "openai/whisper-tiny":
         return load_whisper_tiny()
     else:
         return load_nvidia(model_name)
-
-def preinstall_all_models():
-    ai_model = AIModel()
-    ai_model.load(transcribe_english_model_name)
-    ai_model.load(transcribe_nonenglish_model_name)
-    ai_model.load(identify_languages_model_name)
-    ai_model.unload()
 
 class AIModel:
     def __init__(self):

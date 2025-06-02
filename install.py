@@ -1,5 +1,7 @@
 import subprocess
 import sys
+from settings import transcribe_english_model_name, transcribe_nonenglish_model_name, identify_languages_model_name
+from transcription_models import AIModel, transcribe_english_model_name, transcribe_nonenglish_model_name, identify_languages_model_name
 
 
 def install_packages():
@@ -38,8 +40,15 @@ def install_packages():
         cmd = [sys.executable, "-m", "pip", "install", "--break-system-packages"] + pkg
         subprocess.run(cmd, check=True)
 
+def preinstall_all_models():
+    ai_model = AIModel()
+    ai_model.load(transcribe_english_model_name)
+    ai_model.load(transcribe_nonenglish_model_name)
+    ai_model.load(identify_languages_model_name)
+    ai_model.unload()
+
 if __name__ == "__main__":
     install_packages()
     import torch
     import transcription_models
-    transcription_models.preinstall_all_models()
+    preinstall_all_models()
