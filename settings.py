@@ -7,7 +7,7 @@ en_transcription_batch_size = 64+32
 non_en_transcription_batch_size = 20
 debug = True
 total_vcon_filesize_to_process_gb = 0.1
-default_batch_bytes = 100 * 1024 * 1024 # 100MB
+default_batch_bytes = 2* 1024 * 1024 * 1024 # 100MB
 
 transcribe_english_model_name = "nvidia/parakeet-tdt-0.6b-v2"
 transcribe_nonenglish_model_name = "nvidia/canary-1b-flash"

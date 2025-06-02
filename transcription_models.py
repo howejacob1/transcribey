@@ -15,7 +15,7 @@ import torch
 import torchaudio
 from settings import lang_detect_batch_size, lang_detect_threshold, default_batch_bytes, transcribe_english_model_name, transcribe_nonenglish_model_name, identify_languages_model_name
 import os
-from wavs import is_readable_wav
+from wavs import is_readable_wav, make_wav_batches
 
 def load_whisper_tiny_raw():
     with suppress_output(should_suppress=True):
@@ -102,32 +102,7 @@ class AIModel:
             batch_bytes = gpu_ram // 4
         else:
             batch_bytes = default_batch_bytes  # Default to 2GB if no GPU
-
-        # Prepare batches
-        batches = []
-        current_batch = []
-        current_batch_size = 0
-        for wav_path in wav_files:
-            try:
-                file_size = os.path.getsize(wav_path)
-            except Exception:
-                file_size = 0
-            # If file is larger than batch_bytes, process it alone
-            if file_size >= batch_bytes:
-                if current_batch:
-                    batches.append(current_batch)
-                    current_batch = []
-                    current_batch_size = 0
-                batches.append([wav_path])
-            else:
-                if current_batch_size + file_size > batch_bytes and current_batch:
-                    batches.append(current_batch)
-                    current_batch = []
-                    current_batch_size = 0
-                current_batch.append(wav_path)
-                current_batch_size += file_size
-        if current_batch:
-            batches.append(current_batch)
+        batches = make_wav_batches(wav_files, batch_bytes)
 
         all_transcriptions = []
         for batch in batches:

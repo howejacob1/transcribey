@@ -50,7 +50,7 @@ def get_total_wav_duration(wav_files):
 def is_wav_filename(filename):
     return filename.lower().endswith('.wav')
 
-def wavs_to_bin_packing_items(wav_files):
+def wavs_to_bin_packing_items(all_wav_files):
     wav_files_binpacking = []
     for wav_file in all_wav_files:
         wav_files_binpacking.append({"id": wav_file, "size": os.path.getsize(wav_file)})

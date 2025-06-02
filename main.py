@@ -13,9 +13,9 @@ import time
 from sftp_utils import download_sftp_file, sftp_connect, get_sftp_file_size, parse_sftp_url
 import argparse
 
-def reserve_vcons_for_lang_detect(vcons_collection, max_total_size_gb):
+def reserve_vcons_for_lang_detect(vcons_collection):
     hostname = get_hostname()
-    max_total_size_bytes = max_total_size_gb * (1024**3)
+    max_total_size_bytes = 2 * (1024**3)
     # Find vCons needing language detection and not being processed
     query = {
         "being_processed_by": None,
@@ -102,7 +102,7 @@ def reserve_vcons_for_processing(model_mode, vcons_collection, max_total_size_gb
     reserved = []
     for mode in modes_to_try:
         if mode == "lang_detect":
-            reserved = reserve_vcons_for_lang_detect(vcons_collection, max_total_size_gb)
+            reserved = reserve_vcons_for_lang_detect(vcons_collection)
             if reserved:
                 return reserved, mode
         elif mode == "en":
