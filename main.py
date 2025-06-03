@@ -14,6 +14,7 @@ import argparse
 import vcon as vcon_library_module
 import json
 import logging
+import print_vcon_info
 
 def reserve_vcons(vcons, vcons_collection, size_bytes):
     hostname = get_hostname()
@@ -462,7 +463,7 @@ def main(sftp_url):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Transcribey main entry point")
-    parser.add_argument("mode", choices=["head", "worker", "slurp"], help="Run as head or worker")
+    parser.add_argument("mode", choices=["head", "worker", "slurp", "print"], help="Run as head or worker")
     parser.add_argument("--sftp_url", type=str, default=settings.sftp_url, help="Override SFTP URL (applies to both head and worker)")
     parser.add_argument("--debug", action="store_true", default=False, help="Enable debug mode (applies to both head and worker)")
     args = parser.parse_args()
@@ -481,3 +482,5 @@ if __name__ == "__main__":
         if settings.debug:
             delete_all_vcons()
         make_vcons_from_sftp.main(args.sftp_url)
+    elif args.mode == "print":
+        print_vcon_info.print_vcon_details()
