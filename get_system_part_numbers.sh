@@ -69,4 +69,24 @@ echo "Copy took $ELAPSED seconds."
 
 # Clean up
 rm -f "$TEST_SRC" "$TEST_DST"
-echo "Test files removed." 
+echo "Test files removed."
+
+echo "====================="
+echo "ETHERNET PORT SPEED TEST"
+echo "====================="
+if ! command -v ethtool &> /dev/null; then
+    echo "ethtool is not installed. Please install it with: sudo apt install ethtool"
+else
+    # Try to detect the primary ethernet interface (not loopback, not virtual)
+    ETH_IFACE=$(ip -o link show | awk -F': ' '/state UP/ && $2!="lo" {print $2; exit}')
+    if [ -z "$ETH_IFACE" ]; then
+        # Fallback: just pick the first non-loopback interface
+        ETH_IFACE=$(ip -o link show | awk -F': ' '$2!="lo" {print $2; exit}')
+    fi
+    if [ -n "$ETH_IFACE" ]; then
+        echo "Detected Ethernet interface: $ETH_IFACE"
+        sudo ethtool "$ETH_IFACE" | grep -E 'Speed:|Duplex:|Link detected:'
+    else
+        echo "Could not detect an active Ethernet interface."
+    fi
+fi 
