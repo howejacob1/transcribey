@@ -3,7 +3,7 @@ from transcription_models import AIModel
 from mongo_utils import get_mongo_collection, delete_all_vcons
 import settings
 import make_vcons_from_sftp
-from utils import get_hostname, calculate_batch_bytes, print_gpu_memory_usage, reset_gpu_memory_stats, max_gpu_memory_usage, get_all_filenames_from_sftp
+from utils import get_hostname, calculate_batch_bytes, print_gpu_memory_usage, reset_gpu_memory_stats, max_gpu_memory_usage, get_all_filenames_from_sftp, seconds_to_ydhms
 from wavs import is_wav_filename, clear_cache_directory, is_readable_wav, get_wav_duration
 import os
 import shutil
@@ -521,7 +521,7 @@ def main(sftp_url, measure_mode=False):
         print(f"Total files: {total_files}")
         print(f"Total wav files: {total_wav_files}")
         print(f"Total wav files size: {total_wav_files_size / (1024*1024):.2f} MB")
-        print(f"Total wav files duration: {total_wav_files_duration:.2f} seconds")
+        print(f"Total wav files duration: {total_wav_files_duration:.2f} seconds ({seconds_to_ydhms(total_wav_files_duration)} minutes)")
         print(f"Total valid wav files: {total_valid_wav_files}")
         print(f"Total invalid wav files: {total_invalid_wav_files}")
         print(f"RTF: {total_wav_files_duration / process_time:.2f}x")
