@@ -57,8 +57,8 @@ def main(sftp_url):
                         mb_delta = (total_size - last_size) / (1024 ** 2)
                         time_delta = now - last_update
                         mb_per_sec = mb_delta / time_delta if time_delta > 0 else 0.0
-                        #sys.stdout.write(f"\rProcessing: {rate:.2f} files/sec (total: {processed}), total size: {size_gb:.4f} GB, {mb_per_sec:.4f} MB/s")
-                        #sys.stdout.flush()
+                        sys.stdout.write(f"\rProcessing: {rate:.2f} files/sec (total: {processed}), total size: {size_gb:.4f} GB, {mb_per_sec:.4f} MB/s")
+                        sys.stdout.flush()
                         last_update = now
                         last_processed = processed
                         last_size = total_size
