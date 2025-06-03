@@ -5,6 +5,7 @@ from urllib.parse import urlparse
 import paramiko
 import socket
 import psutil
+import settings
 
 def get_all_filenames(directory):
     """
@@ -157,11 +158,11 @@ def gpu_ram_bytes():
     return None
 
 def calculate_batch_bytes():
-    gpu_ram_bytes_cur = gpu_ram_bytes()
-    if gpu_ram_bytes_cur is None:
-        return psutil.virtual_memory().total // 64
-    else:
-        return gpu_ram_bytes_cur // 64
+    ram_bytes_cur = gpu_ram_bytes()
+    if ram_bytes_cur is None:
+        ram_bytes_cur = psutil.virtual_memory().total
+    ram_bytes_cur -= settings.gpu_ram_unusable
+    return ram_bytes_cur//24
 
 def max_gpu_memory_usage():
     if torch.cuda.is_available():
