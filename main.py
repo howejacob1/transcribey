@@ -3,8 +3,8 @@ from transcription_models import AIModel
 from mongo_utils import get_mongo_collection, delete_all_vcons
 import settings
 import make_vcons_from_sftp
-from utils import get_hostname, calculate_batch_bytes, print_gpu_memory_usage, reset_gpu_memory_stats, max_gpu_memory_usage
-from wavs import is_wav_filename, clear_cache_directory, is_readable_wav
+from utils import get_hostname, calculate_batch_bytes, print_gpu_memory_usage, reset_gpu_memory_stats, max_gpu_memory_usage, get_all_filenames_from_sftp
+from wavs import is_wav_filename, clear_cache_directory, is_readable_wav, get_wav_duration
 import os
 import shutil
 import threading
@@ -438,15 +438,66 @@ def process_vcons(download_thread, vcons_to_process, loaded_ai, mode):
     final_mb_per_sec = (total_bytes_processed / (1024*1024)) / total_time if total_time > 0 else 0
     print(f"\n{mode} processing completed: {total_bytes_processed/(1024*1024):.1f} MB in {total_time:.1f}s ({final_mb_per_sec:.1f} MB/s)")
 
-def main(sftp_url):
+def main(sftp_url, measure_mode=False):
     loaded_ai = AIModel()
     vcons_collection = get_mongo_collection()
     sftp = sftp_connect(sftp_url)
     collection = get_mongo_collection()
 
+    total_files = None
+    total_wav_files = 0
+    total_wav_files_size = 0
+    total_wav_files_duration = 0
+    total_valid_wav_files = 0
+    total_invalid_wav_files = 0
+    delete_time = None
+    slurp_time = None
+    total_start_time = None
+
+    if measure_mode:
+        parsed_sftp_url = parse_sftp_url(sftp_url)
+        print("Fetching all filenames from SFTP...")
+        files = list(get_all_filenames_from_sftp(sftp, parsed_sftp_url["path"]))
+        total_files = len(files)
+
+        print("downloading and measuring wav files...")
+        for file in files:
+            if is_wav_filename(file):
+                total_wav_files += 1
+                # Download the wav file to a temporary location
+                temp_path = os.path.join(settings.cache_directory, os.path.basename(file))
+                try:
+                    # Build the correct SFTP URL for this file
+                    full_sftp_url = f"sftp://{parsed_sftp_url['username']}@{parsed_sftp_url['hostname']}:{parsed_sftp_url['port']}{file}"
+                    download_sftp_file(full_sftp_url, temp_path, sftp)
+                    # Verify the wav file is legitimate
+                    if is_readable_wav(temp_path):
+                        # If legitimate, increment counter and add duration
+                        total_wav_files_size += os.path.getsize(temp_path)
+                        total_wav_files_duration += get_wav_duration(temp_path)
+                        total_valid_wav_files += 1
+                        print(f"Valid wav file: {file}")
+                    else:
+                        total_invalid_wav_files += 1
+                finally:
+                    # Clean up the temporary file
+                    if os.path.exists(temp_path):
+                        os.remove(temp_path)
+    
+        total_start_time = time.time()
+        delete_start_time = time.time()
+        print("Deleting all vcons...")
+        delete_all_vcons()
+        delete_time = time.time() - delete_start_time
+        slurp_start_time = time.time()
+        print("Slurping into db")
+        make_vcons_from_sftp.main(sftp_url)
+        slurp_time = time.time() - slurp_start_time
+
     # Clean up any leftover files from previous runs
     cleanup_cache_directory()
 
+    process_start_time = time.time()
     while True:
         print("Reserving vcons for processing...")
         vcons_to_process, mode = reserve_vcons_for_processing(loaded_ai.loaded_model_mode(),
@@ -459,11 +510,29 @@ def main(sftp_url):
             thread = load_vcons_in_background(vcons_to_process, sftp)
             process_vcons(thread, vcons_to_process, loaded_ai, mode)
         else:
-            time.sleep(1)
+            if measure_mode:
+                break
+            else:
+                time.sleep(1)
+    total_time = time.time() - total_start_time
+    process_time = time.time() - process_start_time
+
+    if measure_mode:
+        print(f"Total files: {total_files}")
+        print(f"Total wav files: {total_wav_files}")
+        print(f"Total wav files size: {total_wav_files_size / (1024*1024):.2f} MB")
+        print(f"Total wav files duration: {total_wav_files_duration:.2f} seconds")
+        print(f"Total valid wav files: {total_valid_wav_files}")
+        print(f"Total invalid wav files: {total_invalid_wav_files}")
+        print(f"RTF: {total_wav_files_duration / process_time:.2f}x")
+        print(f"Data rate: {(total_wav_files_size / process_time) / (1024*1024):.2f} MB/s")
+        print(f"Total time: {total_time:.2f} seconds")
+        print(f"Slurp time: {slurp_time:.2f} seconds")
+        print(f"Delete time: {delete_time:.2f} seconds")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Transcribey main entry point")
-    parser.add_argument("mode", choices=["head", "worker", "slurp", "print", "delete_all"], help="Run as head or worker")
+    parser.add_argument("mode", choices=["head", "worker", "slurp", "print", "delete_all", "measure"], help="head:slurp and run worker. ")
     parser.add_argument("--sftp_url", type=str, default=settings.sftp_url, help="Override SFTP URL (applies to both head and worker)")
     parser.add_argument("--production", action="store_true", default=False, help="Enable production mode (applies to both head and worker)")
     args = parser.parse_args()
@@ -486,3 +555,5 @@ if __name__ == "__main__":
         print_vcon_info.print_vcon_details()
     elif args.mode == "delete_all":
         delete_all_vcons()
+    elif args.mode == "measure":
+        main(args.sftp_url, measure_mode=True)
