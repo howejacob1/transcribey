@@ -465,10 +465,10 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Transcribey main entry point")
     parser.add_argument("mode", choices=["head", "worker", "slurp", "print"], help="Run as head or worker")
     parser.add_argument("--sftp_url", type=str, default=settings.sftp_url, help="Override SFTP URL (applies to both head and worker)")
-    parser.add_argument("--debug", action="store_true", default=False, help="Enable debug mode (applies to both head and worker)")
+    parser.add_argument("--production", action="store_true", default=False, help="Enable production mode (applies to both head and worker)")
     args = parser.parse_args()
 
-    settings.debug = args.debug
+    settings.debug = not args.production
 
     if args.mode == "head":
         if settings.debug:
