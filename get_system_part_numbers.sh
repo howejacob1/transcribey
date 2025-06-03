@@ -40,4 +40,33 @@ if command -v lscpu &> /dev/null; then
 else
     echo "lscpu not found, falling back to /proc/cpuinfo"
     grep 'model name' /proc/cpuinfo | head -1
-fi 
+fi
+
+echo "====================="
+echo "HARD DRIVE SPEED TEST (10GB COPY)"
+echo "====================="
+TEST_SRC="/tmp/dd_speed_test_src.bin"
+TEST_DST="/tmp/dd_speed_test_dst.bin"
+
+# Create a 10GB test file if it doesn't exist
+if [ ! -f "$TEST_SRC" ]; then
+    echo "Creating 10GB test file at $TEST_SRC ..."
+    dd if=/dev/zero of="$TEST_SRC" bs=1M count=10240 status=progress
+fi
+
+# Sync to flush caches
+sync
+
+# Time the copy
+START=$(date +%s)
+echo "Copying 10GB file to $TEST_DST ..."
+dd if="$TEST_SRC" of="$TEST_DST" bs=1M status=progress
+sync
+END=$(date +%s)
+
+ELAPSED=$((END - START))
+echo "Copy took $ELAPSED seconds."
+
+# Clean up
+rm -f "$TEST_SRC" "$TEST_DST"
+echo "Test files removed." 
