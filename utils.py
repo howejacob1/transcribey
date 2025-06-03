@@ -189,3 +189,41 @@ def reset_gpu_memory_stats():
     if torch.cuda.is_available():
         torch.cuda.reset_peak_memory_stats()
         print("GPU memory peak statistics reset")
+
+def seconds_to_minutes(seconds):
+    return seconds/60
+
+def seconds_to_hours(seconds):
+    return seconds_to_minutes(seconds) / 60
+
+def seconds_to_days(seconds):
+    return seconds_to_hours(seconds)/24
+
+def seconds_to_weeks(seconds):
+    return seconds_to_days/7
+
+def seconds_to_months(seconds):
+    return seconds_to_weeks(seconds)/4
+
+def seconds_to_ydhms(seconds):
+    """
+    Convert seconds to a string in the format 'Xy Yd Zh Wm Vs'.
+    Only nonzero units are included, and units are: years, days, hours, minutes, seconds.
+    """
+    seconds = int(seconds)
+    years, rem = divmod(seconds, 31536000)  # 365*24*60*60
+    days, rem = divmod(rem, 86400)          # 24*60*60
+    hours, rem = divmod(rem, 3600)          # 60*60
+    minutes, secs = divmod(rem, 60)
+    parts = []
+    if years:
+        parts.append(f"{years}y")
+    if days:
+        parts.append(f"{days}d")
+    if hours:
+        parts.append(f"{hours}h")
+    if minutes:
+        parts.append(f"{minutes}m")
+    if secs or not parts:
+        parts.append(f"{secs}s")
+    return ' '.join(parts)
