@@ -145,7 +145,11 @@ def load_and_resample_wavs(all_wav_paths, target_sample_rate=16000):
         if is_readable_wav(wav_path):
             try:
                 raw_wav, sample_rate = torchaudio.load(wav_path)
+                # Convert to mono if necessary
+                if raw_wav.shape[0] > 1:
+                    raw_wav = raw_wav.mean(dim=0, keepdim=True)
                 wav = resample_wav_maybe(raw_wav, sample_rate)
+                wav = wav.squeeze().numpy()  # ensure 1D numpy array
                 wavs.append(wav)
                 valid_indices.append(idx)
                 # Explicitly delete the raw tensor to free memory

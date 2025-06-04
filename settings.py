@@ -12,4 +12,4 @@ identify_languages_model_name = "openai/whisper-tiny"
 gpu_ram_unusable = 5*1024**3 # 5GB
 
 # SFTP connection settings for make_vcons_from_sftp.py
-sftp_url = "sftp://bantaim@192.168.1.103:/home/bantaim/conserver/fake_wavs_medlarge/"
+sftp_url = "sftp://bantaim@192.168.1.103:/home/bantaim/conserver/openslr-12/"

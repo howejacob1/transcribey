@@ -1,5 +1,6 @@
 import datetime
 import logging
+import mimetypes
 from vcon import Vcon
 from vcon.party import Party
 from vcon.dialog import Dialog
@@ -7,19 +8,22 @@ from utils import get_file_size
 
 def create_vcon_for_wav(url, sftp_client):
     """ 
-    Create a vCon for the given wav file URL and return it as a dict.
+    Create a vCon for the given wav or flac file URL and return it as a dict.
     """
     logging.getLogger().setLevel(logging.WARN)
     vcon = Vcon.build_new()
     party = Party(name="Unknown", role="participant")
     vcon.add_party(party)
     now = datetime.datetime.now(datetime.timezone.utc)
+    mimetype, _ = mimetypes.guess_type(url)
+    if mimetype is None:
+        mimetype = "audio/wav"  # fallback for legacy
     dialog = Dialog(
         type="audio",
         start=now.isoformat(),
         parties=[0],
         originator=0,
-        mimetype="audio/wav",
+        mimetype=mimetype,
         filename=url,
         body=None,
         encoding=None

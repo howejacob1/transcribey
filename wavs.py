@@ -27,7 +27,7 @@ def get_valid_wav_files(directory):
     valid_wav_files = {}
     for root, _, files in os.walk(directory):
         for file in files:
-            if file.lower().endswith('.wav'):
+            if file.lower().endswith('.wav') or file.lower().endswith('flac'):
                 abs_path = os.path.join(root, file)
                 if is_readable_wav(abs_path):
                     rel_path = os.path.relpath(abs_path, directory)
@@ -49,7 +49,7 @@ def get_total_wav_duration(wav_files):
     return total
 
 def is_wav_filename(filename):
-    return filename.lower().endswith('.wav')
+    return filename.lower().endswith('.wav') or filename.lower().endswith('.flac')
 
 def wavs_to_bin_packing_items(all_wav_files):
     wav_files_binpacking = []
