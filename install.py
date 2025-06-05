@@ -1,12 +1,11 @@
 import subprocess
 import sys
-from settings import transcribe_english_model_name, transcribe_nonenglish_model_name, identify_languages_model_name
-from transcription_models import AIModel, transcribe_english_model_name, transcribe_nonenglish_model_name, identify_languages_model_name
-
+import ai
 
 def install_packages():
     packages = [
         ["numpy<2.0.0"],
+        ["binpacking"],
         ["paramiko"],
         ["torch", "--index-url", "https://download.pytorch.org/whl/cu128"],
         ["torchvision", "--index-url", "https://download.pytorch.org/whl/cu128"],
@@ -50,5 +49,5 @@ def preinstall_all_models():
 if __name__ == "__main__":
     install_packages()
     import torch
-    import transcription_models
+    import ai
     preinstall_all_models()

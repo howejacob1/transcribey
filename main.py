@@ -1,539 +1,81 @@
-import paramiko
-from transcription_models import AIModel
-from mongo_utils import get_mongo_collection, delete_all_vcons
+import cache
+import gc
+from queue import Queue
+import logging
+from cache import cache_size_bytes, processing_size_bytes, downloading_size_bytes, filename_to_processing_filename, filename_to_cache_filename, filename_to_downloading_filename, move_filename_to_processing, move_downloading_to_processing, cache_size_bytes, processing_size_bytes, downloading_size_bytes, filename_to_processing_filename, filename_to_cache_filename, filename_to_downloading_filename, move_filename_to_processing, move_downloading_to_processing, clear_processing, clear_downloading, 
+import secrets_utils
+from ai import load_whisper_tiny, load_nvidia, whisper_token_ids, whisper_start_transcription_token_id, whisper_tokens, identify_languages, transcribe_many
+import mongo_utils as mongo
+import vcon_utils as vcon
+from vcon_utils import process_invalids, load_processing_into_ram, convert_to_mono_many, resample_many, apply_vad_many, move_to_gpu_many, make_batches, batch_to_audio_data, set_languages, set_transcript, transcript, languages, start_discover, mark_vcons_as_done, update_vcons_on_db
 import settings
-import make_vcons_from_sftp
-from utils import get_hostname, calculate_batch_bytes, print_gpu_memory_usage, reset_gpu_memory_stats, max_gpu_memory_usage, get_all_filenames_from_sftp, seconds_to_ydhms
-from wavs import is_wav_filename, clear_cache_directory, is_readable_wav, get_wav_duration
+from settings import hostname, max_download_threads, en_model_name, non_en_model_name, lang_id_model_name
+from gpu import move_to_gpu_maybe
+from utils import batch_bytes, reset_gpu_memory_stats, max_gpu_memory_usage, get_all_filenames_from_sftp, seconds_to_ydhms, ensure_dir_exists, dir_size_bytes, get_device, put_on_gpu, extension
+from audio import is_wav_filename, clear_cache_directory, is_valid_audio, get_wav_duration, slurp_audio, resample_audio, apply_vad, move_audio_to_gpu_maybe, load_audio_onto_cpu, audio_dict_to_batches, convert_to_mono
 import os
-import shutil
 import threading
 import time
-from sftp_utils import download_sftp_file, sftp_connect, get_sftp_file_size, parse_sftp_url
+from sftp import download_sftp_file, sftp_connect, get_sftp_file_size, parse_sftp_url, connect_keep_trying, connect
 import argparse
-import vcon as vcon_library_module
-import json
-import logging
-import print_vcon_info
+import torch
 
-def reserve_vcons(vcons, vcons_collection, size_bytes):
-    hostname = get_hostname()
-    reserved = []
-    total_size = 0
-    for vcon in vcons:
-        size = vcon.get("size", 0)
-        if total_size + size > size_bytes:
-            break
-        result = vcons_collection.update_one({"_id": vcon["_id"], "being_processed_by": None}, {"$set": {"being_processed_by": hostname}})
-        if result.modified_count == 1:
-            reserved.append(vcon)
-            total_size += size
-    return reserved
-
-def find_vcons_lang_detect(vcons_collection):
-    query = {
-        "being_processed_by": None,
-        "$and": [
-            {"analysis": {"$not": {"$elemMatch": {"type": "language_identification"}}}},
-            {"analysis": {"$not": {"$elemMatch": {"type": "corrupt"}}}}
-        ],
-        "attachments": {"$elemMatch": {"type": "audio"}},
-        "corrupt": {"$ne": True}
-    }
-    vcons = list(vcons_collection.find(query))
-    return vcons
-
-def reserve_vcons_for_lang_detect(vcons_collection, size_bytes):
-    # Find vCons needing language detection and not being processed
-    vcons = find_vcons_lang_detect(vcons_collection)
-    return reserve_vcons(vcons, vcons_collection, size_bytes)
-
-def find_vcons_en_transcription(vcons_collection):
-    query = {
-        "being_processed_by": None,
-        "$and": [
-            {"analysis": {"$elemMatch": {"type": "language_identification", "body": ["en"]}}},
-            {"analysis": {"$not": {"$elemMatch": {"type": "transcription"}}}},
-            {"analysis": {"$not": {"$elemMatch": {"type": "corrupt"}}}}
-        ],
-        "attachments": {"$elemMatch": {"type": "audio"}},
-        "corrupt": {"$ne": True}
-    }
-    vcons = list(vcons_collection.find(query))
-    return vcons
-
-def reserve_vcons_for_en_transcription(vcons_collection, size_bytes):
-    # Find vCons with language_identification == ["en"] and no transcription, not being processed
-    vcons = find_vcons_en_transcription(vcons_collection)
-    return reserve_vcons(vcons, vcons_collection, size_bytes)
-
-def find_vcons_non_en_transcription(vcons_collection):
-    query = {
-        "being_processed_by": None,
-        "$and": [
-            {"analysis": {"$elemMatch": {"type": "language_identification", "body": {"$ne": ["en"]}}}},
-            {"analysis": {"$not": {"$elemMatch": {"type": "transcription"}}}},
-            {"analysis": {"$not": {"$elemMatch": {"type": "corrupt"}}}}
-        ],
-        "attachments": {"$elemMatch": {"type": "audio"}},
-        "corrupt": {"$ne": True}
-    }
-    vcons = list(vcons_collection.find(query))
-    return vcons
-
-def reserve_vcons_for_non_en_transcription(vcons_collection, size_bytes):
-    vcons = find_vcons_non_en_transcription(vcons_collection)
-    return reserve_vcons(vcons, vcons_collection, size_bytes)
-
-def make_modes_to_try(model_mode):
-    all_modes = ["lang_detect", "en", "non_en"]
-    if model_mode:
-        all_modes.remove(model_mode)
-        return [model_mode] + all_modes
-    else:
-        return all_modes
-
-def reserve_vcons_for_processing(model_mode, vcons_collection, size_bytes):
-    # Try to reserve for the current model mode
-    modes_to_try = make_modes_to_try(model_mode)
-    reserved = []
-    for mode in modes_to_try:
-        if mode == "lang_detect":
-            reserved = reserve_vcons_for_lang_detect(vcons_collection, size_bytes)
-            if reserved:
-                return reserved, mode
-        elif mode == "en":
-            reserved = reserve_vcons_for_en_transcription(vcons_collection, size_bytes)
-            if reserved:
-                return reserved, mode
-        elif mode == "non_en":
-            reserved = reserve_vcons_for_non_en_transcription(vcons_collection, size_bytes)
-            if reserved:
-                return reserved, mode
-    return [], None
-
-def _download_vcons_to_cache(vcons_to_process, sftp):
-    cache_dir = settings.cache_directory
-    os.makedirs(cache_dir, exist_ok=True)
-    vcon_collection = get_mongo_collection()
-    
-    for vcon in vcons_to_process:
-        for attachment in vcon.get('attachments', []):
-            if attachment.get('type') == 'audio':
-                wav_url = attachment.get('body')
-                if not is_wav_filename(wav_url):
-                    continue
-                wav_basename = os.path.basename(wav_url)
-                cache_path = os.path.join(cache_dir, wav_basename)
-                temp_path = cache_path + ".part"
-                if os.path.exists(cache_path):
-                    continue
-                try:
-                    if wav_url.startswith("sftp://"):
-                        download_sftp_file(wav_url, temp_path, sftp)
-                    else:
-                        shutil.copy2(wav_url, temp_path)
-                    os.rename(temp_path, cache_path)
-                    
-                    # Validate the downloaded WAV file
-                    if not is_readable_wav(cache_path):
-                        print(f"Downloaded WAV file is corrupt: {wav_url}")
-                        # Mark as corrupt in database
-                        analysis = {
-                            "type": "corrupt",
-                            "body": "Corrupt or unreadable audio file",
-                            "encoding": "none"
-                        }
-                        try:
-                            result = vcon_collection.update_one(
-                                {"_id": vcon["_id"]},
-                                {"$push": {"analysis": analysis}, "$set": {"corrupt": True}, "$unset": {"being_processed_by": ""}}
-                            )
-                            if result.modified_count == 1:
-                                print(f"Marked vCon {vcon['_id']} as corrupt in database")
-                            else:
-                                print(f"Failed to mark vCon {vcon['_id']} as corrupt")
-                        except Exception as e:
-                            print(f"Error marking vCon {vcon['_id']} as corrupt: {e}")
-                        
-                        # Remove the corrupt file from cache
-                        if os.path.exists(cache_path):
-                            os.remove(cache_path)
-                        
-                except Exception as e:
-                    if os.path.exists(temp_path):
-                        os.remove(temp_path)
-                    print(f"Failed to download {wav_url} to cache: {e}")
-    print(f"Downloaded {len(vcons_to_process)} vcons to cache")
-
-def cleanup_cache_directory():
-    """Clean up any leftover files in the cache directory from previous runs."""
-    cache_dir = settings.cache_directory
-    if not os.path.exists(cache_dir):
-        return
-    
-    files_removed = 0
-    total_size_removed = 0
-    corrupt_files_removed = 0
-    
-    for filename in os.listdir(cache_dir):
-        file_path = os.path.join(cache_dir, filename)
-        if os.path.isfile(file_path):
+def reserver_thread(sftp_url, vcons_ready_queue):
+    sftp = None
+    while True:
+        if sftp is None:
+            sftp = connect_keep_trying(sftp_url)
+        bytes_to_reserve = cache.bytes_to_reserve()
+        if bytes_to_reserve > 0:
             try:
-                file_size = os.path.getsize(file_path)
-                
-                # Check if it's a WAV file and validate it
-                if is_wav_filename(filename):
-                    if not is_readable_wav(file_path):
-                        print(f"Found corrupt WAV file in cache during cleanup: {file_path}")
-                        corrupt_files_removed += 1
-                
-                os.remove(file_path)
-                files_removed += 1
-                total_size_removed += file_size
+                vcons = vcon.find_and_reserve_many(bytes_to_reserve)
+                vcon.cache_vcon_audio_many(vcons, sftp)
+                vcons_ready_queue.put(vcons)
             except Exception as e:
-                print(f"Failed to clean up {file_path}: {e}")
-    
-    if files_removed > 0:
-        print(f"Cleaned up {files_removed} leftover files ({total_size_removed / (1024*1024):.1f} MB) from cache directory")
-        if corrupt_files_removed > 0:
-            print(f"  - {corrupt_files_removed} of these were corrupt WAV files")
+                logging.info(f"Failed to connect in reserver_thread: {e}")
+                sftp = None
+        time.sleep(1)
 
-def load_vcons_in_background(vcons_to_process, sftp):
-    """
-    Start a background thread to download all wav files referenced in the vcons' attachments into the cache folder.
-    """
-    thread = threading.Thread(target=_download_vcons_to_cache, args=(vcons_to_process, sftp), daemon=True)
+def start_reserver_thread(sftp_url, vcons_ready_queue):
+    thread = threading.Thread(target=reserver_thread, args=(sftp_url, vcons_ready_queue), daemon=True)
     thread.start()
     return thread
 
-def process_vcons(download_thread, vcons_to_process, loaded_ai, mode):
-    # Reset GPU memory stats for accurate tracking
-    
-    # Map vcon_id to cache wav path
-    cache_dir = settings.cache_directory
-    vcon_id_to_cache_path = {}
-    vcon_id_to_vcon = {}
-    for vcon in vcons_to_process:
-        vcon_id = vcon['_id']
-        vcon_id_to_vcon[vcon_id] = vcon
-        for attachment in vcon.get('attachments', []):
-            if attachment.get('type') == 'audio':
-                wav_url = attachment.get('body')
-                if is_wav_filename(wav_url):
-                    wav_basename = os.path.basename(wav_url)
-                    cache_path = os.path.join(cache_dir, wav_basename)
-                    vcon_id_to_cache_path[vcon_id] = cache_path
-                    break
-
-    vcon_collection = get_mongo_collection()
-    loaded_ai.load_by_mode(mode)
-
-    vcon_ids = list(vcon_id_to_cache_path.keys())
-    processed_ids = set()
-    total_bytes_to_process = sum(vcon_id_to_vcon[vid].get('size', 0) for vid in vcon_ids)
-    total_bytes_processed = 0
-    start_time = time.time()
-
-    def available_vcon_ids():
-        valid_ids = []
-        for vid in vcon_ids:
-            cache_path = vcon_id_to_cache_path[vid]
-            if os.path.exists(cache_path):
-                # Additional validation: check if the WAV file is readable
-                if is_readable_wav(cache_path):
-                    valid_ids.append(vid)
-                else:
-                    print(f"Found corrupt WAV file in cache: {cache_path}")
-                    # Mark as corrupt in database
-                    analysis = {
-                        "type": "corrupt",
-                        "body": "Corrupt or unreadable audio file",
-                        "encoding": "none"
-                    }
-                    try:
-                        result = vcon_collection.update_one(
-                            {"_id": vid},
-                            {"$push": {"analysis": analysis}, "$set": {"corrupt": True}, "$unset": {"being_processed_by": ""}}
-                        )
-                        if result.modified_count == 1:
-                            print(f"Marked vCon {vid} as corrupt in database")
-                        else:
-                            print(f"Failed to mark vCon {vid} as corrupt")
-                    except Exception as e:
-                        print(f"Error marking vCon {vid} as corrupt: {e}")
-                    
-                    # Remove the corrupt file from cache
-                    try:
-                        os.remove(cache_path)
-                    except Exception as e:
-                        print(f"Failed to remove corrupt file {cache_path}: {e}")
-        return valid_ids
-
-    print(f"Starting {mode} processing for {len(vcon_ids)} vcons ({total_bytes_to_process / (1024*1024):.1f} MB total)")
+def main(sftp_url):
+    cache.init()
+    cache.clear()
+    vcon.unmarked_all_reserved()
+    vcons_ready_queue = Queue(maxsize=1)
+    reserver_thread = start_reserver_thread(sftp_url, vcons_ready_queue)
+    lang_detect_model, lang_detect_processor = load_whisper_tiny()
+    en_model = load_nvidia(en_model_name)
+    non_en_model = load_nvidia(non_en_model_name)
 
     while True:
-        avail_ids = [vid for vid in available_vcon_ids() if vid not in processed_ids]
-        if not avail_ids:
-            if not download_thread.is_alive():
-                break
-            time.sleep(1)
-            continue
-        batch_files = [vcon_id_to_cache_path[vid] for vid in avail_ids]
-        batch_vcons = [vcon_id_to_vcon[vid] for vid in avail_ids]
-        batch_bytes = sum(vcon_id_to_vcon[vid].get('size', 0) for vid in avail_ids)
-
-        if mode == 'lang_detect':
-            results = loaded_ai.identify_languages(batch_files, vcon_ids=avail_ids, vcon_collection=vcon_collection)
-            for vcon, langs in zip(batch_vcons, results):
-                analysis = {
-                    "type": "language_identification",
-                    "dialog": [0],
-                    "vendor": "whisper-tiny",
-                    "body": langs,
-                    "encoding": "none"
-                }
-                update_success = False
-                try:
-                    result = vcon_collection.update_one({"_id": vcon["_id"]}, {"$push": {"analysis": analysis}})
-                    if result.modified_count == 1:
-                        update_success = True
-                    else:
-                        print(f"Warning: Language identification update for vCon {vcon['_id']} did not modify any document")
-                except Exception as e:
-                    print(f"Error updating language identification for vCon {vcon['_id']}: {e}")
-                
-                # Only release the vcon if the update was successful
-                if update_success:
-                    try:
-                        vcon_collection.update_one({"_id": vcon["_id"]}, {"$unset": {"being_processed_by": ""}})
-                    except Exception as e:
-                        print(f"Error unsetting being_processed_by for vCon {vcon['_id']}: {e}")
-                else:
-                    print(f"Keeping vCon {vcon['_id']} reserved due to failed language identification update")
-        else:
-            successful_vcon_ids = []
-            try:
-                print(f"DEBUG main.py: About to call loaded_ai.transcribe for {len(batch_files)} files in mode '{mode}'. First file: {batch_files[0] if batch_files else 'N/A'}")
-                transcriptions_result = loaded_ai.transcribe(batch_files, english_only=(mode == "en"))
-                print(f"DEBUG main.py: loaded_ai.transcribe returned: {transcriptions_result}")
-
-                if not isinstance(transcriptions_result, list) or len(transcriptions_result) != len(batch_vcons):
-                    print(f"ERROR main.py: Transcription result is not a list or length mismatch. Got: {len(transcriptions_result) if isinstance(transcriptions_result, list) else type(transcriptions_result)}, Expected: {len(batch_vcons)}. Skipping this batch.")
-                    # To prevent further errors with zip, we should probably skip this batch or handle it carefully.
-                    # For now, an empty list will make the loop not run.
-                    transcriptions_for_loop = [] 
-                else:
-                    transcriptions_for_loop = transcriptions_result
-
-                for vcon_dict_from_batch, transcription_text in zip(batch_vcons, transcriptions_for_loop):
-                    if not transcription_text:
-                        print(f"INFO main.py: Skipping empty transcription for vCon {vcon_dict_from_batch.get('_id')}")
-                        continue
-
-                    original_bson_id = vcon_dict_from_batch["_id"]
-                    print(f"DEBUG main.py: Processing transcription for vCon BSON ID {original_bson_id}")
-
-                    try:
-                        current_vcon_doc_from_db = vcon_collection.find_one({"_id": original_bson_id})
-                        if not current_vcon_doc_from_db:
-                            print(f"ERROR main.py: Could not re-fetch vCon {original_bson_id} for Vcon object creation.")
-                            continue
-
-                        dict_for_vcon_load = current_vcon_doc_from_db.copy()
-                        dict_for_vcon_load.pop('_id', None) 
-
-                        try:
-                            v_obj = vcon_library_module.Vcon(dict_for_vcon_load)
-                            logging.info(f"Loaded vCon {v_obj.uuid} from dict using constructor for transcription processing.")
-                        except Exception as e:
-                            logging.error(f"Error initializing Vcon from dict for {dict_for_vcon_load.get('uuid', 'Unknown UUID')} (transcription part): {e}")
-                            continue
-                        
-                        # print(f"DEBUG main.py: vCon {v_obj.uuid} analysis BEFORE add: {v_obj.analysis}")
-
-                        dialog_index_to_attach = 0
-                        if not v_obj.dialog or len(v_obj.dialog) == 0:
-                            print(f"Warning main.py: No dialogs found in vCon {v_obj.uuid}. Attempting vCon-level analysis (dialog=-1).")
-                            dialog_index_to_attach = -1
-                        
-                        # If transcription_text is a Hypothesis object, extract the .text attribute
-                        body_text = transcription_text.text if hasattr(transcription_text, 'text') else transcription_text
-                        analysis_result_index = v_obj.add_analysis(
-                            dialog=dialog_index_to_attach,
-                            type="transcription", # This must match what print_vcon_info.py looks for
-                            body=body_text,
-                            vendor=loaded_ai.model_name if hasattr(loaded_ai, 'model_name') else "unknown",
-                            encoding="none"
-                        )
-                        print(f"DEBUG main.py: v_obj.add_analysis for transcription returned: {analysis_result_index} for vCon UUID {v_obj.uuid}")
-                        print(f"DEBUG main.py: vCon {v_obj.uuid} analysis AFTER add: {v_obj.analysis}")
-                        
-                        if analysis_result_index is None: # Should not be None if add_analysis is successful
-                            print(f"WARNING main.py: add_analysis for transcription on vCon {v_obj.uuid} returned None. Transcription may not be saved.")
-                            # continue # Optional: skip saving if add_analysis didn't confirm addition.
-
-                        save_dict = v_obj.to_dict()
-                        # print(f"DEBUG main.py: Dictionary to save for {v_obj.uuid}: {json.dumps(save_dict, indent=2)}")
-
-                        update_result = vcon_collection.replace_one(
-                            {"_id": original_bson_id}, 
-                            save_dict 
-                        )
-                        print(f"DEBUG main.py: MongoDB replace_one result for UUID {v_obj.uuid} (BSON ID {original_bson_id}): Matched={update_result.matched_count}, Modified={update_result.modified_count}")
-
-                        if update_result.modified_count == 1:
-                            successful_vcon_ids.append(original_bson_id)
-                        elif update_result.matched_count == 1 and update_result.modified_count == 0:
-                            print(f"WARNING main.py: Transcription update for vCon {original_bson_id} matched but did not modify document (data might be identical).")
-                            successful_vcon_ids.append(original_bson_id) # Still consider it successful if data was identical
-                        else:
-                            print(f"ERROR main.py: Transcription update for vCon {original_bson_id} failed. Matched: {update_result.matched_count}, Modified: {update_result.modified_count}")
-                    except Exception as e:
-                        print(f"Error processing/saving transcription for vCon {original_bson_id} using vcon library: {e}")
-                        import traceback
-                        print(traceback.format_exc())
-            except Exception as e:
-                print(f"Error in transcription batch with vcon library: {e}")
-            finally:
-                # Only release vcons that were successfully updated
-                for vid in successful_vcon_ids:
-                    try:
-                        vcon_collection.update_one({"_id": vid}, {"$unset": {"being_processed_by": ""}})
-                    except Exception as e:
-                        print(f"Error unsetting being_processed_by for vCon {vid}: {e}")
-                
-                # For failed vcons, keep them reserved but log them
-                failed_vcon_ids = [vid for vid in avail_ids if vid not in successful_vcon_ids]
-                if failed_vcon_ids:
-                    print(f"Keeping {len(failed_vcon_ids)} vCons reserved due to failed transcription updates: {failed_vcon_ids}")
-                    # Release them anyway to avoid blocking indefinitely
-                    # for vid in failed_vcon_ids:
-                    #     try:
-                    #         vcon_collection.update_one({"_id": vid}, {"$unset": {"being_processed_by": ""}})
-                    #     except Exception as e:
-                    #         print(f"Error unsetting being_processed_by for failed vCon {vid}: {e}")
-
-        total_bytes_processed += batch_bytes
-        processed_ids.update(avail_ids)
-        batch_time = time.time() - start_time
-        progress_pct = (total_bytes_processed / total_bytes_to_process) * 100 if total_bytes_to_process > 0 else 0
-        print(f"Processed {len(avail_ids)} files, {progress_pct:.1f}% complete, max GPU memory usage: {max_gpu_memory_usage()/(1024**3):.2f} GB")
+        vcons = vcons_ready_queue.get()
+        move_downloading_to_processing()
+        valid_vcons = process_invalids(vcons)
+        vcons_in_ram = load_processing_into_ram(valid_vcons)
+        vcons_mono = convert_to_mono_many(vcons_in_ram)
+        vcons_resampled = resample_many(vcons_mono)
+        vcons_vad = apply_vad_many(vcons_resampled)
+        vcons_on_gpu = move_to_gpu_many(vcons_vad)
+        vcons_batched = make_batches(vcons_on_gpu)
+        vcons_detected = identify_languages(vcons_batched, lang_detect_model, lang_detect_processor)
+        vcons_en, vcons_non_en = vcon.split_by_language(vcons_detected)
+        vcons_en_batched = make_batches(vcons_en)
+        vcons_non_en_batched = make_batches(vcons_non_en)
+        vcons_en_transcribed = transcribe_many(vcons_en_batched, en_model)
+        vcons_non_en_transcribed = transcribe_many(vcons_non_en_batched, non_en_model)
+        for vcons in [vcons_en_transcribed, vcons_non_en_transcribed]:
+            mark_vcons_as_done(vcons)
+            update_vcons_on_db(vcons)
+        cache.clear_processing()
         
-        # Monitor GPU memory usage after each batch
-        #print_gpu_memory_usage()
-
-        for file_path in batch_files:
-            try:
-                if os.path.exists(file_path):
-                    os.remove(file_path)
-            except Exception as e:
-                print(f"Failed to delete {file_path}: {e}")
-
-        if not download_thread.is_alive() and len(processed_ids) == len(vcon_ids):
-            break
-    clear_cache_directory()
-
-    total_time = time.time() - start_time
-    final_mb_per_sec = (total_bytes_processed / (1024*1024)) / total_time if total_time > 0 else 0
-    print(f"\n{mode} processing completed: {total_bytes_processed/(1024*1024):.1f} MB in {total_time:.1f}s ({final_mb_per_sec:.1f} MB/s)")
-
-def main(sftp_url, measure_mode=False):
-    loaded_ai = AIModel()
-    vcons_collection = get_mongo_collection()
-    sftp = sftp_connect(sftp_url)
-    collection = get_mongo_collection()
-
-    total_files = None
-    total_wav_files = 0
-    total_wav_files_size = 0
-    total_wav_files_duration = 0
-    total_valid_wav_files = 0
-    total_invalid_wav_files = 0
-    delete_time = None
-    slurp_time = None
-    total_start_time = None
-
-    if measure_mode:
-        parsed_sftp_url = parse_sftp_url(sftp_url)
-        print("Fetching all filenames from SFTP...")
-        files = list(get_all_filenames_from_sftp(sftp, parsed_sftp_url["path"]))
-        total_files = len(files)
-
-        print("downloading and measuring wav files...")
-        for file in files:
-            if is_wav_filename(file):
-                total_wav_files += 1
-                # Download the wav file to a temporary location
-                temp_path = os.path.join(settings.cache_directory, os.path.basename(file))
-                try:
-                    # Build the correct SFTP URL for this file
-                    full_sftp_url = f"sftp://{parsed_sftp_url['username']}@{parsed_sftp_url['hostname']}:{parsed_sftp_url['port']}{file}"
-                    download_sftp_file(full_sftp_url, temp_path, sftp)
-                    # Verify the wav file is legitimate
-                    if is_readable_wav(temp_path):
-                        # If legitimate, increment counter and add duration
-                        total_wav_files_size += os.path.getsize(temp_path)
-                        total_wav_files_duration += get_wav_duration(temp_path)
-                        total_valid_wav_files += 1
-                        print(f"Valid wav file: {file}")
-                    else:
-                        total_invalid_wav_files += 1
-                finally:
-                    # Clean up the temporary file
-                    if os.path.exists(temp_path):
-                        os.remove(temp_path)
-    
-        total_start_time = time.time()
-        delete_start_time = time.time()
-        print("Deleting all vcons...")
-        delete_all_vcons()
-        delete_time = time.time() - delete_start_time
-        slurp_start_time = time.time()
-        print("Slurping into db")
-        make_vcons_from_sftp.main(sftp_url)
-        slurp_time = time.time() - slurp_start_time
-
-    # Clean up any leftover files from previous runs
-    cleanup_cache_directory()
-
-    process_start_time = time.time()
-    while True:
-        print("Reserving vcons for processing...")
-        vcons_to_process, mode = reserve_vcons_for_processing(loaded_ai.loaded_model_mode(),
-                                                              vcons_collection,
-                                                              settings.total_vcon_filesize_to_process_bytes)
-        print(f"Reserved {len(vcons_to_process)} vcons totaling {sum(vcon.get('size', 0) for vcon in vcons_to_process)/(1024*1024):.2f} MB for processing in mode {mode}")
-        
-        # If no vcons were reserved or mode is None, wait and try again
-        if vcons_to_process:
-            thread = load_vcons_in_background(vcons_to_process, sftp)
-            process_vcons(thread, vcons_to_process, loaded_ai, mode)
-        else:
-            if measure_mode:
-                break
-            else:
-                time.sleep(1)
-    total_time = time.time() - total_start_time
-    process_time = time.time() - process_start_time
-
-    if measure_mode:
-        print(f"Total files: {total_files}")
-        print(f"Total wav files: {total_wav_files}")
-        print(f"Total wav files size: {total_wav_files_size / (1024*1024):.2f} MB")
-        print(f"Total wav files duration: {total_wav_files_duration:.2f} seconds ({seconds_to_ydhms(total_wav_files_duration)} minutes)")
-        print(f"Total valid wav files: {total_valid_wav_files}")
-        print(f"Total invalid wav files: {total_invalid_wav_files}")
-        print(f"RTF: {total_wav_files_duration / process_time:.2f}x")
-        print(f"Data rate: {(total_wav_files_size / process_time) / (1024*1024):.2f} MB/s")
-        print(f"Total time: {total_time:.2f} seconds")
-        print(f"Slurp time: {slurp_time:.2f} seconds")
-        print(f"Delete time: {delete_time:.2f} seconds")
-
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Transcribey main entry point")
-    parser.add_argument("mode", choices=["head", "worker", "slurp", "print", "delete_all", "measure"], help="head:slurp and run worker. ")
-    parser.add_argument("--sftp_url", type=str, default=settings.sftp_url, help="Override SFTP URL (applies to both head and worker)")
+    parser.add_argument("mode", choices=["head", "worker", "slurp", "print", "delete_all"], help="head:slurp and run worker. ")
+    parser.add_argument("--url", type=str, default=settings.sftp_url, help="Override SFTP URL (applies to both head and worker)")
     parser.add_argument("--production", action="store_true", default=False, help="Enable production mode (applies to both head and worker)")
     args = parser.parse_args()
 
@@ -541,19 +83,33 @@ if __name__ == "__main__":
 
     if args.mode == "head":
         if settings.debug:
-            delete_all_vcons()
-        sftp_thread = threading.Thread(target=make_vcons_from_sftp.main, args=(args.sftp_url,), daemon=True)
-        sftp_thread.start()
-        main(args.sftp_url)
+            vcon.delete_all()
+        start_discover(args.url)
+        main(args.url)
     elif args.mode == "worker":
-        main(args.sftp_url)
+        main(args.url)
     elif args.mode == "slurp":
         if settings.debug:
-            delete_all_vcons()
-        make_vcons_from_sftp.main(args.sftp_url)
+            vcon.delete_all()
+        start_discover(args.url)
     elif args.mode == "print":
-        print_vcon_info.print_vcon_details()
+        vcon.load_and_print_all()
     elif args.mode == "delete_all":
-        delete_all_vcons()
-    elif args.mode == "measure":
-        main(args.sftp_url, measure_mode=True)
+        vcon.delete_all()
+
+# architecture
+# We can fit all AI models in GPU memory. 
+# So, what if we do the following:
+# In background, always reserve vcons until cache is full, download said vcons. 
+
+# now repeat. 
+# Move all wavs in cache to processing.
+# move all wavs to RAM.
+# Apply VAD.
+# Move all wavs to GPU.
+# Resample to 16000kHz.
+# Identify languages 
+# transcribe english
+# transcribe non-english
+# Start a thread to update vcons. 
+# (If model size is a problem, save to disk, handle later.)
