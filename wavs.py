@@ -75,3 +75,9 @@ def make_wav_batches(all_wav_files, batch_bytes):
 def clear_cache_directory():
     for file in os.listdir(settings.cache_directory):
         os.remove(os.path.join(settings.cache_directory, file))
+
+def vad_wav(wav_path):
+    wav, sr = torchaudio.load(wav_path)
+    vad = torchaudio.transforms.Vad(sample_rate=sr, trigger_level=0.5)
+    vad_mask = vad(wav)
+    return vad_mask

@@ -15,7 +15,7 @@ import torch
 import torchaudio
 from settings import lang_detect_threshold, transcribe_english_model_name, transcribe_nonenglish_model_name, identify_languages_model_name
 import os
-from wavs import is_readable_wav, make_wav_batches
+from wavs import is_readable_wav, make_wav_batches, vad_wav
 
 def load_whisper_tiny_raw():
     with suppress_output(should_suppress=True):
@@ -136,23 +136,34 @@ def resample_wav_maybe(wav, sample_rate, target_sample_rate=16000):
 def load_and_resample_wavs(all_wav_paths, target_sample_rate=16000):
     """
     Loads and resamples a list of wav files to the target sample rate.
+    Applies VAD and removes silent sections from the waveform.
     Returns a tuple: (list of numpy arrays (waveforms), list of valid indices, list of unreadable file paths)
     """
     wavs = []
     valid_indices = []
     unreadable_files = []
+    vad = torchaudio.transforms.Vad(sample_rate=target_sample_rate, trigger_level=0.5)
     for idx, wav_path in enumerate(all_wav_paths):
         if is_readable_wav(wav_path):
             try:
                 raw_wav, sample_rate = torchaudio.load(wav_path)
+                # Resample first
+                wav = resample_wav_maybe(raw_wav, sample_rate, target_sample_rate=target_sample_rate)
                 # Convert to mono if necessary
-                if raw_wav.shape[0] > 1:
-                    raw_wav = raw_wav.mean(dim=0, keepdim=True)
-                wav = resample_wav_maybe(raw_wav, sample_rate)
-                wav = wav.squeeze().numpy()  # ensure 1D numpy array
-                wavs.append(wav)
+                if wav.ndim > 1 and wav.shape[0] > 1:
+                    wav = wav.mean(axis=0, keepdims=True)
+                # Convert to torch tensor for VAD
+                wav_tensor = torch.tensor(wav) if not isinstance(wav, torch.Tensor) else wav
+                if wav_tensor.ndim == 1:
+                    wav_tensor = wav_tensor.unsqueeze(0)  # (1, N)
+                vad_mask = vad(wav_tensor)
+                # Remove silent sections: keep only samples where vad_mask != 0
+                # vad_mask is same shape as wav_tensor
+                speech_indices = vad_mask.squeeze() != 0
+                speech_wav = wav_tensor.squeeze()[speech_indices]
+                # Convert back to numpy array
+                wavs.append(speech_wav.numpy())
                 valid_indices.append(idx)
-                # Explicitly delete the raw tensor to free memory
                 del raw_wav
             except Exception as e:
                 unreadable_files.append(wav_path)
