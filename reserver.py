@@ -5,7 +5,7 @@ import threading
 import time
 import logging
 
-def thread(sftp_url, vcons_ready_queue):
+def actually_start(sftp_url, vcons_ready_queue):
     sftp = None
     while True:
         if sftp is None:
@@ -23,6 +23,6 @@ def thread(sftp_url, vcons_ready_queue):
         time.sleep(1)
 
 def start(sftp_url, vcons_ready_queue):
-    thread = threading.Thread(target=thread, args=(sftp_url, vcons_ready_queue), daemon=True)
+    thread = threading.Thread(target=actually_start, args=(sftp_url, vcons_ready_queue), daemon=True)
     thread.start()
     return thread

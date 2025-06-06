@@ -1,4 +1,3 @@
-import gc
 import importlib
 import time
 import torch
@@ -6,14 +5,13 @@ from transformers import AutoModelForSpeechSeq2Seq, AutoProcessor
 import settings
 from gpu import move_to_gpu_maybe, gc_collect_maybe
 from utils import suppress_output
-from vcon_utils import batch_to_audio_data
 import vcon_utils as vcon
 
 def whisper_token_to_language(token):
     return whisper_token_languages[whisper_token_ids.index(token)]
 
 def load_whisper_tiny_raw():
-    with suppress_output(should_suppress=True):
+    with suppress_output(should_suppress=False):
         model_name = "openai/whisper-tiny"
         processor = AutoProcessor.from_pretrained(model_name)
         model = AutoModelForSpeechSeq2Seq.from_pretrained(model_name)
@@ -33,7 +31,7 @@ def load_whisper_tiny():
     return (model, processor)
 
 def load_nvidia_raw(model_name):
-    with suppress_output(should_suppress=True):
+    with suppress_output(should_suppress=False):
         nemo_asr = importlib.import_module("nemo.collections.asr")
         model = nemo_asr.models.ASRModel.from_pretrained(model_name=model_name)
         return model
@@ -57,7 +55,7 @@ whisper_start_transcription_token_id = 50258
 def identify_languages(all_vcons_batched, model, processor):
     vcons = []
     for vcon_batch in all_vcons_batched:
-        audio_data_batch = batch_to_audio_data(vcon_batch)
+        audio_data_batch = vcon.batch_to_audio_data(vcon_batch)
         inputs = processor(audio_data_batch, sampling_rate=settings.sample_rate, return_tensors="pt", padding=True)
         inputs = move_to_gpu_maybe(inputs)
         input_features = inputs.input_features
@@ -85,8 +83,8 @@ def transcribe_many(vcons_batched, model):
     vcons = []
     for vcon_batch in vcons_batched:
         all_transcriptions = model.transcribe(vcon_batch)
-        for vcon, transcription in zip(vcon_batch, all_transcriptions):
-            vcon.set_transcript(transcription)
-            vcons.append(vcon)
+        for vcon_obj, transcription in zip(vcon_batch, all_transcriptions):
+            vcon.set_transcript(vcon_obj, transcription)
+            vcons.append(vcon_obj)
         gc_collect_maybe()
     return vcons

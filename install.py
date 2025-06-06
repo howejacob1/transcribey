@@ -1,6 +1,5 @@
 import subprocess
 import sys
-import ai
 
 def install_packages():
     packages = [
@@ -39,15 +38,15 @@ def install_packages():
         cmd = [sys.executable, "-m", "pip", "install", "--break-system-packages"] + pkg
         subprocess.run(cmd, check=True)
 
-def preinstall_all_models():
-    ai_model = AIModel()
-    ai_model.load(transcribe_english_model_name)
-    ai_model.load(transcribe_nonenglish_model_name)
-    ai_model.load(identify_languages_model_name)
-    ai_model.unload()
+#def preinstall_all_models():
+#    ai_model = AIModel()
+#    ai_model.load(transcribe_english_model_name)
+#    ai_model.load(transcribe_nonenglish_model_name)
+#    ai_model.load(identify_languages_model_name)
+#    ai_model.unload()
 
 if __name__ == "__main__":
     install_packages()
-    import torch
-    import ai
-    preinstall_all_models()
+    #import torch
+    #import ai
+    #preinstall_all_models()

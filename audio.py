@@ -1,12 +1,6 @@
-import os
-from concurrent.futures import ThreadPoolExecutor, as_completed
-import torch
 import torchaudio
-import gpu
 import settings
-from gpu import move_to_gpu_maybe
 from utils import num_cores
-import binpacking
 
 def get_duration(filename):
     """

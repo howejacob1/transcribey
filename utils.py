@@ -1,10 +1,6 @@
 import os
-import logging
-import time
 import socket
 from contextlib import contextmanager
-from urllib.parse import urlparse
-import torch
 
 def get_all_filenames(directory):
     """

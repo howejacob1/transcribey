@@ -2,7 +2,7 @@ import os
 import socket
 
 # Settings for main.py
-cache_dir = "working_memory/cache/"
+cache_dir = "cache/"
 processing_dir = os.path.join(cache_dir, "processing/")
 downloading_dir = os.path.join(cache_dir, "downloading/")
 lang_detect_threshold = 0.2
@@ -21,3 +21,6 @@ gc_limit_bytes = 1024**3
 # SFTP connection settings for make_vcons_from_sftp.py
 sftp_url = "sftp://bantaim@192.168.1.103:/home/bantaim/conserver/openslr-12/"
 sample_rate = 16000
+max_sftp_workers = 16
+
+# MongoDB connection settings

@@ -2,8 +2,9 @@
 import datetime
 import logging
 import mimetypes
+import time
 import os
-import pprint
+from pprint import pprint
 import threading
 import binpacking
 import torchaudio
@@ -16,11 +17,8 @@ import secrets_utils
 import settings
 from settings import hostname
 import sftp as sftp_utils
-from audio import resample_audio
+from sftp import parse_url
 import gpu
-from gpu import batch_bytes
-from mongo_utils import get_collection
-from sftp import connect, download, file_size
 from utils import extension, suppress_output, wait_for_all_threads_to_finish, wait_for_one_thread_to_finish
 from vcon import Vcon
 from vcon.dialog import Dialog
@@ -30,42 +28,42 @@ def get_size(vcon):
     return vcon["size"]
 
 def get_filename(vcon):
-    return vcon["dialogs"][0]["filename"]
+    return vcon["dialog"][0]["filename"]
 
 def set_filename(vcon, filename):
-    vcon["dialogs"][0]["filename"] = filename
+    vcon["dialog"][0]["filename"] = filename
 
 def get_audio(vcon):
-    return vcon["dialogs"][0]["body"]
+    return vcon["dialog"][0]["body"]
 
 def set_audio(vcon, audio):
-    vcon["dialogs"][0]["body"] = audio
+    vcon["dialog"][0]["body"] = audio
 
 def get_transcript_text(vcon):
-    return vcon["dialogs"][0]["transcript"]["text"]
+    return vcon["dialog"][0]["transcript"]["text"]
 
 def set_transcript_text(vcon, text):
-    vcon["dialogs"][0]["transcript"]["text"] = text
+    vcon["dialog"][0]["transcript"]["text"] = text
 
 def get_languages(vcon):
-    return vcon["dialogs"][0]["transcript"]["languages"]
+    return vcon["dialog"][0]["transcript"]["languages"]
 
 def set_languages(vcon, langs):
-    vcon["dialogs"][0]["transcript"]["languages"] = langs
+    vcon["dialog"][0]["transcript"]["languages"] = langs
 
 def get_collection_name():
-    return secrets_utils.secrets.get('vcons_collection')
+    return secrets_utils.secrets.get('mongo_db', {}).get('vcons_collection')
 
 def get_collection():
     collection_name = get_collection_name()
     return mongo_utils.get_collection(collection_name)
 
 def set_transcript(vcon, transcript):
-    vcon["dialogs"][0]["transcript"]["text"] = transcript
+    vcon["dialog"][0]["transcript"]["text"] = transcript
     return vcon
 
 def set_transcript_dict(vcon, transcript_dict):
-    vcon["dialogs"][0]["transcript"] = transcript_dict
+    vcon["dialog"][0]["transcript"] = transcript_dict
     return vcon
 
 def set_done(vcon):
@@ -100,7 +98,7 @@ def batch_to_audio_data(batch):
     return audio_data_list
 
 def make_batches(vcons):
-    return binpacking.to_constant_volume(vcons, batch_bytes(), key=get_size)
+    return binpacking.to_constant_volume(vcons, gpu.batch_bytes(), key=get_size)
 
 def resample_vcon_one(vcon):
     audio_data_val = get_audio(vcon)
@@ -128,7 +126,7 @@ def downloading_filename(vcon):
 def cache_vcon_audio(vcon, sftp):
     source_filename = get_filename(vcon)
     dest_filename = downloading_filename(vcon)
-    download(source_filename, dest_filename, sftp)
+    sftp_utils.download(source_filename, dest_filename, sftp)
 
 def cache_vcon_audio_many(vcons, sftp):
     futures = []
@@ -174,17 +172,43 @@ def insert_many_maybe(vcons):
 
 def get_by_filename(filename):
     collection = get_collection()
-    return collection.find_one({"dialogs.0.filename": filename})
+    return collection.find_one({"dialog.0.filename": filename})
 
 def exists_by_filename(filename):
     return get_by_filename(filename) is not None
 
+def create(url, file_size=None):
+    with suppress_output():
+        vcon_obj = Vcon.build_new()
+        party = Party(name="Unknown", role="participant")
+        vcon_obj.add_party(party)
+        now = datetime.datetime.now(datetime.timezone.utc)
+        mimetype, _ = mimetypes.guess_type(url)
+        dialog = Dialog(
+            type="audio",
+            start=now.isoformat(),
+            parties=[0],
+            originator=0,
+            mimetype=mimetype,
+            filename=url,
+            body=None,
+            encoding=None
+        )
+        vcon_obj.add_dialog(dialog)
+        vcon = vcon_obj.to_dict()
+        vcon["size"] = file_size
+        set_transcript_dict(vcon, {})
+        return vcon
+
 def discover(url):
-    sftp = connect(url)
+    sftp = sftp_utils.connect(url)
+    parsed = sftp_utils.parse_url(url)
+    path = parsed["path"]
+    print(parsed)
     vcons = []
-    for filename in sftp_utils.get_all_filenames(url, sftp):
+    for filename in sftp_utils.get_all_filenames(path, sftp):
         if not exists_by_filename(filename):
-            vcon = create(filename, sftp.file_size(filename, sftp))
+            vcon = create(filename, sftp_utils.file_size(filename, sftp))
             vcons.append(vcon)
     insert_many_maybe(vcons)
 
@@ -251,29 +275,6 @@ def update_vcons_on_db(vcons):
     thread = threading.Thread(target=collection.bulk_write, args=(operations,))
     thread.start()
 
-def create(url, file_size=None):
-    with suppress_output():
-        vcon_obj = Vcon.build_new()
-        party = Party(name="Unknown", role="participant")
-        vcon_obj.add_party(party)
-        now = datetime.datetime.now(datetime.timezone.utc)
-        mimetype, _ = mimetypes.guess_type(url)
-        dialog = Dialog(
-            type="audio",
-            start=now.isoformat(),
-            parties=[0],
-            originator=0,
-            mimetype=mimetype,
-            filename=url,
-            body=None,
-            encoding=None
-        )
-        vcon_obj.add_dialog(dialog)
-        vcon = vcon_obj.to_dict()
-        vcon["size"] = file_size
-        set_transcript_dict(vcon, {})
-        return vcon
-
 def delete_all():
     collection = get_collection()
     result = collection.delete_many({})
@@ -285,7 +286,7 @@ def load_and_print_all():
 
 def all_urls():
     collection = get_collection()
-    return [get_filename(vcon) for vcon in collection.find({"dialogs.0.filename": 1})]
+    return [get_filename(vcon) for vcon in collection.find({"dialog.0.filename": 1})]
 
 def find_and_reserve():
     collection = get_collection()
