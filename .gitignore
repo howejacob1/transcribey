@@ -8,3 +8,4 @@ venv/*
 secrets.toml
 working_memory/*
 broken_wavs/
+cache/
