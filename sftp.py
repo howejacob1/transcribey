@@ -61,7 +61,7 @@ def _get_all_filenames_worker(root, transport):
             path = entry.filename
             base = os.path.basename(path)
             filename = os.path.join(root, base)
-            logging.info(f"Discovered {filename}")
+            logging.debug(f"Discovered {filename}")
             if is_dir(entry):
                 dirs.append(filename)
             else:
