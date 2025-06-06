@@ -19,7 +19,7 @@ from settings import hostname
 import sftp as sftp_utils
 from sftp import parse_url
 import gpu
-from utils import extension, suppress_output, wait_for_all_threads_to_finish, wait_for_one_thread_to_finish
+from utils import extension, suppress_output, wait_for_all_threads_to_finish, wait_for_one_thread_to_finish, is_audio_filename
 from vcon import Vcon
 from vcon.dialog import Dialog
 from vcon.party import Party
@@ -177,7 +177,8 @@ def get_by_filename(filename):
 def exists_by_filename(filename):
     return get_by_filename(filename) is not None
 
-def create(url, file_size=None):
+def create(url):
+    vcon = None
     with suppress_output():
         vcon_obj = Vcon.build_new()
         party = Party(name="Unknown", role="participant")
@@ -196,9 +197,8 @@ def create(url, file_size=None):
         )
         vcon_obj.add_dialog(dialog)
         vcon = vcon_obj.to_dict()
-        vcon["size"] = file_size
         set_transcript_dict(vcon, {})
-        return vcon
+    return vcon
 
 def discover(url):
     sftp = sftp_utils.connect_keep_trying(url)
@@ -206,14 +206,17 @@ def discover(url):
         parsed = sftp_utils.parse_url(url)
         path = parsed["path"]
         vcons = []
-        for filename in sftp_utils.get_all_filenames(path, sftp):
-            if not exists_by_filename(filename):
-                vcon = create(filename, sftp_utils.file_size(filename, sftp))
-                vcons.append(vcon)
+        for filename, size in sftp_utils.get_all_filenames(path, sftp):
+            if is_audio_filename(filename):
+                if not exists_by_filename(filename):
+                    vcon = create(filename)
+                    vcon["size"] = size
+                    vcons.append(vcon)
         insert_many_maybe(vcons)
     finally:
         sftp.close()
     
+    logging.info(f"Discover complete. {len(vcons)} vcons discovered.")
 
 def start_discover(url):
     discover_thread = threading.Thread(target=discover, args=(url,), daemon=True)

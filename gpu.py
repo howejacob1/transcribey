@@ -15,11 +15,9 @@ def tensor_on_cpu(tensor):
     return tensor.device.type == "cpu"
 
 def move_to_gpu(tensor):
-    if we_have_a_gpu():
-        if tensor_on_cpu(tensor):
-            tensor = tensor.to(get_device(), non_blocking=True)
-            tensor = tensor.pin_memory()
-            tensor = tensor.contiguous()
+    if we_have_a_gpu() and tensor_on_cpu(tensor):
+        tensor = tensor.pin_memory()
+        tensor = tensor.to(get_device(), non_blocking=True)
     return tensor
 
 def move_to_gpu_maybe(tensor):

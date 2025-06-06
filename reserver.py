@@ -12,14 +12,16 @@ def actually_start(sftp_url, vcons_ready_queue):
             sftp = connect_keep_trying(sftp_url)
         bytes_to_reserve = cache.bytes_to_reserve()
         if bytes_to_reserve > 0:
-            try:
-                vcons = vcon.find_and_reserve_many(bytes_to_reserve)
-                if vcons:
-                    vcon.cache_vcon_audio_many(vcons, sftp)
-                    vcons_ready_queue.put(vcons)
-            except Exception as e:
-                logging.info(f"Failed to connect in reserver_thread: {e}")
-                sftp = None
+            # try:print()
+            print(f"=======================WARNING RESTORE TRY")
+            vcons = vcon.find_and_reserve_many(bytes_to_reserve)
+            if vcons:
+                print(f"Reserving {len(vcons)} vcons")
+                vcon.cache_vcon_audio_many(vcons, sftp)
+                vcons_ready_queue.put(vcons)
+            # except Exception as e:
+            #     logging.info(f"Failed to connect in reserver_thread: {e}")
+            #     sftp = None
         time.sleep(1)
 
 def start(sftp_url, vcons_ready_queue):

@@ -123,3 +123,7 @@ def delete_files_in_dir(dir):
 
 def num_cores():
     return os.cpu_count()
+
+def is_audio_filename(filename):
+    ext = extension(filename)
+    return ext in [".wav", ".mp3", ".ogg", ".m4a", ".flac", ".aac", ".wma", ".aiff", ".au", ".raw", ".pcm"]

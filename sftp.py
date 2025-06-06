@@ -32,14 +32,13 @@ def connect_keep_trying(url):
         try:
             return connect(url)
         except Exception as e:
-            time.sleep(5)
+            time.sleep(1)
 
 def file_size(filename, sftp):
     return sftp.stat(filename).st_size
 
-def download(url, local_path, sftp):
-    parsed = parse_url(url)
-    return sftp.get(parsed["path"], local_path)
+def download(remote_path, local_path, sftp):
+    return sftp.get(remote_path, local_path)
 
 def is_dir(path):
     return path.st_mode & 0o040000
@@ -57,6 +56,7 @@ def _get_all_filenames_worker(root, transport):
         all_entries = sftp.listdir_attr(root)
         files = []
         dirs = []
+        sizes = []
         for entry in all_entries:
             path = entry.filename
             base = os.path.basename(path)
@@ -66,12 +66,13 @@ def _get_all_filenames_worker(root, transport):
                 dirs.append(filename)
             else:
                 files.append(filename)
-        return files, dirs
+                sizes.append(entry.st_size)
+        return files, dirs, sizes
     finally:
         sftp.close()
 
 # filthy AI functions
-def get_all_filenames(root, sftp, max_workers=4):
+def get_all_filenames(root, sftp, max_workers=settings.max_discover_workers):
     logging.info(f"Getting all filenames from {root} using {max_workers} workers")
     transport = sftp.sock.get_transport()
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
@@ -80,9 +81,9 @@ def get_all_filenames(root, sftp, max_workers=4):
             done, futures = wait(futures, return_when=FIRST_COMPLETED)
             for future in done:
                 try:
-                    files, dirs = future.result()
-                    for f in files:
-                        yield f
+                    files, dirs, sizes = future.result()
+                    for filename, size in zip(files, sizes):
+                        yield filename, size
                     for d in dirs:
                         futures.add(executor.submit(_get_all_filenames_worker, d, transport))
                 except Exception as exc:
