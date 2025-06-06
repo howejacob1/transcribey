@@ -201,16 +201,19 @@ def create(url, file_size=None):
         return vcon
 
 def discover(url):
-    sftp = sftp_utils.connect(url)
-    parsed = sftp_utils.parse_url(url)
-    path = parsed["path"]
-    print(parsed)
-    vcons = []
-    for filename in sftp_utils.get_all_filenames(path, sftp):
-        if not exists_by_filename(filename):
-            vcon = create(filename, sftp_utils.file_size(filename, sftp))
-            vcons.append(vcon)
-    insert_many_maybe(vcons)
+    sftp = sftp_utils.connect_keep_trying(url)
+    try:
+        parsed = sftp_utils.parse_url(url)
+        path = parsed["path"]
+        vcons = []
+        for filename in sftp_utils.get_all_filenames(path, sftp):
+            if not exists_by_filename(filename):
+                vcon = create(filename, sftp_utils.file_size(filename, sftp))
+                vcons.append(vcon)
+        insert_many_maybe(vcons)
+    finally:
+        sftp.close()
+    
 
 def start_discover(url):
     discover_thread = threading.Thread(target=discover, args=(url,), daemon=True)

@@ -46,7 +46,13 @@ def is_dir(path):
 
 # filthy AI functions
 def _get_all_filenames_worker(root, transport):
-    sftp = paramiko.SFTPClient.from_transport(transport)
+    sftp = None
+    while True:
+        try:
+            sftp = paramiko.SFTPClient.from_transport(transport)
+            break
+        except Exception as e:
+            continue
     try:
         all_entries = sftp.listdir_attr(root)
         files = []
