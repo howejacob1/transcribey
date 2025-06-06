@@ -4,7 +4,7 @@ import time
 from urllib.parse import urlparse
 import paramiko
 import settings
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor, as_completed, wait, FIRST_COMPLETED
 
 def parse_url(sftp_url):
     parsed = urlparse(sftp_url)
@@ -32,7 +32,7 @@ def connect_keep_trying(url):
         try:
             return connect(url)
         except Exception as e:
-            time.sleep(1)
+            time.sleep(5)
 
 def file_size(filename, sftp):
     return sftp.stat(filename).st_size
@@ -44,67 +44,40 @@ def download(url, local_path, sftp):
 def is_dir(path):
     return path.st_mode & 0o040000
 
-def ls(path, sftp):
-    return sftp.listdir_attr(path)
-
-def get_all_filenames_sequential(root, sftp):
-    """
-    Recursively lists all filenames in a directory on SFTP, non-parallel.
-    """
-    all_files = []
-    dirs_to_process = [root]
-    while dirs_to_process:
-        current_dir = dirs_to_process.pop(0)
-        try:
-            for item in ls(current_dir, sftp):
-                path = os.path.join(current_dir, item.filename)
-                if is_dir(item):
-                    dirs_to_process.append(path)
-                else:
-                    all_files.append(path)
-        except Exception as e:
-            logging.error(f"Error listing {current_dir}: {e}")
-    return all_files
-
 # filthy AI functions
-def _get_all_filenames_worker(root, sftp):
-    """
-    Worker function to list files in a directory on SFTP.
-    This function is intended to be run in a thread pool.
-    It's not used in the new implementation but kept for reference.
-    """
+def _get_all_filenames_worker(root, transport):
+    sftp = paramiko.SFTPClient.from_transport(transport)
     try:
-        all_paths = ls(root, sftp)
+        all_entries = sftp.listdir_attr(root)
         files = []
         dirs = []
-        for path in all_paths:
-            base = path.filename
+        for entry in all_entries:
+            path = entry.filename
+            base = os.path.basename(path)
             filename = os.path.join(root, base)
-            if is_dir(path):
+            logging.info(f"Discovered {filename}")
+            if is_dir(entry):
                 dirs.append(filename)
             else:
                 files.append(filename)
         return files, dirs
-    except Exception as e:
-        logging.error(f"Error in worker for dir {root}: {e}")
-        return [], []
+    finally:
+        sftp.close()
 
 # filthy AI functions
-def get_all_filenames(root, sftp, max_workers=10):
-    logging.info(f"Getting all filenames from {root}")
-    
-    dirs_to_process = [root]
-    
-    while dirs_to_process:
-        current_dir = dirs_to_process.pop(0)
-        logging.info(f"Processing directory: {current_dir}")
-        try:
-            items = ls(current_dir, sftp)
-            for item in items:
-                path = os.path.join(current_dir, item.filename)
-                if is_dir(item):
-                    dirs_to_process.append(path)
-                else:
-                    yield path
-        except Exception as e:
-            logging.error(f"Could not list directory {current_dir}: {e}")
+def get_all_filenames(root, sftp, max_workers=4):
+    logging.info(f"Getting all filenames from {root} using {max_workers} workers")
+    transport = sftp.sock.get_transport()
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = {executor.submit(_get_all_filenames_worker, root, transport)}
+        while futures:
+            done, futures = wait(futures, return_when=FIRST_COMPLETED)
+            for future in done:
+                try:
+                    files, dirs = future.result()
+                    for f in files:
+                        yield f
+                    for d in dirs:
+                        futures.add(executor.submit(_get_all_filenames_worker, d, transport))
+                except Exception as exc:
+                    logging.error(f"A worker generated an exception: {exc}")
