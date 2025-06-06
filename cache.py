@@ -1,11 +1,7 @@
-import settings
-from utils import dir_size_bytes, ensure_dir_exists, delete_files_in_dir
 import os
-from settings import cache_dir, processing_dir, downloading_dir
-
-def init():
-    ensure_dir_exists(cache_dir)
-    ensure_dir_exists(processing_dir)
+import settings
+from settings import cache_dir, downloading_dir, processing_dir
+from utils import dir_size_bytes, ensure_dir_exists, delete_files_in_dir
 
 def cache_size_bytes():
     return dir_size_bytes(cache_dir)
@@ -42,6 +38,10 @@ def clear_downloading():
 def clear():
     clear_processing()
     clear_downloading()
+
+def init():
+    ensure_dir_exists(cache_dir)
+    ensure_dir_exists(processing_dir)
 
 def bytes_to_reserve():
     return settings.cache_size_bytes - cache_size_bytes()

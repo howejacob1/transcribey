@@ -1,8 +1,10 @@
 import os
-from contextlib import contextmanager
-import torch
-from urllib.parse import urlparse
+import logging
+import time
 import socket
+from contextlib import contextmanager
+from urllib.parse import urlparse
+import torch
 
 def get_all_filenames(directory):
     """
@@ -42,12 +44,6 @@ def suppress_output(should_suppress=True):
     else:
         yield
 
-def hostname():
-    """
-    Returns the hostname of the current machine.
-    """
-    return socket.gethostname()
-
 def get_ipv4_address():
     """
     Returns the primary IPv4 address of the current machine.
@@ -74,7 +70,7 @@ def seconds_to_days(seconds):
     return seconds_to_hours(seconds) / 24
 
 def seconds_to_weeks(seconds):
-    return seconds_to_days /7
+    return seconds_to_days(seconds) / 7
 
 def seconds_to_months(seconds):
     return seconds_to_weeks(seconds)/4

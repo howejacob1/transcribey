@@ -1,12 +1,12 @@
 import os
-import torchaudio
-import binpacking
-import gpu
-from gpu import we_have_a_gpu
-import settings 
-import torch
 from concurrent.futures import ThreadPoolExecutor, as_completed
+import torch
+import torchaudio
+import gpu
+import settings
+from gpu import move_to_gpu_maybe
 from utils import num_cores
+import binpacking
 
 def get_duration(filename):
     """
@@ -23,15 +23,8 @@ def is_valid(file_path):
     duration = get_duration(file_path)
     return duration is not None
 
-def move_to_gpu_maybe(audio):
-    if we_have_a_gpu():
-        gpu.move_to_gpu_maybe(audio)
-        audio.to(gpu.get_device(), non_blocking=True)
-
 def load_to_cpu(filename):
     audio, sample_rate = torchaudio.load(filename)
-    audio.pin_memory()
-    audio.contiguous()
     return audio, sample_rate
 
 def resample_audio(audio, sample_rate):
@@ -46,7 +39,7 @@ def resample_audio(audio, sample_rate):
 def get_size(audio):
     return audio.element_size() * audio.numel()
 
-def audio_is_mono(audio_data):
+def is_mono(audio_data):
     return audio_data.shape[0] == 1
 
 def convert_to_mono(audio_data):
@@ -55,11 +48,6 @@ def convert_to_mono(audio_data):
 
 def cpu_cores_for_mono_conversion():
     return num_cores() - 2
-
-def apply_vad(audio_data, vad):
-    target_sample_rate = settings.sample_rate
-    vad = torchaudio.transforms.Vad(sample_rate=target_sample_rate, trigger_level=0.5)
-    return vad(audio_data)
 
 def cpu_cores_for_vad():
     return num_cores() - 2

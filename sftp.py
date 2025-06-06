@@ -1,7 +1,7 @@
 import os
 import time
-import paramiko
 from urllib.parse import urlparse
+import paramiko
 
 def parse_url(sftp_url):
     parsed = urlparse(sftp_url)
@@ -13,16 +13,14 @@ def parse_url(sftp_url):
             "port": parsed.port or 22,
             "path": parsed.path}
 
-def connect_raw(hostname, port, username, ssh):
-    return ssh.connect(hostname, port=port, username=username)
+def connect_raw(hostname, port, username, client):
+    return client.connect(hostname, port=port, username=username)
 
 def connect(url):
     client = paramiko.SSHClient()
     client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
     url_parsed = parse_url(url)
-    client = connect_raw(url_parsed["hostname"], 
-                         url_parsed["port"], 
-                         url_parsed["username"])
+    connect_raw(url_parsed["hostname"], url_parsed["port"], url_parsed["username"], client)
     sftp = client.open_sftp()
     return sftp
 
@@ -34,14 +32,10 @@ def connect_keep_trying(url):
             time.sleep(1)
 
 def file_size(url, sftp):
-    """ 
-    Return the size of a file given a local path or SFTP URL.
-    If sftp_client is provided, it will be used for SFTP URLs.
-    """
     parsed = parse_url(url)
     return sftp.stat(parsed["path"]).st_size
 
-def download_raw(url, local_path, sftp):
+def download(url, local_path, sftp):
     parsed = parse_url(url)
     return sftp.get(parsed["path"], local_path)
 
