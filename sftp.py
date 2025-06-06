@@ -17,12 +17,15 @@ def parse_url(sftp_url):
             "path": parsed.path}
 
 def connect_raw(hostname, port, username, client):
-    return client.connect(hostname, port=port, username=username)
+    logging.info(f"Connecting to {username}@{hostname}:{port}")
+    client.connect(hostname, port=port, username=username, timeout=5)
+    logging.info(f"!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!Done, connected to {username}@{hostname}:{port}")
 
 def connect(url):
     client = paramiko.SSHClient()
     client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
     url_parsed = parse_url(url)
+    
     connect_raw(url_parsed["hostname"], url_parsed["port"], url_parsed["username"], client)
     sftp = client.open_sftp()
     return sftp
@@ -30,7 +33,8 @@ def connect(url):
 def connect_keep_trying(url):
     while True:
         try:
-            return connect(url)
+            sftp = connect(url)
+            return sftp
         except Exception as e:
             time.sleep(1)
 
@@ -38,7 +42,7 @@ def file_size(filename, sftp):
     return sftp.stat(filename).st_size
 
 def download(remote_path, local_path, sftp):
-    return sftp.get(remote_path, local_path)
+    sftp.get(remote_path, local_path)
 
 def is_dir(path):
     return path.st_mode & 0o040000
@@ -72,7 +76,7 @@ def _get_all_filenames_worker(root, transport):
         sftp.close()
 
 # filthy AI functions
-def get_all_filenames(root, sftp, max_workers=settings.max_discover_workers):
+def get_all_filenames_threaded(root, sftp, max_workers=settings.max_discover_workers):
     logging.info(f"Getting all filenames from {root} using {max_workers} workers")
     transport = sftp.sock.get_transport()
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
@@ -88,3 +92,19 @@ def get_all_filenames(root, sftp, max_workers=settings.max_discover_workers):
                         futures.add(executor.submit(_get_all_filenames_worker, d, transport))
                 except Exception as exc:
                     logging.error(f"A worker generated an exception: {exc}")
+
+def get_all_filenames(root, sftp):
+    queue = [root]
+    while queue:
+        current_dir = queue.pop(0)
+        try:
+            entries = sftp.listdir_attr(current_dir)
+        except Exception as e:
+            logging.error(f"Failed to list directory {current_dir}: {e}")
+            continue
+        for entry in entries:
+            filename = os.path.join(current_dir, entry.filename)
+            if is_dir(entry):
+                queue.append(filename)
+            else:
+                yield filename, entry.st_size

@@ -1,6 +1,7 @@
 import torchaudio
 import settings
 from utils import num_cores
+import logging
 
 def get_duration(filename):
     """
@@ -14,8 +15,12 @@ def get_duration(filename):
         return None
 
 def is_valid(file_path):
-    duration = get_duration(file_path)
-    return duration is not None
+    try:
+        duration = get_duration(file_path)
+        return duration is not None
+    except Exception as e:
+        logging.info(f"Error in is_valid: {e}")
+        return False
 
 def load_to_cpu(filename):
     audio, sample_rate = torchaudio.load(filename)
@@ -41,6 +46,9 @@ def convert_to_mono(audio_data):
     return audio_data
 
 def cpu_cores_for_mono_conversion():
+    return num_cores() - 2
+
+def cpu_cores_for_resampling():
     return num_cores() - 2
 
 def cpu_cores_for_vad():

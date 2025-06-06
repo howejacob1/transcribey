@@ -13,13 +13,13 @@ hostname = socket.gethostname()
 en_model_name = "nvidia/parakeet-tdt_ctc-110m"
 non_en_model_name = "nvidia/canary-1b-flash"
 lang_id_model_name = "openai/whisper-tiny"
-gpu_ram_unusable = 5*1024**3 # 5GB
-max_download_threads = 4
+gpu_ram_unusable = 3*1024**3 # 5GB
+max_download_threads = 1
 gc_limit_bytes = 1024**3
 
 # SFTP connection settings for make_vcons_from_sftp.py
-sftp_url = "sftp://bantaim@192.168.1.103:/home/bantaim/conserver/openslr-12/"
+sftp_url = "sftp://bantaim@127.0.0.1:22/home/bantaim/conserver/fake_wavs_cute/"
 sample_rate = 16000
-max_discover_workers = 4
+max_discover_workers = 1
 
 # MongoDB connection settings

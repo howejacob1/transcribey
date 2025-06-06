@@ -14,16 +14,26 @@ def tensor_on_gpu(tensor):
 def tensor_on_cpu(tensor):
     return tensor.device.type == "cpu"
 
-def move_to_gpu(tensor):
-    if we_have_a_gpu() and tensor_on_cpu(tensor):
-        tensor = tensor.pin_memory()
-        tensor = tensor.to(get_device(), non_blocking=True)
-    return tensor
-
-def move_to_gpu_maybe(tensor):
+def move_to_gpu(obj):
     if we_have_a_gpu():
-        tensor = move_to_gpu(tensor)
-    return tensor
+        device = get_device()
+        move_to_gpu = False
+        if isinstance(obj, torch.nn.Module):
+            # Check if the model is already on the GPU
+            if not next(obj.parameters()).is_cuda:
+                move_to_gpu = True
+        elif isinstance(obj, torch.Tensor):
+            if tensor_on_cpu(obj):
+                obj = obj.pin_memory()
+                move_to_gpu = True
+        if move_to_gpu:
+            obj = obj.to(device, non_blocking=True)
+    return obj
+
+def move_to_gpu_maybe(obj):
+    if we_have_a_gpu():
+        obj = move_to_gpu(obj)
+    return obj
 
 def gpu_ram_total_bytes():
     return torch.cuda.get_device_properties(torch.cuda.current_device()).total_memory

@@ -5,7 +5,7 @@ from transformers import AutoModelForSpeechSeq2Seq, AutoProcessor
 import settings
 from gpu import move_to_gpu_maybe, gc_collect_maybe
 from utils import suppress_output
-import vcon_utils as vcon
+import vcon_utils
 
 def whisper_token_to_language(token):
     return whisper_token_languages[whisper_token_ids.index(token)]
@@ -13,8 +13,8 @@ def whisper_token_to_language(token):
 def load_whisper_tiny_raw():
     with suppress_output(should_suppress=False):
         model_name = "openai/whisper-tiny"
-        processor = AutoProcessor.from_pretrained(model_name)
-        model = AutoModelForSpeechSeq2Seq.from_pretrained(model_name)
+        processor = AutoProcessor.from_pretrained(model_name, torch_dtype=torch.float16)
+        model = AutoModelForSpeechSeq2Seq.from_pretrained(model_name, torch_dtype=torch.float16)
         return (model, processor)
 
 def load_whisper_tiny():
@@ -26,7 +26,6 @@ def load_whisper_tiny():
     print("Loading whisper tiny.")
     model, processor = load_whisper_tiny_raw()
     model = move_to_gpu_maybe(model)
-    processor = move_to_gpu_maybe(processor)
     print(f"Whisper tiny loaded in {time.time() - total_start_time:.2f} seconds total")
     return (model, processor)
 
@@ -34,6 +33,7 @@ def load_nvidia_raw(model_name):
     with suppress_output(should_suppress=False):
         nemo_asr = importlib.import_module("nemo.collections.asr")
         model = nemo_asr.models.ASRModel.from_pretrained(model_name=model_name)
+        model.to(torch.float16)
         return model
 
 def load_nvidia(model_name):
@@ -55,8 +55,9 @@ whisper_start_transcription_token_id = 50258
 def identify_languages(all_vcons_batched, model, processor):
     vcons = []
     for vcon_batch in all_vcons_batched:
-        audio_data_batch = vcon.batch_to_audio_data(vcon_batch)
-        inputs = processor(audio_data_batch, sampling_rate=settings.sample_rate, return_tensors="pt", padding=True)
+        audio_data_batch = vcon_utils.batch_to_audio_data(vcon_batch)
+        inputs = processor(audio_data_batch, sampling_rate=settings.sample_rate, padding=True)
+        time.sleep(2)
         inputs = move_to_gpu_maybe(inputs)
         input_features = inputs.input_features
         input_features = move_to_gpu_maybe(input_features)
@@ -67,14 +68,14 @@ def identify_languages(all_vcons_batched, model, processor):
         logits = logits[:, 0, :]
         valid_counter = 0
         lang_logits = logits[valid_counter, whisper_token_ids]
-        lang_probs = torch.softmax(lang_logits, dim=-1).numpy()
+        lang_probs = torch.softmax(lang_logits, dim=-1).cpu().numpy()
         audio_languages_detected = [whisper_tokens[j] for j, prob in enumerate(lang_probs) if prob >= settings.lang_detect_threshold]
         languages = None
         if not audio_languages_detected:
             max_prob_idx = lang_probs.argmax()
             languages = [whisper_tokens[max_prob_idx]]
         for vcon in vcon_batch:
-            vcon.set_languages(languages)
+            vcon_utils.set_languages(vcon, languages)
             vcons.append(vcon)
         gc_collect_maybe()
     return vcons
@@ -84,7 +85,7 @@ def transcribe_many(vcons_batched, model):
     for vcon_batch in vcons_batched:
         all_transcriptions = model.transcribe(vcon_batch)
         for vcon_obj, transcription in zip(vcon_batch, all_transcriptions):
-            vcon.set_transcript(vcon_obj, transcription)
+            vcon_utils.set_transcript(vcon_obj, transcription)
             vcons.append(vcon_obj)
         gc_collect_maybe()
     return vcons

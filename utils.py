@@ -99,7 +99,7 @@ def ensure_dir_exists(path):
         os.makedirs(path)
 
 def extension(filename):
-    return os.path.splitext(filename)[1]
+    return os.path.splitext(filename)[1][1:]
 
 def what_directory_are_we_in():
     return os.getcwd()
@@ -126,4 +126,25 @@ def num_cores():
 
 def is_audio_filename(filename):
     ext = extension(filename)
-    return ext in [".wav", ".mp3", ".ogg", ".m4a", ".flac", ".aac", ".wma", ".aiff", ".au", ".raw", ".pcm"]
+    return ext in ["wav", "mp3", "ogg", "m4a", "flac", "aac", "wma", "aiff", "au", "raw", "pcm"]
+
+import sys
+import traceback
+import threading
+
+def dump_thread_stacks():
+    """Dumps the stack trace of all running threads to the console."""
+    print(f"\n--- Thread Stack Dump ---")
+    
+    # A map from thread ID to thread name
+    thread_names = {th.ident: th.name for th in threading.enumerate()}
+    
+    for thread_id, frame in sys._current_frames().items():
+        thread_name = thread_names.get(thread_id, f"Thread-{thread_id}")
+        print(f"\n--- Stack for {thread_name} (ID: {thread_id}) ---")
+        
+        # The 'traceback' module formats the stack frame into a readable string
+        stack_trace = "".join(traceback.format_stack(frame))
+        print(stack_trace.strip())
+        
+    print("--- End of Thread Stack Dump ---\n")

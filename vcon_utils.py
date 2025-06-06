@@ -32,24 +32,28 @@ def get_filename(vcon):
 
 def set_filename(vcon, filename):
     vcon["dialog"][0]["filename"] = filename
+    return vcon
 
 def get_audio(vcon):
     return vcon["dialog"][0]["body"]
 
 def set_audio(vcon, audio):
     vcon["dialog"][0]["body"] = audio
+    return vcon
 
 def get_transcript_text(vcon):
     return vcon["dialog"][0]["transcript"]["text"]
 
 def set_transcript_text(vcon, text):
     vcon["dialog"][0]["transcript"]["text"] = text
+    return vcon
 
 def get_languages(vcon):
     return vcon["dialog"][0]["transcript"]["languages"]
 
 def set_languages(vcon, langs):
     vcon["dialog"][0]["transcript"]["languages"] = langs
+    return vcon
 
 def get_collection_name():
     return secrets_utils.secrets.get('mongo_db', {}).get('vcons_collection')
@@ -76,7 +80,7 @@ def is_mono(vcon):
 def convert_to_mono_maybe(vcon):
     if not is_mono(vcon):
         audio_data_val = audio.convert_to_mono(get_audio(vcon))
-        set_audio(vcon, audio_data_val)
+        vcon = set_audio(vcon, audio_data_val)
     return vcon
 
 def convert_to_mono_many(vcons):
@@ -84,8 +88,7 @@ def convert_to_mono_many(vcons):
     vcons_mono_futures = []
     with ThreadPoolExecutor(max_workers=audio.cpu_cores_for_mono_conversion()) as executor:
         for vcon in vcons:
-            if not is_mono(vcon):
-                vcons_mono_futures.append(executor.submit(convert_to_mono_maybe, vcon))
+            vcons_mono_futures.append(executor.submit(convert_to_mono_maybe, vcon))
         for future in as_completed(vcons_mono_futures):
             vcons_mono.append(future.result())
     return vcons_mono
@@ -103,19 +106,21 @@ def make_batches(vcons):
 def resample_vcon_one(vcon):
     audio_data_val = get_audio(vcon)
     sample_rate_val = vcon["sample_rate"]
-    resampled_audio_data = audio.resample(audio_data_val, sample_rate_val)
+    resampled_audio_data = audio.resample_audio(audio_data_val, sample_rate_val)
     set_audio(vcon, resampled_audio_data)
     return vcon
 
 def resample_many(vcons):
+    print(f"Resampling {len(vcons)} vcons.")
     futures = []
     resampled_vcons = []
-    with ThreadPoolExecutor() as executor:
+    with ThreadPoolExecutor(max_workers=audio.cpu_cores_for_resampling()) as executor:
         for vcon in vcons:
             futures.append(executor.submit(resample_vcon_one, vcon))
         for future in as_completed(futures):
             vcon_val = future.result()
             resampled_vcons.append(vcon_val)
+    print(f"Resampled vcons: {len(resampled_vcons)}")
     return resampled_vcons
 
 def downloading_filename(vcon):
@@ -129,15 +134,21 @@ def cache_vcon_audio(vcon, sftp):
     sftp_utils.download(source_filename, dest_filename, sftp)
 
 def cache_vcon_audio_many(vcons, sftp):
-    futures = []
-    with ThreadPoolExecutor(max_workers=settings.max_download_threads) as executor:
-        for vcon in vcons:
-            futures.append(executor.submit(cache_vcon_audio, vcon, sftp))
-        for future in as_completed(futures):
-            future.result()
+    total_count = len(vcons)
+    count = 0
+    for vcon in vcons:
+        cache_vcon_audio(vcon, sftp)
+        count += 1
+        print(f"Cached {count} of {total_count}")
+        if count % 50 == 0:
+            print(f"Cached {count/total_count*100:.2f}% of vcons")
+    print(f"Finished caching {total_count} vcons.")
+    return vcons
 
 def processing_filename(vcon):
-    return cache.filename_to_processing_filename(vcon["uuid"])
+    vcon_filename = get_filename(vcon)
+    audio_extension = extension(vcon_filename)
+    return cache.filename_to_processing_filename(vcon["uuid"] + "." + audio_extension)
 
 def mark_vcon_as_invalid(vcon):
     collection = get_collection()
@@ -153,13 +164,15 @@ def is_audio_valid(vcon):
 def process_invalids(vcons):
     vcons_valid = []
     for vcon in vcons:
-        if not is_audio_valid(vcon):
+        filename = processing_filename(vcon)
+        if not audio.is_valid(filename):
             vcon["done"] = True
             vcon["corrupt"] = True
             mark_vcon_as_invalid(vcon)
             remove_vcon_from_processing(vcon)
         else:
             vcons_valid.append(vcon)
+    print(f"Valid vcons: {len(vcons_valid)}")
     return vcons_valid
 
 def unmarked_all_reserved():
@@ -201,29 +214,37 @@ def create(url):
     return vcon
 
 def discover(url):
-    sftp = sftp_utils.connect_keep_trying(url)
     try:
+        sftp = sftp_utils.connect_keep_trying(url)
         parsed = sftp_utils.parse_url(url)
         path = parsed["path"]
         vcons = []
+        count = 0
         for filename, size in sftp_utils.get_all_filenames(path, sftp):
             if is_audio_filename(filename):
                 if not exists_by_filename(filename):
+                    count += 1
                     vcon = create(filename)
                     vcon["size"] = size
                     vcons.append(vcon)
+                    if count % 50 == 0:
+                        logging.info(f"discovered {count} vcons")
+        logging.info(f"inserting {len(vcons)} vcons")
         insert_many_maybe(vcons)
+        logging.info(f"done inserting {len(vcons)} vcons")
     finally:
-        sftp.close()
+        if sftp:
+            sftp.close()
     
     logging.info(f"Discover complete. {len(vcons)} vcons discovered.")
 
 def start_discover(url):
-    discover_thread = threading.Thread(target=discover, args=(url,), daemon=True)
+    discover_thread = threading.Thread(target=discover, args=(url,), daemon=False)
     discover_thread.start()
     return discover_thread
 
 def load_processing_into_ram(vcons):
+    logging.info(f"Loading {len(vcons)} vcons into RAM.")
     for vcon in vcons:
         filename = processing_filename(vcon)
         audio_data_val, sample_rate_val = audio.load_to_cpu(filename)
@@ -231,14 +252,21 @@ def load_processing_into_ram(vcons):
         vcon["sample_rate"] = sample_rate_val
     return vcons
 
+def apply_vad_one(vcon, vad):
+    audio_data = get_audio(vcon)
+    vad_data = vad(audio_data)
+    set_audio(vcon, vad_data)
+    return vcon
+
 def apply_vad_many(vcons):
     vcons_vad = []
     vcons_vad_futures = []
+    logging.info(f"Applying VAD to {len(vcons)} vcons.")
     vad = torchaudio.transforms.Vad(sample_rate=settings.sample_rate, trigger_level=0.5)
     with ThreadPoolExecutor(max_workers=audio.cpu_cores_for_vad()) as executor:
         for vcon in vcons:
-            audio = get_audio(vcon)
-            vcons_vad_futures.append(executor.submit(vad, audio))
+            audio_data = get_audio(vcon)
+            vcons_vad_futures.append(executor.submit(apply_vad_one, vcon, vad))
         for future in as_completed(vcons_vad_futures):
             vcons_vad.append(future.result())
     return vcons_vad
@@ -278,17 +306,23 @@ def update_vcons_on_db(vcons):
         operations.append(ReplaceOne({"uuid": vcon_uuid_val}, 
                                      vcon,
                                      upsert=True))
-    thread = threading.Thread(target=collection.bulk_write, args=(operations,))
-    thread.start()
+    collection.bulk_write(operations)
+    # thread = threading.Thread(target=collection.bulk_write, args=(operations,))
+    # thread.start()
 
 def delete_all():
     collection = get_collection()
     result = collection.delete_many({})
     print(f"Deleted {result.deleted_count} documents from the collection.")
 
+def load_all():
+    collection = get_collection()
+    return list(collection.find())
+
 def load_and_print_all():
     collection = get_collection()
-    pprint(collection.find())
+    vcons = load_all()
+    pprint(vcons)
 
 def all_urls():
     collection = get_collection()
@@ -297,7 +331,7 @@ def all_urls():
 def find_and_reserve():
     collection = get_collection()
     result = collection.find_one_and_update(
-        {"done": {"$ne": True}},
+        {"done": {"$ne": True}, "processed_by": {"$exists": False}},
         {"$set": {"processed_by": settings.hostname}},
         return_document=True
     )
