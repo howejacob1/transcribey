@@ -101,11 +101,7 @@ def batch_to_audio_data(batch):
     return audio_data_list
 
 def make_batches(vcons):
-    batches =  binpacking.to_constant_volume(vcons, gpu.batch_bytes(), key=get_size)
-    for batch in batches:
-        print(f"Batch size: {len(batch)}")
-        print(f"number of batches: {len(batches)}")
-    return batches
+    return binpacking.to_constant_volume(vcons, gpu.batch_bytes(), key=get_size)
 
 def resample_vcon_one(vcon):
     audio_data_val = get_audio(vcon)
@@ -143,7 +139,6 @@ def cache_vcon_audio_many(vcons, sftp):
     for vcon in vcons:
         cache_vcon_audio(vcon, sftp)
         count += 1
-        print(f"Cached {count} of {total_count}")
         if count % 50 == 0:
             print(f"Cached {count/total_count*100:.2f}% of vcons")
     print(f"Finished caching {total_count} vcons.")
@@ -184,8 +179,9 @@ def unmarked_all_reserved():
     collection.update_many({"processed_by": settings.hostname, "done": {"$ne": True}}, {"$unset": {"processed_by": ""}})
 
 def insert_many_maybe(vcons):
-    collection = get_collection()
-    collection.insert_many(vcons)
+    if vcons:
+        collection = get_collection()
+        collection.insert_many(vcons)
 
 def get_by_filename(filename):
     collection = get_collection()
@@ -218,7 +214,7 @@ def create(url):
         print(vcon)
     return vcon
 
-def discover(url):
+def discover(url, keep_running):
     try:
         sftp = sftp_utils.connect_keep_trying(url)
         parsed = sftp_utils.parse_url(url)
@@ -226,6 +222,10 @@ def discover(url):
         vcons = []
         count = 0
         for filename, size in sftp_utils.get_all_filenames(path, sftp):
+            if not keep_running.is_set():
+                if sftp:
+                    sftp.close()
+                return
             if is_audio_filename(filename):
                 if not exists_by_filename(filename):
                     count += 1
@@ -243,8 +243,8 @@ def discover(url):
     
     logging.info(f"Discover complete. {len(vcons)} vcons discovered.")
 
-def start_discover(url):
-    discover_thread = threading.Thread(target=discover, args=(url,), daemon=False)
+def start_discover(url, keep_running):
+    discover_thread = threading.Thread(target=discover, args=(url, keep_running), daemon=False)
     discover_thread.start()
     return discover_thread
 

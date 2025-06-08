@@ -55,7 +55,7 @@ def gpu_ram_free_bytes():
 
 def batch_bytes():
     free_bytes = gpu_ram_free_bytes()
-    return free_bytes // 128
+    return free_bytes // 512
 
 def max_gpu_memory_usage():
     if torch.cuda.is_available():
@@ -82,5 +82,6 @@ def reset_gpu_memory_stats():
 def gc_collect_maybe():
     if we_have_a_gpu():
         if gpu_ram_free_bytes() < settings.gc_limit_bytes:
-            print
+            torch.cuda.empty_cache()
+            torch.cuda.synchronize()
             gc.collect()

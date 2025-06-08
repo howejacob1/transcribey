@@ -5,12 +5,13 @@ from utils import dump_thread_stacks
 import threading
 import time
 import logging
+import queue
 
-def actually_start(sftp_url, vcons_ready_queue, vcons_lock, once=False):
+def actually_start(sftp_url, vcons_ready_queue, vcons_lock, keep_running, once=False):
     logging.info(f"Starting reserver")
     try:
         sftp = None
-        while True:
+        while keep_running.is_set():
             if sftp is None:
                 try:
                     sftp = connect(sftp_url)
@@ -28,8 +29,15 @@ def actually_start(sftp_url, vcons_ready_queue, vcons_lock, once=False):
                     with vcons_lock:
                         vcon.cache_vcon_audio_many(vcons, sftp)
                         print(f"Finished caching {len(vcons)} vcons. Putting.")
-                        vcons_ready_queue.put(vcons)
+                        while keep_running.is_set():
+                            try:
+                                vcons_ready_queue.put(vcons, timeout=0.1)
+                                break
+                            except queue.Full:
+                                pass
                         print(f"!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!1Done putting {len(vcons)} vcons on queue.")
+            else:
+                time.sleep(1)
             
                 # except Exception as e:
                 #     logging.info(f"Error in reserver: {e}")
@@ -43,8 +51,8 @@ def actually_start(sftp_url, vcons_ready_queue, vcons_lock, once=False):
         if sftp is not None:
             sftp.close()
 
-def start(sftp_url, vcons_ready_queue, vcons_lock):
-    thread = threading.Thread(target=actually_start, args=(sftp_url,vcons_ready_queue, vcons_lock), daemon=False)
+def start(sftp_url, vcons_ready_queue, vcons_lock, keep_running):
+    thread = threading.Thread(target=actually_start, args=(sftp_url,vcons_ready_queue, vcons_lock, keep_running), daemon=False)
     thread.name = "reserver_thread"
     thread.start()
     return thread

@@ -14,7 +14,7 @@ def whisper_token_to_language(token):
     return whisper_token_languages[whisper_token_ids.index(token)]
 
 def load_whisper_tiny_raw():
-    with suppress_output(should_suppress=False):
+    with suppress_output(should_suppress=True):
         model_name = "openai/whisper-tiny"
         processor = AutoProcessor.from_pretrained(model_name)
         model = AutoModelForSpeechSeq2Seq.from_pretrained(model_name)
@@ -33,7 +33,7 @@ def load_whisper_tiny():
     return (model, processor)
 
 def load_nvidia_raw(model_name):
-    with suppress_output(should_suppress=False):
+    with suppress_output(should_suppress=True):
         nemo_asr = importlib.import_module("nemo.collections.asr")
         model = nemo_asr.models.ASRModel.from_pretrained(model_name=model_name)
         model.to(torch.float16)
@@ -55,10 +55,10 @@ whisper_token_languages = ['<|en|>', '<|zh|>', '<|de|>', '<|es|>', '<|ru|>', '<|
 whisper_token_ids = [50259, 50260, 50261, 50262, 50263, 50264, 50265, 50266, 50267, 50268, 50269, 50270, 50271, 50272, 50273, 50274, 50275, 50276, 50277, 50278, 50279, 50280, 50281, 50282, 50283, 50284, 50285, 50286, 50287, 50288, 50289, 50290, 50291, 50292, 50293, 50294, 50295, 50296, 50297, 50298, 50299, 50300, 50301, 50302, 50303, 50304, 50305, 50306, 50307, 50308, 50309, 50310, 50311, 50312, 50313, 50314, 50315, 50316, 50317, 50318, 50319, 50320, 50321, 50322, 50323, 50324, 50325, 50326, 50327, 50328, 50329, 50330, 50331, 50332, 50333, 50334, 50335, 50336, 50337, 50338, 50339, 50340, 50341, 50342, 50343, 50344, 50345, 50346, 50347, 50348, 50349, 50350, 50351, 50352, 50353, 50354, 50355, 50356, 50357]
 whisper_start_transcription_token_id = 50258
 
-def identify_languages(all_vcons_batched, model, processor):
+def identify_langauge_batch(vcon_batch, model, processor):
     vcons = []
-    for vcon_batch in all_vcons_batched:
-        vcon_utils.print_audio_duration_many(vcon_utils.unbatch(all_vcons_batched))
+    with torch.no_grad():
+        #vcon_utils.print_audio_duration_many(vcon_utils.unbatch(all_vcons_batched))
         audio_data_batch = vcon_utils.batch_to_audio_data(vcon_batch)
         audio_data_processed = []
         for audio_data in audio_data_batch:
@@ -80,46 +80,65 @@ def identify_languages(all_vcons_batched, model, processor):
         #     print(f"audio_data[{i}] type: {type(audio_data)}, shape: {getattr(audio_data, 'shape', None)}, dtype: {getattr(audio_data, 'dtype', None)}")
         #     audio_data_squeezed.append(audio_data)
         # Batch process
-        print(f"before processor gpu_ram_free_bytes: {gpu_ram_free_bytes()}")
+        #print(f"before processor gpu_ram_free_bytes: {gpu_ram_free_bytes()}")
         inputs = processor(audio_data_processed, sampling_rate=settings.sample_rate, return_tensors="pt", padding="max_length")
-        print(f"after processor, before move_to_gpu_maybe(inputs) gpu_ram_free_bytes: {gpu_ram_free_bytes()}")
+        #print(f"after processor, before move_to_gpu_maybe(inputs) gpu_ram_free_bytes: {gpu_ram_free_bytes()}")
         inputs = move_to_gpu_maybe(inputs)
-        print(f"after move_to_gpu_maybe, before move_to_gpu_maybe(input_features) gpu_ram_free_bytes: {gpu_ram_free_bytes()}")
+        #print(f"after move_to_gpu_maybe, before move_to_gpu_maybe(input_features) gpu_ram_free_bytes: {gpu_ram_free_bytes()}")
         input_features = inputs.input_features
         input_features = move_to_gpu_maybe(input_features)
-        print(f"after move_to_gpu_maybe(input_features), before move_to_gpu_maybe(decoder_input_ids) gpu_ram_free_bytes: {gpu_ram_free_bytes()}")
+        #print(f"after move_to_gpu_maybe(input_features), before move_to_gpu_maybe(decoder_input_ids) gpu_ram_free_bytes: {gpu_ram_free_bytes()}")
         decoder_input_ids = torch.tensor([[whisper_start_transcription_token_id]] * len(audio_data_processed))
-        print(f"after decoder_input_ids, before move_to_gpu_maybe(decoder_input_ids) gpu_ram_free_bytes: {gpu_ram_free_bytes()}")
+        #print(f"after decoder_input_ids, before move_to_gpu_maybe(decoder_input_ids) gpu_ram_free_bytes: {gpu_ram_free_bytes()}")
         decoder_input_ids = move_to_gpu_maybe(decoder_input_ids)
-        print(f"after move_to_gpu_maybe(decoder_input_ids), before model(input_features, decoder_input_ids=decoder_input_ids) gpu_ram_free_bytes: {gpu_ram_free_bytes()}")
-        with torch.no_grad():
+        #print(f"after move_to_gpu_maybe(decoder_input_ids), before model(input_features, decoder_input_ids=decoder_input_ids) gpu_ram_free_bytes: {gpu_ram_free_bytes()}")
+        with suppress_output(should_suppress=True):
             model_output = model(input_features, decoder_input_ids=decoder_input_ids)
-        print(f"after model(input_features, decoder_input_ids=decoder_input_ids), before logits gpu_ram_free_bytes: {gpu_ram_free_bytes()}")
+        #print(f"after model(input_features, decoder_input_ids=decoder_input_ids), before logits gpu_ram_free_bytes: {gpu_ram_free_bytes()}")
         logits = model_output.logits
-        print(f"after logits, before logits[:, 0, :] gpu_ram_free_bytes: {gpu_ram_free_bytes()}")
+        #print(f"after logits, before logits[:, 0, :] gpu_ram_free_bytes: {gpu_ram_free_bytes()}")
         logits = logits[:, 0, :]
-        print(f"after logits[:, 0, :], before for i, vcon in enumerate(vcon_batch) gpu_ram_free_bytes: {gpu_ram_free_bytes()}")
+        #print(f"after logits[:, 0, :], before for i, vcon in enumerate(vcon_batch) gpu_ram_free_bytes: {gpu_ram_free_bytes()}")
         for i, vcon in enumerate(vcon_batch):
-            print(f"after for i, vcon in enumerate(vcon_batch), before lang_logits gpu_ram_free_bytes: {gpu_ram_free_bytes()}")
+            #print(f"after for i, vcon in enumerate(vcon_batch), before lang_logits gpu_ram_free_bytes: {gpu_ram_free_bytes()}")
             lang_logits = logits[i, whisper_token_ids]
-            print(f"after lang_logits, before lang_probs gpu_ram_free_bytes: {gpu_ram_free_bytes()}")
+            #print(f"after lang_logits, before lang_probs gpu_ram_free_bytes: {gpu_ram_free_bytes()}")
             lang_probs = torch.softmax(lang_logits, dim=-1).cpu().detach().numpy()
-            print(f"after lang_probs, before audio_languages_detected gpu_ram_free_bytes: {gpu_ram_free_bytes()}")
+            #print(f"after lang_probs, before audio_languages_detected gpu_ram_free_bytes: {gpu_ram_free_bytes()}")
             audio_languages_detected = [whisper_tokens[j] for j, prob in enumerate(lang_probs) if prob >= settings.lang_detect_threshold]
-            print(f"after audio_languages_detected, before audio_languages_detected gpu_ram_free_bytes: {gpu_ram_free_bytes()}")
+            #print(f"after audio_languages_detected, before audio_languages_detected gpu_ram_free_bytes: {gpu_ram_free_bytes()}")
             if audio_languages_detected:
                 languages = audio_languages_detected
             else:
                 max_prob_idx = lang_probs.argmax()
-                print(f"gpu_ram_free_bytes: {gpu_ram_free_bytes()}")
+                #print(f"gpu_ram_free_bytes: {gpu_ram_free_bytes()}")
                 languages = [whisper_tokens[max_prob_idx]]
-                print(f"gpu_ram_free_bytes: {gpu_ram_free_bytes()}")
+                #print(f"gpu_ram_free_bytes: {gpu_ram_free_bytes()}")
             vcon_utils.set_languages(vcon, languages)
-            print(f"gpu_ram_free_bytes: {gpu_ram_free_bytes()}")
+            #print(f"gpu_ram_free_bytes: {gpu_ram_free_bytes()}")
             vcons.append(vcon)
+        
+    return vcons
+    
+def identify_languages(all_vcons_batched, model, processor):
+    vcons = []
+    for vcon_batch in all_vcons_batched:
+        vcons.extend(identify_langauge_batch(vcon_batch, model, processor))
         gc_collect_maybe()
-        torch.cuda.empty_cache()
-        torch.cuda.synchronize()
+    return vcons
+
+def transcribe_batch(vcon_batch, model, language="en", config={}):
+    audio_data_batch = vcon_utils.batch_to_audio_data(vcon_batch)
+    audio_data_processed = []
+    for audio_data in audio_data_batch:
+        audio_data = audio_data.squeeze().cpu().numpy().astype(np.float32)
+        audio_data_processed.append(audio_data)
+    all_transcriptions = model.transcribe(audio_data_processed, **config)
+    vcons = []
+    for vcon_obj, transcription in zip(vcon_batch, all_transcriptions):
+        text = transcription.text
+        vcon_obj = vcon_utils.set_transcript(vcon_obj, text)
+        vcons.append(vcon_obj)
     return vcons
 
 def transcribe_many(vcons_batched, model, language="en"):
@@ -130,17 +149,8 @@ def transcribe_many(vcons_batched, model, language="en"):
                     "target_lang": language,
                     "task": "asr",
                     "pnc": "yes"}
-    print(f"gpu_ram_free_bytes: {gpu_ram_free_bytes()}")
+    #print(f"gpu_ram_free_bytes: {gpu_ram_free_bytes()}")
     for vcon_batch in vcons_batched:
-        audio_data_batch = vcon_utils.batch_to_audio_data(vcon_batch)
-        audio_data_processed = []
-        for audio_data in audio_data_batch:
-            audio_data = audio_data.squeeze().cpu().numpy().astype(np.float32)
-            audio_data_processed.append(audio_data)
-        all_transcriptions = model.transcribe(audio_data_processed, **config)
-        for vcon_obj, transcription in zip(vcon_batch, all_transcriptions):
-            text = transcription.text
-            vcon_obj = vcon_utils.set_transcript(vcon_obj, text)
-            vcons.append(vcon_obj)
+        vcons.extend(transcribe_batch(vcon_batch, model, language, config))
         gc_collect_maybe()
     return vcons

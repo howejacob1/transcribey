@@ -148,3 +148,12 @@ def dump_thread_stacks():
         print(stack_trace.strip())
         
     print("--- End of Thread Stack Dump ---\n")
+
+def size_of_file(filename):
+    return os.path.getsize(filename)
+
+def clear_screen():
+    if os.name == 'nt':
+        os.system('cls')
+    else:
+        os.system('clear')
