@@ -215,6 +215,7 @@ def create(url):
         vcon_obj.add_dialog(dialog)
         vcon = vcon_obj.to_dict()
         set_transcript_dict(vcon, {})
+        print(vcon)
     return vcon
 
 def discover(url):
@@ -306,6 +307,9 @@ def update_vcons_on_db(vcons):
     collection = get_collection()
     operations = []
     for vcon in vcons:
+        pprint(vcon)
+        del vcon["dialog"][0]['body']
+        print(f"vcon: {vcon}")
         vcon_uuid_val = vcon["uuid"]
         operations.append(ReplaceOne({"uuid": vcon_uuid_val}, 
                                      vcon,

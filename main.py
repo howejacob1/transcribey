@@ -43,6 +43,7 @@ def main(sftp_url):
         non_en_model = ai.load_nvidia(settings.non_en_model_name)
     
     info_header("Starting main loop.")
+    
     while True:
         vcons = None
 
@@ -123,7 +124,7 @@ def main(sftp_url):
         
         vcons_non_en_transcribed = None
         with with_timing("Transcribing non-en vcons."):
-            vcons_non_en_transcribed = ai.transcribe_many(vcons_non_en_batched, non_en_model)
+            vcons_non_en_transcribed = ai.transcribe_many(vcons_non_en_batched, non_en_model, language="es")
         print(f"Non-en transcribed vcons: {vcons_non_en_transcribed[0]}")
 
         with with_timing("Marking as done."):
