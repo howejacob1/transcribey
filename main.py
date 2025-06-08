@@ -108,8 +108,8 @@ def main(sftp_url, keep_running, measure=False):
         apply_vad_start_time = time.time()
         vcons_vad = None
         with with_timing("Applying VAD."):
-            #vcons_vad = vcon.apply_vad_many(vcons_resampled)
-            vcons_vad = vcons_resampled
+            vcons_vad = vcon.apply_vad_many(vcons_resampled)
+            #vcons_vad = vcons_resampled
             print(f"VAD vcons: {len(vcons_vad)}")
         print(f"VAD vcons: {vcons_vad[0]}")
         apply_vad_time = time.time() - apply_vad_start_time
