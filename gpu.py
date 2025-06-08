@@ -1,3 +1,4 @@
+import GPUtil
 import torch
 import gc
 import settings
@@ -42,12 +43,20 @@ def gpu_ram_allocated_bytes():
     return torch.cuda.memory_allocated(get_device())
 
 def gpu_ram_free_bytes():
-    return gpu_ram_total_bytes() - gpu_ram_allocated_bytes()
+    gpus = GPUtil.getGPUs()
+    gpu = gpus[0]
+    memory_used_mb = gpu.memoryUsed
+    print(f"memory_used_mb: {memory_used_mb}")
+    memory_used_bytes = memory_used_mb * 1024 * 1024
+    print(f"memory_used_bytes: {memory_used_bytes}")
+    free = gpu_ram_total_bytes() - memory_used_bytes
+    print(f"free: {free}")
+    return free
 
 def batch_bytes():
     free_bytes = gpu_ram_free_bytes()
-    return free_bytes // 8
-    
+    return free_bytes // 256
+
 def max_gpu_memory_usage():
     if torch.cuda.is_available():
         current_device = torch.cuda.current_device()
@@ -73,4 +82,5 @@ def reset_gpu_memory_stats():
 def gc_collect_maybe():
     if we_have_a_gpu():
         if gpu_ram_free_bytes() < settings.gc_limit_bytes:
+            print
             gc.collect()

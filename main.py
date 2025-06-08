@@ -81,7 +81,12 @@ def main(sftp_url):
             vcons_vad = vcon.apply_vad_many(vcons_resampled)
             print(f"VAD vcons: {len(vcons_vad)}")
         print(f"VAD vcons: {vcons_vad[0]}")
-    
+
+        vcons_padded = None
+        with with_timing("Padding."):
+            vcons_padded = vcon.pad_many(vcons_vad)
+        print(f"Padded vcons: {vcons_padded[0]}")
+
         # vcons_on_gpu = None
         # with with_timing("Moving to GPU."):
         #     vcons_on_gpu = vcon.move_to_gpu_many(vcons_vad)
@@ -89,10 +94,11 @@ def main(sftp_url):
 
         vcons_batched = None
         with with_timing("Batching."):
-            vcons_batched = vcon.make_batches(vcons_vad)
+            vcons_batched = vcon.make_batches(vcons_padded)
         print(f"Batched vcons: {vcons_batched[0]}")
 
         vcons_detected = None
+        
         with with_timing("Identifying languages."):
             vcons_detected = ai.identify_languages(vcons_batched, lang_detect_model, lang_detect_processor)
         print(f"Detected vcons: {vcons_detected[0]}")

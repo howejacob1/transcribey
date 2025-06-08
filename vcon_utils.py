@@ -101,7 +101,11 @@ def batch_to_audio_data(batch):
     return audio_data_list
 
 def make_batches(vcons):
-    return binpacking.to_constant_volume(vcons, gpu.batch_bytes(), key=get_size)
+    batches =  binpacking.to_constant_volume(vcons, gpu.batch_bytes(), key=get_size)
+    for batch in batches:
+        print(f"Batch size: {len(batch)}")
+        print(f"number of batches: {len(batches)}")
+    return batches
 
 def resample_vcon_one(vcon):
     audio_data_val = get_audio(vcon)
@@ -347,3 +351,34 @@ def find_and_reserve_many(size_bytes):
         reserved.append(some_vcon)
         total_bytes += get_size(some_vcon)
     return reserved
+
+def get_longest_duration(vcons):
+    longest_duration = 0
+    for vcon in vcons:
+        audio_data = get_audio(vcon)
+        duration = audio.get_duration(get_filename(vcon))
+        if duration > longest_duration:
+            longest_duration = duration
+    return longest_duration
+
+def pad_many(vcons):
+    longest_duration = get_longest_duration(vcons)    
+    vcons_padded = []
+    for vcon in vcons:
+        audio_data = get_audio(vcon)
+        audio_data = audio.pad_audio(audio_data, settings.sample_rate, longest_duration)
+        vcon = set_audio(vcon, audio_data)
+        vcons_padded.append(vcon)
+    return vcons
+
+def print_audio_duration_many(vcons):
+    for vcon in vcons:
+        audio_data = get_audio(vcon)
+        print(f"duration: {audio_data.shape[1]}")
+        print(f"channels: {audio_data.shape[0]}")
+
+def unbatch(vcons_batched):
+    vcons = []
+    for vcon_batch in vcons_batched:
+        vcons.extend(vcon_batch)
+    return vcons

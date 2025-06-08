@@ -42,7 +42,11 @@ def file_size(filename, sftp):
     return sftp.stat(filename).st_size
 
 def download(remote_path, local_path, sftp):
-    sftp.get(remote_path, local_path)
+    while True:
+        try: 
+            return sftp.get(remote_path, local_path)
+        except FileNotFoundError:
+            logging.info(f"File not found: {remote_path}")
 
 def is_dir(path):
     return path.st_mode & 0o040000

@@ -1,3 +1,4 @@
+import torch
 import torchaudio
 import settings
 from utils import num_cores
@@ -53,3 +54,13 @@ def cpu_cores_for_resampling():
 
 def cpu_cores_for_vad():
     return num_cores() - 2
+
+def pad_audio(audio_data, sample_rate, duration):
+    """Pads audio data on the right to ensure it has a minimum duration."""
+    target_samples = int(duration * sample_rate)
+    
+    if audio_data.shape[1] < target_samples:
+        padding_needed = target_samples - audio_data.shape[1]
+        return torch.nn.functional.pad(audio_data, (0, padding_needed))
+    
+    return audio_data

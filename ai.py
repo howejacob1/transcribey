@@ -6,6 +6,9 @@ import settings
 from gpu import move_to_gpu_maybe, gc_collect_maybe
 from utils import suppress_output
 import vcon_utils
+import audio
+import numpy as np
+from gpu import gpu_ram_free_bytes
 
 def whisper_token_to_language(token):
     return whisper_token_languages[whisper_token_ids.index(token)]
@@ -13,8 +16,8 @@ def whisper_token_to_language(token):
 def load_whisper_tiny_raw():
     with suppress_output(should_suppress=False):
         model_name = "openai/whisper-tiny"
-        processor = AutoProcessor.from_pretrained(model_name, torch_dtype=torch.float16)
-        model = AutoModelForSpeechSeq2Seq.from_pretrained(model_name, torch_dtype=torch.float16)
+        processor = AutoProcessor.from_pretrained(model_name)
+        model = AutoModelForSpeechSeq2Seq.from_pretrained(model_name)
         return (model, processor)
 
 def load_whisper_tiny():
@@ -55,29 +58,68 @@ whisper_start_transcription_token_id = 50258
 def identify_languages(all_vcons_batched, model, processor):
     vcons = []
     for vcon_batch in all_vcons_batched:
+        vcon_utils.print_audio_duration_many(vcon_utils.unbatch(all_vcons_batched))
         audio_data_batch = vcon_utils.batch_to_audio_data(vcon_batch)
-        inputs = processor(audio_data_batch, sampling_rate=settings.sample_rate, padding=True)
-        time.sleep(2)
+        audio_data_processed = []
+        for audio_data in audio_data_batch:
+            audio_data = audio_data.squeeze().cpu().numpy().astype(np.float32)
+            audio_data_processed.append(audio_data)
+        # # Ensure all audio is a 1D, float32, mono torch tensor
+        # audio_data_squeezed = []
+        # for i, audio_data in enumerate(audio_data_batch):
+        #     # Convert numpy arrays to torch tensors
+        #     if isinstance(audio_data, np.ndarray):
+        #         audio_data = torch.tensor(audio_data)
+        #     # Squeeze and flatten to 1D
+        #     audio_data = audio_data.squeeze()
+        #     if audio_data.ndim != 1:
+        #         # If still not 1D, take the first channel (assume mono)
+        #         audio_data = audio_data[0]
+        #     # Ensure float32
+        #     audio_data = audio_data.to(torch.float32)
+        #     print(f"audio_data[{i}] type: {type(audio_data)}, shape: {getattr(audio_data, 'shape', None)}, dtype: {getattr(audio_data, 'dtype', None)}")
+        #     audio_data_squeezed.append(audio_data)
+        # Batch process
+        print(f"before processor gpu_ram_free_bytes: {gpu_ram_free_bytes()}")
+        inputs = processor(audio_data_processed, sampling_rate=settings.sample_rate, return_tensors="pt", padding="max_length")
+        print(f"after processor, before move_to_gpu_maybe(inputs) gpu_ram_free_bytes: {gpu_ram_free_bytes()}")
         inputs = move_to_gpu_maybe(inputs)
+        print(f"after move_to_gpu_maybe, before move_to_gpu_maybe(input_features) gpu_ram_free_bytes: {gpu_ram_free_bytes()}")
         input_features = inputs.input_features
         input_features = move_to_gpu_maybe(input_features)
-        decoder_input_ids = torch.tensor([[whisper_start_transcription_token_id]] * len(audio_data_batch))
+        print(f"after move_to_gpu_maybe(input_features), before move_to_gpu_maybe(decoder_input_ids) gpu_ram_free_bytes: {gpu_ram_free_bytes()}")
+        decoder_input_ids = torch.tensor([[whisper_start_transcription_token_id]] * len(audio_data_processed))
+        print(f"after decoder_input_ids, before move_to_gpu_maybe(decoder_input_ids) gpu_ram_free_bytes: {gpu_ram_free_bytes()}")
         decoder_input_ids = move_to_gpu_maybe(decoder_input_ids)
-        model_output = model(input_features, decoder_input_ids=decoder_input_ids)
+        print(f"after move_to_gpu_maybe(decoder_input_ids), before model(input_features, decoder_input_ids=decoder_input_ids) gpu_ram_free_bytes: {gpu_ram_free_bytes()}")
+        with torch.no_grad():
+            model_output = model(input_features, decoder_input_ids=decoder_input_ids)
+        print(f"after model(input_features, decoder_input_ids=decoder_input_ids), before logits gpu_ram_free_bytes: {gpu_ram_free_bytes()}")
         logits = model_output.logits
+        print(f"after logits, before logits[:, 0, :] gpu_ram_free_bytes: {gpu_ram_free_bytes()}")
         logits = logits[:, 0, :]
-        valid_counter = 0
-        lang_logits = logits[valid_counter, whisper_token_ids]
-        lang_probs = torch.softmax(lang_logits, dim=-1).cpu().numpy()
-        audio_languages_detected = [whisper_tokens[j] for j, prob in enumerate(lang_probs) if prob >= settings.lang_detect_threshold]
-        languages = None
-        if not audio_languages_detected:
-            max_prob_idx = lang_probs.argmax()
-            languages = [whisper_tokens[max_prob_idx]]
-        for vcon in vcon_batch:
+        print(f"after logits[:, 0, :], before for i, vcon in enumerate(vcon_batch) gpu_ram_free_bytes: {gpu_ram_free_bytes()}")
+        for i, vcon in enumerate(vcon_batch):
+            print(f"after for i, vcon in enumerate(vcon_batch), before lang_logits gpu_ram_free_bytes: {gpu_ram_free_bytes()}")
+            lang_logits = logits[i, whisper_token_ids]
+            print(f"after lang_logits, before lang_probs gpu_ram_free_bytes: {gpu_ram_free_bytes()}")
+            lang_probs = torch.softmax(lang_logits, dim=-1).cpu().detach().numpy()
+            print(f"after lang_probs, before audio_languages_detected gpu_ram_free_bytes: {gpu_ram_free_bytes()}")
+            audio_languages_detected = [whisper_tokens[j] for j, prob in enumerate(lang_probs) if prob >= settings.lang_detect_threshold]
+            print(f"after audio_languages_detected, before audio_languages_detected gpu_ram_free_bytes: {gpu_ram_free_bytes()}")
+            if audio_languages_detected:
+                languages = audio_languages_detected
+            else:
+                max_prob_idx = lang_probs.argmax()
+                print(f"gpu_ram_free_bytes: {gpu_ram_free_bytes()}")
+                languages = [whisper_tokens[max_prob_idx]]
+                print(f"gpu_ram_free_bytes: {gpu_ram_free_bytes()}")
             vcon_utils.set_languages(vcon, languages)
+            print(f"gpu_ram_free_bytes: {gpu_ram_free_bytes()}")
             vcons.append(vcon)
         gc_collect_maybe()
+        torch.cuda.empty_cache()
+        torch.cuda.synchronize()
     return vcons
 
 def transcribe_many(vcons_batched, model):
