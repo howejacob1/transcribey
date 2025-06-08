@@ -122,17 +122,25 @@ def identify_languages(all_vcons_batched, model, processor):
         torch.cuda.synchronize()
     return vcons
 
-def transcribe_many(vcons_batched, model):
+def transcribe_many(vcons_batched, model, language="en"):
     vcons = []
+    config = {}
+    if language != "en":
+        config = {"source_lang": language,
+                    "target_lang": language,
+                    "task": "asr",
+                    "pnc": "yes"}
+    print(f"gpu_ram_free_bytes: {gpu_ram_free_bytes()}")
     for vcon_batch in vcons_batched:
         audio_data_batch = vcon_utils.batch_to_audio_data(vcon_batch)
         audio_data_processed = []
         for audio_data in audio_data_batch:
             audio_data = audio_data.squeeze().cpu().numpy().astype(np.float32)
             audio_data_processed.append(audio_data)
-        all_transcriptions = model.transcribe(audio_data_processed)
+        all_transcriptions = model.transcribe(audio_data_processed, **config)
         for vcon_obj, transcription in zip(vcon_batch, all_transcriptions):
-            vcon_obj = vcon_utils.set_transcript(vcon_obj, transcription)
+            text = transcription.text
+            vcon_obj = vcon_utils.set_transcript(vcon_obj, text)
             vcons.append(vcon_obj)
         gc_collect_maybe()
     return vcons
