@@ -125,9 +125,14 @@ def identify_languages(all_vcons_batched, model, processor):
 def transcribe_many(vcons_batched, model):
     vcons = []
     for vcon_batch in vcons_batched:
-        all_transcriptions = model.transcribe(vcon_batch)
+        audio_data_batch = vcon_utils.batch_to_audio_data(vcon_batch)
+        audio_data_processed = []
+        for audio_data in audio_data_batch:
+            audio_data = audio_data.squeeze().cpu().numpy().astype(np.float32)
+            audio_data_processed.append(audio_data)
+        all_transcriptions = model.transcribe(audio_data_processed)
         for vcon_obj, transcription in zip(vcon_batch, all_transcriptions):
-            vcon_utils.set_transcript(vcon_obj, transcription)
+            vcon_obj = vcon_utils.set_transcript(vcon_obj, transcription)
             vcons.append(vcon_obj)
         gc_collect_maybe()
     return vcons
