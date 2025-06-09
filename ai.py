@@ -175,30 +175,18 @@ def identify_languages(all_vcons_batched, model):
                 # Use the model's built-in inference method instead of direct forward()
                 # This is more appropriate for NeMo models
                 with torch.no_grad():
-                    # Try different inference methods that NeMo models typically have
-                    if hasattr(model, 'infer'):
-                        # Some NeMo models have an infer method
-                        result = model.infer([audio_data])
-                        if isinstance(result, list):
-                            pred_label_idx = result[0] if len(result) > 0 else 0
-                        else:
-                            pred_label_idx = result
-                    elif hasattr(model, 'predict'):
-                        # Some have predict method
-                        result = model.predict([audio_data])
-                        pred_label_idx = result[0] if isinstance(result, list) else result
-                    else:
-                        # Fallback to manual forward pass with proper tensor handling
-                        audio_tensor = torch.from_numpy(audio_data).unsqueeze(0).to(model.device)
-                        input_signal_length = torch.tensor([audio_tensor.shape[1]], dtype=torch.long, device=model.device)
-                        
-                        logits = model(input_signal=audio_tensor, input_signal_length=input_signal_length)
-                        
-                        # Handle different possible output formats
-                        if isinstance(logits, tuple):
-                            logits = logits[0]  # Take first element if tuple
-                        
-                        pred_label_idx = logits.argmax().item()
+                    print(f"Warning: No infer or predict method found for model. Using manual forward pass.")
+                    # Fallback to manual forward pass with proper tensor handling
+                    audio_tensor = torch.from_numpy(audio_data).unsqueeze(0).to(model.device)
+                    input_signal_length = torch.tensor([audio_tensor.shape[1]], dtype=torch.long, device=model.device)
+                    
+                    logits = model(input_signal=audio_tensor, input_signal_length=input_signal_length)
+                    
+                    # Handle different possible output formats
+                    if isinstance(logits, tuple):
+                        logits = logits[0]  # Take first element if tuple
+                    
+                    pred_label_idx = logits.argmax().item()
                 
                 # Map index to language code
                 if isinstance(pred_label_idx, (torch.Tensor, np.ndarray)):
