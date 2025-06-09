@@ -1,4 +1,5 @@
 import argparse
+import gpu
 from concurrent.futures import as_completed, ThreadPoolExecutor
 import logging
 import threading
@@ -147,7 +148,7 @@ def main(sftp_url, keep_running, measure=False):
         batch_start_time = time.time()
         vcons_batched = None
         with with_timing("Batching."):
-            vcons_batched = vcon.make_batches(vcons_preprocessed)
+            vcons_batched = vcon.make_batches(vcons_preprocessed, gpu.batch_bytes())
         batch_time = time.time() - batch_start_time
 
         vcons_detected = None
@@ -166,13 +167,13 @@ def main(sftp_url, keep_running, measure=False):
 
         batch_en_start_time = time.time()
         info_header(f"Batching {len(vcons_en)} en vcons.")
-        vcons_en_batched = vcon.make_batches(vcons_en)
+        vcons_en_batched = vcon.make_batches(vcons_en, gpu.batch_bytes()*512)
         print(f"En batched vcons: {vcons_en_batched[0]}")
         batch_en_time = time.time() - batch_en_start_time
 
         batch_non_en_start_time = time.time()
         info_header(f"Batching {len(vcons_non_en)} non-en vcons.")
-        vcons_non_en_batched = vcon.make_batches(vcons_non_en)
+        vcons_non_en_batched = vcon.make_batches(vcons_non_en, gpu.batch_bytes()*512)
         print(f"Non-en batched vcons: {vcons_non_en_batched[0]}")
         batch_non_en_time = time.time() - batch_non_en_start_time
 
@@ -248,6 +249,7 @@ def main(sftp_url, keep_running, measure=False):
             keep_running.clear()
             reserver_thread.join()
             return
+    print("Done.")
         
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Transcribey main entry point")

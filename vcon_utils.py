@@ -101,8 +101,8 @@ def batch_to_audio_data(batch):
         audio_data_list.append(audio_data_val)
     return audio_data_list
 
-def make_batches(vcons):
-    return binpacking.to_constant_volume(vcons, gpu.batch_bytes(), key=get_size)
+def make_batches(vcons, batch_bytes):
+    return binpacking.to_constant_volume(vcons, batch_bytes, key=get_size)
 
 def resample_vcon_one(vcon):
     audio_data_val = get_audio(vcon)
@@ -193,7 +193,7 @@ def exists_by_filename(filename):
 
 def create(url):
     vcon = None
-    with suppress_output():
+    with suppress_output(should_suppress=True):
         vcon_obj = Vcon.build_new()
         party = Party(name="Unknown", role="participant")
         vcon_obj.add_party(party)
@@ -308,9 +308,9 @@ def update_vcons_on_db(vcons):
     collection = get_collection()
     operations = []
     for vcon in vcons:
-        pprint(vcon)
+        #pprint(vcon)
         del vcon["dialog"][0]['body']
-        print(f"vcon: {vcon}")
+        #print(f"vcon: {vcon}")
         vcon_uuid_val = vcon["uuid"]
         operations.append(ReplaceOne({"uuid": vcon_uuid_val}, 
                                      vcon,
@@ -400,12 +400,12 @@ def preprocess_vcon_one(vcon, vad):
         vcon["sample_rate"] = sample_rate
         vcon = convert_to_mono_maybe(vcon)
         vcon = resample_vcon_one(vcon)
-        #vcon = apply_vad_one(vcon, vad)
+        vcon = apply_vad_one(vcon, vad)
         duration = audio.audio_data_duration(audio_data, sample_rate)
         bytes = audio.get_size(audio_data)
         vcon["size"] = bytes
         audio_data = get_audio(vcon)
-        audio_data = audio_data.squeeze().numpy()
+        audio_data = audio_data.squeeze().numpy().astype(np.float16)
         set_audio(vcon, audio_data)
         return vcon, bytes, duration
     except RuntimeError:

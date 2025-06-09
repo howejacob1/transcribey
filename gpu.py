@@ -55,7 +55,7 @@ def gpu_ram_free_bytes():
 
 def batch_bytes():
     free_bytes = gpu_ram_free_bytes()
-    return free_bytes // 256
+    return free_bytes // 512
 
 def max_gpu_memory_usage():
     if torch.cuda.is_available():

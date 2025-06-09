@@ -1,3 +1,4 @@
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import importlib
 import time
 import torch
@@ -14,7 +15,7 @@ def whisper_token_to_language(token):
     return whisper_token_languages[whisper_token_ids.index(token)]
 
 def load_whisper_tiny_raw():
-    with suppress_output(should_suppress=True):
+    with suppress_output(should_suppress=False):
         model_name = "openai/whisper-tiny"
         processor = AutoProcessor.from_pretrained(model_name)
         model = AutoModelForSpeechSeq2Seq.from_pretrained(model_name)
@@ -33,7 +34,7 @@ def load_whisper_tiny():
     return (model, processor)
 
 def load_nvidia_raw(model_name):
-    with suppress_output(should_suppress=True):
+    with suppress_output(should_suppress=False):
         nemo_asr = importlib.import_module("nemo.collections.asr")
         model = nemo_asr.models.ASRModel.from_pretrained(model_name=model_name)
         model.to(torch.float16)
@@ -55,11 +56,10 @@ whisper_token_languages = ['<|en|>', '<|zh|>', '<|de|>', '<|es|>', '<|ru|>', '<|
 whisper_token_ids = [50259, 50260, 50261, 50262, 50263, 50264, 50265, 50266, 50267, 50268, 50269, 50270, 50271, 50272, 50273, 50274, 50275, 50276, 50277, 50278, 50279, 50280, 50281, 50282, 50283, 50284, 50285, 50286, 50287, 50288, 50289, 50290, 50291, 50292, 50293, 50294, 50295, 50296, 50297, 50298, 50299, 50300, 50301, 50302, 50303, 50304, 50305, 50306, 50307, 50308, 50309, 50310, 50311, 50312, 50313, 50314, 50315, 50316, 50317, 50318, 50319, 50320, 50321, 50322, 50323, 50324, 50325, 50326, 50327, 50328, 50329, 50330, 50331, 50332, 50333, 50334, 50335, 50336, 50337, 50338, 50339, 50340, 50341, 50342, 50343, 50344, 50345, 50346, 50347, 50348, 50349, 50350, 50351, 50352, 50353, 50354, 50355, 50356, 50357]
 whisper_start_transcription_token_id = 50258
 
-def identify_langauge_batch(vcon_batch, model, processor):
+def identify_language_batch(vcon_batch, audio_data_batch, inputs, model):
     vcons = []
     with torch.no_grad():
         #vcon_utils.print_audio_duration_many(vcon_utils.unbatch(all_vcons_batched))
-        audio_data_batch = vcon_utils.batch_to_audio_data(vcon_batch)
         # audio_data_processed = []
         # for audio_data in audio_data_batch:
         #     audio_data = audio_data.squeeze().cpu().numpy().astype(np.float32)
@@ -81,7 +81,7 @@ def identify_langauge_batch(vcon_batch, model, processor):
         #     audio_data_squeezed.append(audio_data)
         # Batch process
         #print(f"before processor gpu_ram_free_bytes: {gpu_ram_free_bytes()}")
-        inputs = processor(audio_data_batch, sampling_rate=settings.sample_rate, return_tensors="pt", padding="max_length")
+        
         #print(f"after processor, before move_to_gpu_maybe(inputs) gpu_ram_free_bytes: {gpu_ram_free_bytes()}")
         inputs = move_to_gpu_maybe(inputs)
         #print(f"after move_to_gpu_maybe, before move_to_gpu_maybe(input_features) gpu_ram_free_bytes: {gpu_ram_free_bytes()}")
@@ -120,10 +120,22 @@ def identify_langauge_batch(vcon_batch, model, processor):
         
     return vcons
     
+
+def preprocess_identify_languages(vcon_batch, audio_data_batch, processor):
+    audio_data_batch = vcon_utils.batch_to_audio_data(vcon_batch)
+    inputs = processor(audio_data_batch, sampling_rate=settings.sample_rate, return_tensors="pt", padding="max_length")
+    return vcon_batch, audio_data_batch, inputs
+
 def identify_languages(all_vcons_batched, model, processor):
     vcons = []
-    for vcon_batch in all_vcons_batched:
-        vcons.extend(identify_langauge_batch(vcon_batch, model, processor))
+    futures = []
+    with ThreadPoolExecutor(max_workers=audio.cpu_cores_for_preprocessing()) as executor:
+        for vcon_batch in all_vcons_batched:
+            audio_data_batch = vcon_utils.batch_to_audio_data(vcon_batch)
+            futures.append(executor.submit(preprocess_identify_languages, vcon_batch, audio_data_batch, processor))
+        for future in as_completed(futures):
+            vcon_batch, audio_data_batch, inputs = future.result()
+            vcons.extend(identify_language_batch(vcon_batch, audio_data_batch, inputs, model))
         gc_collect_maybe()
     return vcons
 
