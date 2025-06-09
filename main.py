@@ -263,7 +263,15 @@ if __name__ == "__main__":
     parser.add_argument("mode", choices=["head", "worker", "discover", "print", "delete_all", "measure"], help="head:slurp and run worker. ")
     parser.add_argument("--url", type=str, default=settings.sftp_url, help="Override SFTP URL (applies to both head and worker)")
     parser.add_argument("--production", action="store_true", default=False, help="Enable production mode (applies to both head and worker)")
+    parser.add_argument("--dataset", choices=["fast", "med", "slow"], help="use precompiled dataset")
     args = parser.parse_args()
+    
+    if args.dataset == "fast":
+        args.url = "sftp://bantaim@127.0.0.1:22/home/bantaim/conserver/fake_wavs_cute/"
+    elif args.dataset == "med":
+        args.url = "sftp://bantaim@127.0.0.1:22/home/bantaim/conserver/openslr-12/"
+    elif args.dataset == "slow":
+        args.url = "sftp://bantaim@127.0.0.1:22/home/bantaim/conserver/fake_wavs_medlarge/"
 
     debug = not args.production
     keep_running = threading.Event()
