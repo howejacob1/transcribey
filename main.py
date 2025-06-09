@@ -24,6 +24,8 @@ logging.basicConfig(level=logging.INFO, format='[%(asctime)s] [%(threadName)s] %
 logging.getLogger("paramiko").setLevel(logging.INFO)
 
 def main(sftp_url, keep_running, measure=False):
+    torch.cuda.empty_cache()
+    torch.cuda.synchronize()
     # sftp = sftp_utils.connect_keep_trying(sftp_url)
     with with_timing("Unmarking all reserved."):
         vcon.unmarked_all_reserved()
@@ -38,12 +40,12 @@ def main(sftp_url, keep_running, measure=False):
     # with with_timing("Loading whisper."):
     #     lang_detect_model, lang_detect_processor = ai.load_whisper_tiny()
 
-    en_model = None
+    lang_detect_model = None
     with with_timing("Loading langid model."):
         lang_detect_model = ai.load_nvidia_ambernet()
 
     en_model = None
-    with with_timing("Loading en model."):
+    with with_timing("Loading en whisper model."):
         en_model = ai.load_nvidia(settings.en_model_name)
 
     non_en_model = None
@@ -75,23 +77,11 @@ def main(sftp_url, keep_running, measure=False):
         
         preprocess_start_time = time.time()
         vcons_preprocessed = []
-        count = 0
+        total_bytes = 0
+        total_duration = 0
+        total_vcons = 0
         with with_timing("Preprocessing."):
-            futures = []
-            vad = torchaudio.transforms.Vad(sample_rate=settings.sample_rate, trigger_level=0.5)
-            with ThreadPoolExecutor(max_workers=audio.cpu_cores_for_preprocessing()) as executor:
-                for vcon_cur in vcons:
-                    total_vcons += 1
-                    futures.append(executor.submit(vcon.preprocess_vcon_one, vcon_cur, vad))
-                for future in as_completed(futures):
-                    count += 1
-                    if count % 50 == 0:
-                        print(f"Preprocessed {count} vcons")
-                    vcon_cur, bytes, duration = future.result()
-                    if vcon_cur is not None:
-                        vcons_preprocessed.append(vcon_cur)
-                        total_bytes += bytes
-                        total_duration += duration
+            vcons_preprocessed, total_bytes, total_duration, total_vcons = vcon.preprocess_many(vcons)
         preprocess_time = time.time() - preprocess_start_time
 
         # processing_invalids_start_time = time.time()
@@ -325,3 +315,4 @@ if __name__ == "__main__":
             vcon.delete_all()
     except KeyboardInterrupt:
         keep_running.clear()
+

@@ -9,7 +9,7 @@ from pprint import pprint
 import threading
 import binpacking
 import torchaudio
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor, as_completed
 from pymongo import MongoClient, ReplaceOne
 import audio
 import cache
@@ -391,24 +391,65 @@ def unbatch(vcons_batched):
         vcons.extend(vcon_batch)
     return vcons
 
-def preprocess_vcon_one(vcon, vad):
+def preprocess_vcon_one(vcon_cur, _):
     try:
-        filename = processing_filename(vcon)
+        print(f"Preprocessing {vcon_cur['uuid']}")
+        filename = processing_filename(vcon_cur)
         cache.move_filename_to_processing(filename)
         audio_data, sample_rate = audio.load_to_cpu(filename)
-        vcon = set_audio(vcon, audio_data)
-        vcon["sample_rate"] = sample_rate
-        vcon = convert_to_mono_maybe(vcon)
-        vcon = resample_vcon_one(vcon)
-        #vcon = apply_vad_one(vcon, vad)
+        vcon_cur = set_audio(vcon_cur, audio_data)
+        vcon_cur["sample_rate"] = sample_rate
         duration = audio.audio_data_duration(audio_data, sample_rate)
+        vcon_cur = convert_to_mono_maybe(vcon_cur)
+        vcon_cur = resample_vcon_one(vcon_cur)
+        #vcon_cur = apply_vad_one(vcon_cur, vad)
         bytes = audio.get_size(audio_data)
-        vcon["size"] = bytes
-        audio_data = get_audio(vcon)
+        vcon_cur["size"] = bytes
+        audio_data = get_audio(vcon_cur)
         audio_data = audio_data.squeeze().numpy()
-        set_audio(vcon, audio_data)
-        return vcon, bytes, duration
+        set_audio(vcon_cur, audio_data)
+        return vcon_cur, bytes, duration
     except RuntimeError:
-        mark_vcon_as_invalid(vcon)
-        remove_vcon_from_processing(vcon)
+        mark_vcon_as_invalid(vcon_cur)
+        remove_vcon_from_processing(vcon_cur)
         return None, 0, 0
+
+def preprocess_many(vcons):
+    vcons_preprocessed = []
+    total_bytes = 0
+    total_duration = 0
+    total_vcons = len(vcons)
+    count = 0
+
+    futures = []
+    for vcon_cur in vcons:
+        vcon_cur, bytes, duration = preprocess_vcon_one(vcon_cur, None)
+        if vcon_cur is not None:
+            vcons_preprocessed.append(vcon_cur)
+            total_bytes += bytes
+            total_duration += duration
+            count += 1
+            if count % 50 == 0:
+                logging.info(f"Preprocessed {count}/{total_vcons} vcons")
+        else:
+            print(f"Failed to preprocess vcon")
+            total_vcons -= 1
+    return vcons_preprocessed, total_bytes, total_duration, total_vcons
+    # Using ProcessPoolExecutor to leverage multiple CPU cores for the preprocessing tasks.
+    # This is beneficial because audio processing is CPU-intensive.
+    # with ProcessPoolExecutor(max_workers=audio.cpu_cores_for_preprocessing()) as executor:
+    #     for vcon_cur in vcons:
+    #         futures.append(executor.submit(preprocess_vcon_one, vcon_cur, None))
+
+    #     for future in as_completed(futures):
+    #         count += 1
+    #         if count % 50 == 0:
+    #             logging.info(f"Preprocessed {count}/{total_vcons} vcons")
+
+    #         vcon_cur, bytes, duration = future.result()
+    #         if vcon_cur is not None:
+    #             vcons_preprocessed.append(vcon_cur)
+    #             total_bytes += bytes
+    #             total_duration += duration
+    
+    
