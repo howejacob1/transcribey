@@ -46,16 +46,16 @@ def gpu_ram_free_bytes():
     gpus = GPUtil.getGPUs()
     gpu = gpus[0]
     memory_used_mb = gpu.memoryUsed
-    print(f"memory_used_mb: {memory_used_mb}")
+    #print(f"memory_used_mb: {memory_used_mb}")
     memory_used_bytes = memory_used_mb * 1024 * 1024
-    print(f"memory_used_bytes: {memory_used_bytes}")
+    #print(f"memory_used_bytes: {memory_used_bytes}")
     free = gpu_ram_total_bytes() - memory_used_bytes
-    print(f"free: {free}")
+    #print(f"free: {free}")
     return free
 
 def batch_bytes():
     free_bytes = gpu_ram_free_bytes()
-    return free_bytes // 512
+    return free_bytes // 256
 
 def max_gpu_memory_usage():
     if torch.cuda.is_available():

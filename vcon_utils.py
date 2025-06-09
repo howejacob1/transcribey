@@ -1,5 +1,6 @@
 # This module should be imported as vcon.
 import datetime
+import numpy as np
 import logging
 import mimetypes
 import time
@@ -365,15 +366,18 @@ def get_longest_duration(vcons):
             longest_duration = duration
     return longest_duration
 
+def pad_vcon(vcon, longest_duration):
+    audio_data = get_audio(vcon)
+    audio_data = audio.pad_audio(audio_data, settings.sample_rate, longest_duration)
+    vcon = set_audio(vcon, audio_data)
+    return vcon
+
 def pad_many(vcons):
     longest_duration = get_longest_duration(vcons)    
     vcons_padded = []
     for vcon in vcons:
-        audio_data = get_audio(vcon)
-        audio_data = audio.pad_audio(audio_data, settings.sample_rate, longest_duration)
-        vcon = set_audio(vcon, audio_data)
-        vcons_padded.append(vcon)
-    return vcons
+        vcons_padded.append(pad_vcon(vcon, longest_duration))
+    return vcons_padded
 
 def print_audio_duration_many(vcons):
     for vcon in vcons:
@@ -386,3 +390,25 @@ def unbatch(vcons_batched):
     for vcon_batch in vcons_batched:
         vcons.extend(vcon_batch)
     return vcons
+
+def preprocess_vcon_one(vcon, vad):
+    try:
+        filename = processing_filename(vcon)
+        cache.move_filename_to_processing(filename)
+        audio_data, sample_rate = audio.load_to_cpu(filename)
+        vcon = set_audio(vcon, audio_data)
+        vcon["sample_rate"] = sample_rate
+        vcon = convert_to_mono_maybe(vcon)
+        vcon = resample_vcon_one(vcon)
+        #vcon = apply_vad_one(vcon, vad)
+        duration = audio.audio_data_duration(audio_data, sample_rate)
+        bytes = audio.get_size(audio_data)
+        vcon["size"] = bytes
+        audio_data = get_audio(vcon)
+        audio_data = audio_data.squeeze().numpy()
+        set_audio(vcon, audio_data)
+        return vcon, bytes, duration
+    except RuntimeError:
+        mark_vcon_as_invalid(vcon)
+        remove_vcon_from_processing(vcon)
+        return None, 0, 0

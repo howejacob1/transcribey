@@ -60,10 +60,10 @@ def identify_langauge_batch(vcon_batch, model, processor):
     with torch.no_grad():
         #vcon_utils.print_audio_duration_many(vcon_utils.unbatch(all_vcons_batched))
         audio_data_batch = vcon_utils.batch_to_audio_data(vcon_batch)
-        audio_data_processed = []
-        for audio_data in audio_data_batch:
-            audio_data = audio_data.squeeze().cpu().numpy().astype(np.float32)
-            audio_data_processed.append(audio_data)
+        # audio_data_processed = []
+        # for audio_data in audio_data_batch:
+        #     audio_data = audio_data.squeeze().cpu().numpy().astype(np.float32)
+        #     audio_data_processed.append(audio_data)
         # # Ensure all audio is a 1D, float32, mono torch tensor
         # audio_data_squeezed = []
         # for i, audio_data in enumerate(audio_data_batch):
@@ -81,19 +81,19 @@ def identify_langauge_batch(vcon_batch, model, processor):
         #     audio_data_squeezed.append(audio_data)
         # Batch process
         #print(f"before processor gpu_ram_free_bytes: {gpu_ram_free_bytes()}")
-        inputs = processor(audio_data_processed, sampling_rate=settings.sample_rate, return_tensors="pt", padding="max_length")
+        inputs = processor(audio_data_batch, sampling_rate=settings.sample_rate, return_tensors="pt", padding="max_length")
         #print(f"after processor, before move_to_gpu_maybe(inputs) gpu_ram_free_bytes: {gpu_ram_free_bytes()}")
         inputs = move_to_gpu_maybe(inputs)
         #print(f"after move_to_gpu_maybe, before move_to_gpu_maybe(input_features) gpu_ram_free_bytes: {gpu_ram_free_bytes()}")
         input_features = inputs.input_features
         input_features = move_to_gpu_maybe(input_features)
         #print(f"after move_to_gpu_maybe(input_features), before move_to_gpu_maybe(decoder_input_ids) gpu_ram_free_bytes: {gpu_ram_free_bytes()}")
-        decoder_input_ids = torch.tensor([[whisper_start_transcription_token_id]] * len(audio_data_processed))
+        decoder_input_ids = torch.tensor([[whisper_start_transcription_token_id]] * len(audio_data_batch))
         #print(f"after decoder_input_ids, before move_to_gpu_maybe(decoder_input_ids) gpu_ram_free_bytes: {gpu_ram_free_bytes()}")
         decoder_input_ids = move_to_gpu_maybe(decoder_input_ids)
         #print(f"after move_to_gpu_maybe(decoder_input_ids), before model(input_features, decoder_input_ids=decoder_input_ids) gpu_ram_free_bytes: {gpu_ram_free_bytes()}")
-        with suppress_output(should_suppress=True):
-            model_output = model(input_features, decoder_input_ids=decoder_input_ids)
+        
+        model_output = model(input_features, decoder_input_ids=decoder_input_ids)
         #print(f"after model(input_features, decoder_input_ids=decoder_input_ids), before logits gpu_ram_free_bytes: {gpu_ram_free_bytes()}")
         logits = model_output.logits
         #print(f"after logits, before logits[:, 0, :] gpu_ram_free_bytes: {gpu_ram_free_bytes()}")
@@ -129,11 +129,11 @@ def identify_languages(all_vcons_batched, model, processor):
 
 def transcribe_batch(vcon_batch, model, language="en", config={}):
     audio_data_batch = vcon_utils.batch_to_audio_data(vcon_batch)
-    audio_data_processed = []
-    for audio_data in audio_data_batch:
-        audio_data = audio_data.squeeze().cpu().numpy().astype(np.float32)
-        audio_data_processed.append(audio_data)
-    all_transcriptions = model.transcribe(audio_data_processed, **config)
+    # audio_data_processed = []
+    # for audio_data in audio_data_batch:
+    #     audio_data = audio_data.squeeze().numpy().astype(np.float32)
+    #     audio_data_processed.append(audio_data)
+    all_transcriptions = model.transcribe(audio_data_batch, **config)
     vcons = []
     for vcon_obj, transcription in zip(vcon_batch, all_transcriptions):
         text = transcription.text

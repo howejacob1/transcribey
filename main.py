@@ -1,9 +1,12 @@
 import argparse
+from concurrent.futures import as_completed, ThreadPoolExecutor
 import logging
 import threading
 import time
 from queue import Queue, Empty
+import numpy as np
 import torch
+import torchaudio
 import cache
 import mongo_utils as mongo
 import reserver
@@ -47,79 +50,94 @@ def main(sftp_url, keep_running, measure=False):
     total_vcons = 0
     total_duration = 0
     total_bytes = 0
-    start_time = 0
 
     while True:
-        start_time = time.time()
+        program_start_time = time.time()
 
         vcons = None
-        move_downloading_to_processing_start_time = time.time()
-        with with_timing("Moving downloading to processing."):
-            with vcons_lock:
-                vcons = vcons_ready_queue.get()
-                cache.move_downloading_to_processing()
-        move_downloading_to_processing_time = time.time() - move_downloading_to_processing_start_time
+        # move_downloading_to_processing_start_time = time.time()
+        with vcons_lock:
+            vcons = vcons_ready_queue.get()
+                # cache.move_downloading_to_processing()
+        # move_downloading_to_processing_time = time.time() - move_downloading_to_processing_start_time
+        
+        preprocess_start_time = time.time()
+        vcons_preprocessed = []
+        with with_timing("Preprocessing."):
+            futures = []
+            vad = torchaudio.transforms.Vad(sample_rate=settings.sample_rate, trigger_level=0.5)
+            with ThreadPoolExecutor(max_workers=audio.cpu_cores_for_preprocessing()) as executor:
+                for vcon_cur in vcons:
+                    total_vcons += 1
+                    futures.append(executor.submit(vcon.preprocess_vcon_one, vcon_cur, vad))
+                for future in as_completed(futures):
+                    vcon_cur, bytes, duration = future.result()
+                    if vcon_cur is not None:
+                        vcons_preprocessed.append(vcon_cur)
+                        total_bytes += bytes
+                        total_duration += duration
+        preprocess_time = time.time() - preprocess_start_time
 
-        processing_invalids_start_time = time.time()
-        vcons_len = len(vcons)
-        valid_vcons = None
-        with with_timing("Processing invalids."):
-            valid_vcons = vcon.process_invalids(vcons)
-        logging.info(f"Eliminated {vcons_len - len(valid_vcons)} invalid vcons")
-        processing_invalids_time = time.time() - processing_invalids_start_time
+        # processing_invalids_start_time = time.time()
+        # vcons_len = len(vcons)
+        # valid_vcons = None
+        # with with_timing("Processing invalids."):
+        #     valid_vcons = vcon.process_invalids(vcons)
+        # logging.info(f"Eliminated {vcons_len - len(valid_vcons)} invalid vcons")
+        # processing_invalids_time = time.time() - processing_invalids_start_time
 
-        measurement_start_time = time.time()
-        if measure:
-            total_vcons += len(valid_vcons)
-            total_bytes = dir_size_bytes(settings.processing_dir)
-            for cur_vcon in valid_vcons:
-                filename = vcon.get_filename(cur_vcon)
-                total_bytes += size_of_file(filename)
-                total_duration += audio.get_duration(filename)
-        measurement_end_time = time.time()
-        measurement_time = measurement_end_time - measurement_start_time
-        start_time += measurement_time
+        # measurement_start_time = time.time()
+        # if measure:
+        #     total_vcons += len(valid_vcons)
+        #     total_bytes = dir_size_bytes(settings.processing_dir)
+        #     for cur_vcon in valid_vcons:
+        #         filename = vcon.get_filename(cur_vcon)
+        #         total_bytes += size_of_file(filename)
+        #         total_duration += audio.get_duration(filename)
+        # measurement_end_time = time.time()
+        # measurement_time = measurement_end_time - measurement_start_time
+        # start_time += measurement_time
 
-        load_processing_into_ram_start_time = time.time()
-        print(f"Valid vcons: {len(valid_vcons)}")
-        vcons_in_ram = None
-        with with_timing("Loading valid vcons into RAM."):
-            vcons_in_ram = vcon.load_processing_into_ram(valid_vcons)
-            print(f"Vcons in RAM: {len(vcons_in_ram)}")
-        print(f"Vcons in RAM: {vcons_in_ram[0]}")
-        load_processing_into_ram_time = time.time() - load_processing_into_ram_start_time
+        # load_processing_into_ram_start_time = time.time()
+        # print(f"Valid vcons: {len(valid_vcons)}")
+        # vcons_in_ram = None
+        # with with_timing("Loading valid vcons into RAM."):
+        #     vcons_in_ram = vcon.load_processing_into_ram(valid_vcons)
+        #     print(f"Vcons in RAM: {len(vcons_in_ram)}")
+        # print(f"Vcons in RAM: {vcons_in_ram[0]}")
+        # load_processing_into_ram_time = time.time() - load_processing_into_ram_start_time
 
-        convert_to_mono_start_time = time.time()
-        vcons_mono = None
-        with with_timing("Converting to mono."):
-            vcons_mono = vcon.convert_to_mono_many(vcons_in_ram)
-            print(f"Mono vcons: {len(vcons_mono)}")
-        print(f"Mono vcons: {vcons_mono[0]}")
-        convert_to_mono_time = time.time() - convert_to_mono_start_time
+        # convert_to_mono_start_time = time.time()
+        # vcons_mono = None
+        # with with_timing("Converting to mono."):
+        #     vcons_mono = vcon.convert_to_mono_many(vcons_in_ram)
+        #     print(f"Mono vcons: {len(vcons_mono)}")
+        # print(f"Mono vcons: {vcons_mono[0]}")
+        # convert_to_mono_time = time.time() - convert_to_mono_start_time
 
-        resample_start_time = time.time()
-        vcons_resampled = None
-        with with_timing("Resampling."):
-            vcons_resampled = vcon.resample_many(vcons_mono)
-            print(f"Resampled vcons: {len(vcons_resampled)}")
-        print(f"Resampled vcons: {vcons_resampled[0]}")
-        resample_time = time.time() - resample_start_time
+        # resample_start_time = time.time()
+        # vcons_resampled = None
+        # with with_timing("Resampling."):
+        #     vcons_resampled = vcon.resample_many(vcons_mono)
+        #     print(f"Resampled vcons: {len(vcons_resampled)}")
+        # print(f"Resampled vcons: {vcons_resampled[0]}")
+        # resample_time = time.time() - resample_start_time
 
-        apply_vad_start_time = time.time()
-        vcons_vad = None
-        with with_timing("Applying VAD."):
-            vcons_vad = vcon.apply_vad_many(vcons_resampled)
-            #vcons_vad = vcons_resampled
-            print(f"VAD vcons: {len(vcons_vad)}")
-        print(f"VAD vcons: {vcons_vad[0]}")
-        apply_vad_time = time.time() - apply_vad_start_time
+        # apply_vad_start_time = time.time()
+        # vcons_vad = None
+        # with with_timing("Applying VAD."):
+        #     vcons_vad = vcon.apply_vad_many(vcons_resampled)
+        #     #vcons_vad = vcons_resampled
+        #     print(f"VAD vcons: {len(vcons_vad)}")
+        # print(f"VAD vcons: {vcons_vad[0]}")
+        # apply_vad_time = time.time() - apply_vad_start_time
 
-        pad_start_time = time.time()
-        vcons_padded = None
-        with with_timing("Padding."):
-            vcons_padded = vcon.pad_many(vcons_vad)
-        print(f"Padded vcons: {vcons_padded[0]}")
-        pad_time = time.time() - pad_start_time
+        # pad_start_time = time.time()
+        # vcons_padded = None
+        # with with_timing("Padding."):
+        #     vcons_padded = vcon.pad_many(vcons_preprocessed)
+        # print(f"Padded vcons: {vcons_padded[0]}")
+        # pad_time = time.time() - pad_start_time
 
         # vcons_on_gpu = None
         # with with_timing("Moving to GPU."):
@@ -129,7 +147,7 @@ def main(sftp_url, keep_running, measure=False):
         batch_start_time = time.time()
         vcons_batched = None
         with with_timing("Batching."):
-            vcons_batched = vcon.make_batches(vcons_padded)
+            vcons_batched = vcon.make_batches(vcons_preprocessed)
         batch_time = time.time() - batch_start_time
 
         vcons_detected = None
@@ -190,7 +208,7 @@ def main(sftp_url, keep_running, measure=False):
         clear_processing_time = time.time() - clear_processing_start_time
 
         program_end_time = time.time()
-        program_time = program_end_time - start_time
+        program_time = program_end_time - program_start_time
 
         if measure:
             clear_screen()
@@ -207,13 +225,14 @@ def main(sftp_url, keep_running, measure=False):
             print(f"RTF: {total_duration / program_time}")
             print(f"Total MB per second: {total_bytes_mb / program_time:.2f}MB/s")
             print(f"--------------------------------")
-            print(f"Move downloading to processing: {move_downloading_to_processing_time:.2f}s {move_downloading_to_processing_time/program_time*100:.2f}%")
-            print(f"Processing invalids: {processing_invalids_time:.2f}s {processing_invalids_time/program_time*100:.2f}%")
-            print(f"Load processing into RAM: {load_processing_into_ram_time:.2f}s {load_processing_into_ram_time/program_time*100:.2f}%")
-            print(f"Convert to mono: {convert_to_mono_time:.2f}s {convert_to_mono_time/program_time*100:.2f}%")
-            print(f"Resample: {resample_time:.2f}s {resample_time/program_time*100:.2f}%")
-            print(f"Apply VAD: {apply_vad_time:.2f}s {apply_vad_time/program_time*100:.2f}%")
-            print(f"Pad: {pad_time:.2f}s {pad_time/program_time*100:.2f}%")
+            # print(f"Move downloading to processing: {move_downloading_to_processing_time:.2f}s {move_downloading_to_processing_time/program_time*100:.2f}%")
+            # print(f"Processing invalids: {processing_invalids_time:.2f}s {processing_invalids_time/program_time*100:.2f}%")
+            # print(f"Load processing into RAM: {load_processing_into_ram_time:.2f}s {load_processing_into_ram_time/program_time*100:.2f}%")
+            # print(f"Convert to mono: {convert_to_mono_time:.2f}s {convert_to_mono_time/program_time*100:.2f}%")
+            # print(f"Resample: {resample_time:.2f}s {resample_time/program_time*100:.2f}%")
+            # print(f"Apply VAD: {apply_vad_time:.2f}s {apply_vad_time/program_time*100:.2f}%")
+            # print(f"Pad: {pad_time:.2f}s {pad_time/program_time*100:.2f}%")
+            print(f"Preprocess: {preprocess_time:.2f}s {preprocess_time/program_time*100:.2f}%")
             print(f"Batch: {batch_time:.2f}s {batch_time/program_time*100:.2f}%")
             print(f"Identify languages: {identify_languages_time:.2f}s {identify_languages_time/program_time*100:.2f}%")
             print(f"Split by language: {split_by_language_time:.2f}s {split_by_language_time/program_time*100:.2f}%")

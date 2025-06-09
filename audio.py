@@ -15,6 +15,9 @@ def get_duration(filename):
     except Exception as e:
         return None
 
+def audio_data_duration(audio_data, sample_rate):
+    return audio_data.shape[1] / sample_rate
+
 def is_valid(file_path):
     try:
         duration = get_duration(file_path)
@@ -64,3 +67,6 @@ def pad_audio(audio_data, sample_rate, duration):
         return torch.nn.functional.pad(audio_data, (0, padding_needed))
     
     return audio_data
+
+def cpu_cores_for_preprocessing():
+    return num_cores() - 1

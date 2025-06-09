@@ -18,7 +18,7 @@ max_download_threads = 1
 gc_limit_bytes = 4*1024**3
 
 # SFTP connection settings for make_vcons_from_sftp.py
-#sftp_url = "sftp://bantaim@127.0.0.1:22/home/bantaim/conserver/openslr-12/"
+sftp_url = "sftp://bantaim@127.0.0.1:22/home/bantaim/conserver/openslr-12/"
 sftp_url = "sftp://bantaim@127.0.0.1:22/home/bantaim/conserver/fake_wavs_cute/"
 sample_rate = 16000
 max_discover_workers = 1
