@@ -138,10 +138,27 @@ def identify_languages(all_vcons_batched, model):
     Identify languages using NVIDIA AmberNet model.
     Returns vcons with standard language codes like ["en", "es", etc.]
     """
-    if not (hasattr(model, 'cfg') and hasattr(model.cfg, 'train_ds') and hasattr(model.cfg.train_ds, 'labels')):
-        raise AttributeError("Model does not have 'cfg.train_ds.labels' attribute. Cannot determine language map.")
+    language_map = None
+    if hasattr(model, 'cfg'):
+        if hasattr(model.cfg, 'train_ds') and hasattr(model.cfg.train_ds, 'labels'):
+            language_map = model.cfg.train_ds.labels
+        elif hasattr(model.cfg, 'validation_ds') and hasattr(model.cfg.validation_ds, 'labels'):
+            language_map = model.cfg.validation_ds.labels
+        elif hasattr(model.cfg, 'test_ds') and hasattr(model.cfg.test_ds, 'labels'):
+            language_map = model.cfg.test_ds.labels
+        elif hasattr(model.cfg, 'labels'):
+            language_map = model.cfg.labels
 
-    language_map = model.cfg.train_ds.labels
+    if language_map is None and hasattr(model, 'decoder') and hasattr(model.decoder, 'vocabulary'):
+        language_map = model.decoder.vocabulary
+
+    if language_map is None:
+        raise AttributeError(
+            "Could not find language map in model. Tried model.cfg.train_ds.labels, "
+            "model.cfg.validation_ds.labels, model.cfg.test_ds.labels, model.cfg.labels, "
+            "and model.decoder.vocabulary."
+        )
+
     #print(f"Using language map with {len(language_map)} languages: {language_map[:10]}...")
     
     vcons = []
@@ -175,18 +192,31 @@ def identify_languages(all_vcons_batched, model):
                 # Use the model's built-in inference method instead of direct forward()
                 # This is more appropriate for NeMo models
                 with torch.no_grad():
-                    print(f"Warning: No infer or predict method found for model. Using manual forward pass.")
-                    # Fallback to manual forward pass with proper tensor handling
-                    audio_tensor = torch.from_numpy(audio_data).unsqueeze(0).to(model.device)
-                    input_signal_length = torch.tensor([audio_tensor.shape[1]], dtype=torch.long, device=model.device)
-                    
-                    logits = model(input_signal=audio_tensor, input_signal_length=input_signal_length)
-                    
-                    # Handle different possible output formats
-                    if isinstance(logits, tuple):
-                        logits = logits[0]  # Take first element if tuple
-                    
-                    pred_label_idx = logits.argmax().item()
+                    # Try different inference methods that NeMo models typically have
+                    if hasattr(model, 'infer'):
+                        # Some NeMo models have an infer method
+                        result = model.infer([audio_data])
+                        if isinstance(result, list):
+                            pred_label_idx = result[0] if len(result) > 0 else 0
+                        else:
+                            pred_label_idx = result
+                    elif hasattr(model, 'predict'):
+                        # Some have predict method
+                        result = model.predict([audio_data])
+                        pred_label_idx = result[0] if isinstance(result, list) else result
+                    else:
+                        #print(f"Warning: No infer or predict method found for model. Using manual forward pass.")
+                        # Fallback to manual forward pass with proper tensor handling
+                        audio_tensor = torch.from_numpy(audio_data).unsqueeze(0).to(model.device)
+                        input_signal_length = torch.tensor([audio_tensor.shape[1]], dtype=torch.long, device=model.device)
+                        
+                        logits = model(input_signal=audio_tensor, input_signal_length=input_signal_length)
+                        
+                        # Handle different possible output formats
+                        if isinstance(logits, tuple):
+                            logits = logits[0]  # Take first element if tuple
+                        
+                        pred_label_idx = logits.argmax().item()
                 
                 # Map index to language code
                 if isinstance(pred_label_idx, (torch.Tensor, np.ndarray)):
