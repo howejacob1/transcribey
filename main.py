@@ -33,11 +33,15 @@ def main(sftp_url, keep_running, measure=False):
 
     info_header(f"Starting reserver thread for {sftp_url}")
     reserver_thread = reserver.start(sftp_url, vcons_ready_queue, vcons_lock, keep_running)
-    lang_detect_model = None
-    lang_detect_processor = None
-    with with_timing("Loading whisper."):
-        lang_detect_model, lang_detect_processor = ai.load_whisper_tiny()
-        
+    # lang_detect_model = None
+    # lang_detect_processor = None
+    # with with_timing("Loading whisper."):
+    #     lang_detect_model, lang_detect_processor = ai.load_whisper_tiny()
+
+    en_model = None
+    with with_timing("Loading langid model."):
+        lang_detect_model = ai.load_nvidia_ambernet()
+
     en_model = None
     with with_timing("Loading en model."):
         en_model = ai.load_nvidia(settings.en_model_name)
@@ -71,6 +75,7 @@ def main(sftp_url, keep_running, measure=False):
         
         preprocess_start_time = time.time()
         vcons_preprocessed = []
+        count = 0
         with with_timing("Preprocessing."):
             futures = []
             vad = torchaudio.transforms.Vad(sample_rate=settings.sample_rate, trigger_level=0.5)
@@ -79,6 +84,9 @@ def main(sftp_url, keep_running, measure=False):
                     total_vcons += 1
                     futures.append(executor.submit(vcon.preprocess_vcon_one, vcon_cur, vad))
                 for future in as_completed(futures):
+                    count += 1
+                    if count % 50 == 0:
+                        print(f"Preprocessed {count} vcons")
                     vcon_cur, bytes, duration = future.result()
                     if vcon_cur is not None:
                         vcons_preprocessed.append(vcon_cur)
@@ -155,59 +163,62 @@ def main(sftp_url, keep_running, measure=False):
         batch_start_time = time.time()
         vcons_batched = None
         with with_timing("Batching."):
-            vcons_batched = vcon.make_batches(vcons_preprocessed, gpu.batch_bytes())
+            vcons_batched = vcon.make_batches(vcons_preprocessed, gpu.batch_bytes()*512)
         batch_time = time.time() - batch_start_time
 
         vcons_detected = None
         identify_languages_start_time = time.time()
         with with_timing("Identifying languages."):
-            vcons_detected = ai.identify_languages(vcons_batched, lang_detect_model, lang_detect_processor)
+            vcons_detected = ai.identify_languages(vcons_batched, lang_detect_model)
         print(f"Detected vcons.")
         identify_languages_time = time.time() - identify_languages_start_time
 
         split_by_language_start_time = time.time()
         with with_timing("Splitting by language."):
             vcons_en, vcons_non_en = vcon.split_by_language(vcons_detected)
-        print(f"En vcons: {vcons_en[0]}")
-        print(f"Non-en vcons: {vcons_non_en[0]}")
+        # print(f"En vcons: {vcons_en[0]}")
+        # print(f"Non-en vcons: {vcons_non_en[0]}")
         split_by_language_time = time.time() - split_by_language_start_time
-
+        
+        # batching
         batch_en_start_time = time.time()
+        vcons_en_batched = []
         info_header(f"Batching {len(vcons_en)} en vcons.")
-        vcons_en_batched = vcon.make_batches(vcons_en, gpu.batch_bytes()*512)
-        print(f"En batched vcons: {vcons_en_batched[0]}")
+        if vcons_en:
+            vcons_en_batched = vcon.make_batches(vcons_en, gpu.batch_bytes()*512)
         batch_en_time = time.time() - batch_en_start_time
 
         batch_non_en_start_time = time.time()
+        vcons_non_en_batched = []
         info_header(f"Batching {len(vcons_non_en)} non-en vcons.")
-        vcons_non_en_batched = vcon.make_batches(vcons_non_en, gpu.batch_bytes()*512)
-        print(f"Non-en batched vcons: {vcons_non_en_batched[0]}")
+        if vcons_non_en:
+            vcons_non_en_batched = vcon.make_batches(vcons_non_en, gpu.batch_bytes()*512)
         batch_non_en_time = time.time() - batch_non_en_start_time
 
         transcribe_en_start_time = time.time()
-        vcons_en_transcribed = None
+        vcons_en_transcribed = []
         with with_timing("Transcribing en vcons."):
-            vcons_en_transcribed = ai.transcribe_many(vcons_en_batched, en_model)
-        print(f"En transcribed vcons: {vcons_en_transcribed[0]}")
+            if vcons_en:
+                vcons_en_transcribed = ai.transcribe_many(vcons_en_batched, en_model)
         transcribe_en_time = time.time() - transcribe_en_start_time
 
         transcribe_non_en_start_time = time.time()
-        vcons_non_en_transcribed = None
+        vcons_non_en_transcribed = []
         with with_timing("Transcribing non-en vcons."):
-            vcons_non_en_transcribed = ai.transcribe_many(vcons_non_en_batched, non_en_model, language="es")
-        print(f"Non-en transcribed vcons: {vcons_non_en_transcribed[0]}")
+            if vcons_non_en:
+                vcons_non_en_transcribed = ai.transcribe_many(vcons_non_en_batched, non_en_model, language="es")
         transcribe_non_en_time = time.time() - transcribe_non_en_start_time
+
+        all_vcons = vcons_en_transcribed + vcons_non_en_transcribed
 
         mark_as_done_start_time = time.time()
         with with_timing("Marking as done."):
-            for vcons_batch in [vcons_en_transcribed, vcons_non_en_transcribed]:
-                vcon.mark_vcons_as_done(vcons_batch)
+            vcon.mark_vcons_as_done(all_vcons)
         mark_as_done_time = time.time() - mark_as_done_start_time
 
         update_on_db_start_time = time.time()
         with with_timing("Updating on DB."):
-            vcon.update_vcons_on_db(vcons_en_transcribed)
-            vcon.update_vcons_on_db(vcons_non_en_transcribed)
+            vcon.update_vcons_on_db(all_vcons)
         update_on_db_time = time.time() - update_on_db_start_time
 
         clear_processing_start_time = time.time()
@@ -243,6 +254,16 @@ def main(sftp_url, keep_running, measure=False):
             print(f"Preprocess: {preprocess_time:.2f}s {preprocess_time/program_time*100:.2f}%")
             print(f"Batch: {batch_time:.2f}s {batch_time/program_time*100:.2f}%")
             print(f"Identify languages: {identify_languages_time:.2f}s {identify_languages_time/program_time*100:.2f}%")
+            num_en = 0
+            num_es = 0
+            for vcon_cur in all_vcons:
+                languages = vcon.get_languages(vcon_cur)
+                if "en" in languages:
+                    num_en += 1
+                if "es" in languages:
+                    num_es += 1
+            print(f"Num en: {num_en} ({num_en/len(all_vcons)*100:.2f}%)")
+            print(f"Num es: {num_es} ({num_es/len(all_vcons)*100:.2f}%)")
             print(f"Split by language: {split_by_language_time:.2f}s {split_by_language_time/program_time*100:.2f}%")
             print(f"Batch en: {batch_en_time:.2f}s {batch_en_time/program_time*100:.2f}%")
             print(f"Batch non-en: {batch_non_en_time:.2f}s {batch_non_en_time/program_time*100:.2f}%")

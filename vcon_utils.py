@@ -400,12 +400,12 @@ def preprocess_vcon_one(vcon, vad):
         vcon["sample_rate"] = sample_rate
         vcon = convert_to_mono_maybe(vcon)
         vcon = resample_vcon_one(vcon)
-        vcon = apply_vad_one(vcon, vad)
+        #vcon = apply_vad_one(vcon, vad)
         duration = audio.audio_data_duration(audio_data, sample_rate)
         bytes = audio.get_size(audio_data)
         vcon["size"] = bytes
         audio_data = get_audio(vcon)
-        audio_data = audio_data.squeeze().numpy().astype(np.float16)
+        audio_data = audio_data.squeeze().numpy()
         set_audio(vcon, audio_data)
         return vcon, bytes, duration
     except RuntimeError:

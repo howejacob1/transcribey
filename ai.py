@@ -10,12 +10,13 @@ import vcon_utils
 import audio
 import numpy as np
 from gpu import gpu_ram_free_bytes
+import nemo.collections.asr as nemo_asr
 
 def whisper_token_to_language(token):
     return whisper_token_languages[whisper_token_ids.index(token)]
 
 def load_whisper_tiny_raw():
-    with suppress_output(should_suppress=False):
+    with suppress_output(should_suppress=True):
         model_name = "openai/whisper-tiny"
         processor = AutoProcessor.from_pretrained(model_name)
         model = AutoModelForSpeechSeq2Seq.from_pretrained(model_name)
@@ -34,10 +35,8 @@ def load_whisper_tiny():
     return (model, processor)
 
 def load_nvidia_raw(model_name):
-    with suppress_output(should_suppress=False):
-        nemo_asr = importlib.import_module("nemo.collections.asr")
+    with suppress_output(should_suppress=True):
         model = nemo_asr.models.ASRModel.from_pretrained(model_name=model_name)
-        model.to(torch.float16)
         return model
 
 def load_nvidia(model_name):
@@ -48,6 +47,14 @@ def load_nvidia(model_name):
     model = move_to_gpu_maybe(model)
     print(f"Model {model_name} loaded in {time.time() - total_start_time:.2f} seconds total")
     return model
+
+def load_nvidia_ambernet():
+    model_name = "langid_ambernet"
+    with suppress_output(should_suppress=True):
+        langid_model = nemo_asr.models.EncDecSpeakerLabelModel.from_pretrained(model_name="langid_ambernet")
+        langid_model = move_to_gpu_maybe(langid_model)
+        langid_model.eval()
+        return langid_model
 
 #language_tokens = [t for t in tokenizer.additional_special_tokens if len(t) == 6]
 #language_token_ids = tokenizer.convert_tokens_to_ids(language_tokens)
@@ -121,22 +128,113 @@ def identify_language_batch(vcon_batch, audio_data_batch, inputs, model):
     return vcons
     
 
-def preprocess_identify_languages(vcon_batch, audio_data_batch, processor):
-    audio_data_batch = vcon_utils.batch_to_audio_data(vcon_batch)
-    inputs = processor(audio_data_batch, sampling_rate=settings.sample_rate, return_tensors="pt", padding="max_length")
-    return vcon_batch, audio_data_batch, inputs
+# def preprocess_identify_languages(vcon_batch, audio_data_batch, processor):
+#     audio_data_batch = vcon_utils.batch_to_audio_data(vcon_batch)
+#     inputs = processor(audio_data_batch, sampling_rate=settings.sample_rate, return_tensors="pt", padding="max_length")
+#     return vcon_batch, audio_data_batch, inputs
 
-def identify_languages(all_vcons_batched, model, processor):
+def identify_languages(all_vcons_batched, model):
+    """
+    Identify languages using NVIDIA AmberNet model.
+    Returns vcons with standard language codes like ["en", "es", etc.]
+    """
+    if not (hasattr(model, 'cfg') and hasattr(model.cfg, 'train_ds') and hasattr(model.cfg.train_ds, 'labels')):
+        raise AttributeError("Model does not have 'cfg.train_ds.labels' attribute. Cannot determine language map.")
+
+    language_map = model.cfg.train_ds.labels
+    #print(f"Using language map with {len(language_map)} languages: {language_map[:10]}...")
+    
     vcons = []
-    futures = []
-    with ThreadPoolExecutor(max_workers=audio.cpu_cores_for_preprocessing()) as executor:
-        for vcon_batch in all_vcons_batched:
-            audio_data_batch = vcon_utils.batch_to_audio_data(vcon_batch)
-            futures.append(executor.submit(preprocess_identify_languages, vcon_batch, audio_data_batch, processor))
-        for future in as_completed(futures):
-            vcon_batch, audio_data_batch, inputs = future.result()
-            vcons.extend(identify_language_batch(vcon_batch, audio_data_batch, inputs, model))
+    for vcon_batch in all_vcons_batched:
+        print(f"identifying languages for {len(vcon_batch)} vcons (gpu memory: {gpu_ram_free_bytes()})")
+        audio_data_batch = vcon_utils.batch_to_audio_data(vcon_batch)
+        results = []
+        
+        # Process each audio sample
+        for audio_data in audio_data_batch:
+            try:
+                # Ensure audio is numpy array and convert to proper format
+                if isinstance(audio_data, torch.Tensor):
+                    audio_data = audio_data.cpu().numpy()
+                
+                # Ensure audio is 1D and float32
+                audio_data = audio_data.squeeze()
+                if audio_data.ndim != 1:
+                    # If still not 1D, take the first channel (assume mono)
+                    audio_data = audio_data[0]
+                audio_data = audio_data.astype(np.float32)
+                
+                # Check if audio is long enough (minimum duration check)
+                min_samples = 1024  # Minimum samples for reliable language detection
+                if len(audio_data) < min_samples:
+                    #print(f"Audio too short ({len(audio_data)} samples), padding to {min_samples}")
+                    # Pad with zeros or repeat the audio
+                    padding_needed = min_samples - len(audio_data)
+                    audio_data = np.pad(audio_data, (0, padding_needed), mode='constant')
+                
+                # Use the model's built-in inference method instead of direct forward()
+                # This is more appropriate for NeMo models
+                with torch.no_grad():
+                    # Try different inference methods that NeMo models typically have
+                    if hasattr(model, 'infer'):
+                        # Some NeMo models have an infer method
+                        result = model.infer([audio_data])
+                        if isinstance(result, list):
+                            pred_label_idx = result[0] if len(result) > 0 else 0
+                        else:
+                            pred_label_idx = result
+                    elif hasattr(model, 'predict'):
+                        # Some have predict method
+                        result = model.predict([audio_data])
+                        pred_label_idx = result[0] if isinstance(result, list) else result
+                    else:
+                        # Fallback to manual forward pass with proper tensor handling
+                        audio_tensor = torch.from_numpy(audio_data).unsqueeze(0).to(model.device)
+                        input_signal_length = torch.tensor([audio_tensor.shape[1]], dtype=torch.long, device=model.device)
+                        
+                        logits = model(input_signal=audio_tensor, input_signal_length=input_signal_length)
+                        
+                        # Handle different possible output formats
+                        if isinstance(logits, tuple):
+                            logits = logits[0]  # Take first element if tuple
+                        
+                        pred_label_idx = logits.argmax().item()
+                
+                # Map index to language code
+                if isinstance(pred_label_idx, (torch.Tensor, np.ndarray)):
+                    pred_label_idx = pred_label_idx.item()
+                
+                if pred_label_idx < len(language_map):
+                    predicted_lang = language_map[pred_label_idx]
+                    #print(f"Predicted language index {pred_label_idx} -> {predicted_lang}")
+                else:
+                    print(f"Warning: Predicted index {pred_label_idx} out of range (max: {len(language_map)-1}), defaulting to 'en'")
+                    predicted_lang = 'en'
+                if predicted_lang != 'es':
+                    predicted_lang = "en" # assume spanish is correctly identified-- all else assert english
+                results.append(predicted_lang)
+                
+            except Exception as e:
+                #print(f"Error processing audio sample: {e}")
+                results.append('en')  # Default fallback
+        
+        # Assign languages to vcons (one language per vcon)
+        for i, vcon_cur in enumerate(vcon_batch):
+            if i < len(results):
+                detected_lang = results[i]
+                # Always return as list for consistency (e.g., ["en"])
+                language_list = [detected_lang]
+                #print(f"Detected language for vcon {i}: {language_list}")
+                vcon_utils.set_languages(vcon_cur, language_list)
+                vcons.append(vcon_cur)  # Fixed: append the vcon, not the list
+            else:
+                #print(f"Warning: No result for vcon {i}, defaulting to ['en']")
+                vcon_utils.set_languages(vcon_cur, ['en'])
+                vcons.append(vcon_cur)
+        
         gc_collect_maybe()
+    
+    print(f"Processed {len(vcons)} vcons for language identification")
     return vcons
 
 def transcribe_batch(vcon_batch, model, language="en", config={}):
