@@ -52,14 +52,21 @@ def main(sftp_url, keep_running, measure=False):
     total_duration = 0
     total_bytes = 0
 
-    while True:
+    while True:                                                                                                                     
         program_start_time = time.time()
 
         vcons = None
         # move_downloading_to_processing_start_time = time.time()
-        with vcons_lock:
-            vcons = vcons_ready_queue.get()
-                # cache.move_downloading_to_processing()
+        while True: # until we get vcons
+            with vcons_lock:
+                try:
+                    vcons = vcons_ready_queue.get(timeout=0.1)
+                    break
+                except Empty:
+                    pass
+            time.sleep(1) # release lock for a sec
+        
+        # cache.move_downloading_to_processing()
         # move_downloading_to_processing_time = time.time() - move_downloading_to_processing_start_time
         
         preprocess_start_time = time.time()
