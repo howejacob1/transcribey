@@ -262,6 +262,8 @@ def main(sftp_url, keep_running, measure=False):
             print(f"Mark as done: {mark_as_done_time:.2f}s {mark_as_done_time/program_time*100:.2f}%")
             print(f"Update on DB: {update_on_db_time:.2f}s {update_on_db_time/program_time*100:.2f}%")
             print(f"Clear processing: {clear_processing_time:.2f}s {clear_processing_time/program_time*100:.2f}%")
+            print(f"Max GPU ram utilization: {gpu.max_gpu_memory_usage()/(1024**3):.2f}GB")
+            gpu.print_gpu_memory_usage()
             print(f"--------------------------------")
             print(f"Total time: {program_time:.2f}s {program_time/program_time*100:.2f}%")
             keep_running.clear()
