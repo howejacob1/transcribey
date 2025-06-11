@@ -1,5 +1,6 @@
 import torch
 import torchaudio
+import gpu
 import settings
 from utils import num_cores
 import logging
@@ -25,6 +26,11 @@ def is_valid(file_path):
     except Exception as e:
         logging.info(f"Error in is_valid: {e}")
         return False
+    
+def load_to_gpu(filename):
+    audio_data, sample_rate = torchaudio.load(filename)
+    audio_data = gpu.move_to_gpu_maybe(audio_data)
+    return audio_data, sample_rate
 
 def load_to_cpu(filename):
     audio, sample_rate = torchaudio.load(filename)
@@ -33,7 +39,7 @@ def load_to_cpu(filename):
 def resample_audio(audio, sample_rate):
     target_sample_rate = settings.sample_rate
     if sample_rate != target_sample_rate:
-        resampler = torchaudio.transforms.Resample(sample_rate, target_sample_rate)
+        resampler = torchaudio.transforms.Resample(sample_rate, target_sample_rate).to(gpu.get_device())
         resampled_audio = resampler(audio)
         return resampled_audio
     else:
