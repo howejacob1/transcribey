@@ -271,7 +271,7 @@ def transcribe_batch(vcon_batch, model, language="en", config={}):
 
 def transcribe_many(vcons_batched, model, language="en"):
     vcons = []
-    config = {}
+    config = {"batch_size": 52}
     if language != "en":
         config = {"source_lang": language,
                     "target_lang": language,
