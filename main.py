@@ -63,14 +63,7 @@ def main(sftp_url, keep_running, measure=False):
 
         vcons = None
         # move_downloading_to_processing_start_time = time.time()
-        while True: # until we get vcons
-            with vcons_lock:
-                try:
-                    vcons = vcons_ready_queue.get(timeout=0.1)
-                    break
-                except Empty:
-                    pass
-            time.sleep(1) # release lock for a sec
+        vcons = vcons_ready_queue.get()
         
         # cache.move_downloading_to_processing()
         # move_downloading_to_processing_time = time.time() - move_downloading_to_processing_start_time
@@ -317,4 +310,3 @@ if __name__ == "__main__":
             vcon.delete_all()
     except KeyboardInterrupt:
         keep_running.clear()
-

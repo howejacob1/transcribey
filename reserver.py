@@ -24,15 +24,14 @@ def actually_start(sftp_url, vcons_ready_queue, vcons_lock, keep_running, once=F
             vcons = vcon.find_and_reserve_many(settings.cache_size_bytes)
             if vcons:
                 print(f"Reserving {len(vcons)} vcons")
-                with vcons_lock:
-                    vcon.cache_vcon_audio_many(vcons, sftp)
-                    print(f"Finished caching {len(vcons)} vcons. Putting.")
-                    while keep_running.is_set():
-                        try:
-                            vcons_ready_queue.put(vcons, timeout=0.1)
-                            break
-                        except queue.Full:
-                            pass
+                vcon.cache_vcon_audio_many(vcons, sftp)
+                print(f"Finished caching {len(vcons)} vcons. Putting.")
+                while keep_running.is_set():
+                    try:
+                        vcons_ready_queue.put(vcons, timeout=0.1)
+                        break
+                    except queue.Full:
+                        pass
             if once:
                 break
             time.sleep(1) # don't overwhelm network
@@ -45,3 +44,4 @@ def start(sftp_url, vcons_ready_queue, vcons_lock, keep_running):
     thread.name = "reserver_thread"
     thread.start()
     return thread
+
