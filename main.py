@@ -153,7 +153,7 @@ def main(sftp_url, keep_running, measure=False):
         batch_start_time = time.time()
         vcons_batched = None
         with with_timing("Batching."):
-            vcons_batched = vcon.make_batches(vcons_preprocessed, gpu.batch_bytes()*512)
+            vcons_batched = vcon.make_batches(vcons_preprocessed, gpu.batch_bytes())
         batch_time = time.time() - batch_start_time
 
         vcons_detected = None
@@ -175,14 +175,14 @@ def main(sftp_url, keep_running, measure=False):
         vcons_en_batched = []
         info_header(f"Batching {len(vcons_en)} en vcons.")
         if vcons_en:
-            vcons_en_batched = vcon.make_batches(vcons_en, gpu.batch_bytes()*512)
+            vcons_en_batched = vcon.make_batches(vcons_en, gpu.batch_bytes())
         batch_en_time = time.time() - batch_en_start_time
 
         batch_non_en_start_time = time.time()
         vcons_non_en_batched = []
         info_header(f"Batching {len(vcons_non_en)} non-en vcons.")
         if vcons_non_en:
-            vcons_non_en_batched = vcon.make_batches(vcons_non_en, gpu.batch_bytes()*512)
+            vcons_non_en_batched = vcon.make_batches(vcons_non_en, gpu.batch_bytes())
         batch_non_en_time = time.time() - batch_non_en_start_time
 
         transcribe_en_start_time = time.time()
