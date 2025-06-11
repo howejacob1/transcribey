@@ -1,6 +1,6 @@
 # This module should be imported as vcon.
 import datetime
-import numpy as np
+import cupy as cp
 import logging
 import mimetypes
 import time
@@ -396,7 +396,7 @@ def preprocess_vcon_one(vcon_cur, _):
         print(f"Preprocessing {vcon_cur['uuid']}")
         filename = processing_filename(vcon_cur)
         cache.move_filename_to_processing(filename)
-        audio_data, sample_rate = audio.load_to_cpu(filename)
+        audio_data, sample_rate = audio.load_to_gpu(filename)
         vcon_cur = set_audio(vcon_cur, audio_data)
         vcon_cur["sample_rate"] = sample_rate
         duration = audio.audio_data_duration(audio_data, sample_rate)
@@ -406,7 +406,7 @@ def preprocess_vcon_one(vcon_cur, _):
         bytes = audio.get_size(audio_data)
         vcon_cur["size"] = bytes
         audio_data = get_audio(vcon_cur)
-        audio_data = audio_data.squeeze().numpy()
+        audio_data = audio_data.squeeze()
         set_audio(vcon_cur, audio_data)
         return vcon_cur, bytes, duration
     except RuntimeError:
