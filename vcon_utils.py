@@ -1,87 +1,46 @@
-# This module should be imported as vcon.
-import datetime
-import cupy as cp
+from multiprocessing import Event, Process
 import logging
+from log_utils import with_blocking_time
+import threading
+from typing import List
+from mongo_utils import db
+import sftp
+from vcon_class import Vcon
+from utils import block_until_threads_finish
+import logging
+import datetime
 import mimetypes
-import time
 import os
 from pprint import pprint
-import threading
 import binpacking
 import torchaudio
 from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor, as_completed
 from pymongo import MongoClient, ReplaceOne
 import audio
 import cache
-import mongo_utils
+from mongo_utils import db
 import secrets_utils
 import settings
 from settings import hostname
 import sftp as sftp_utils
 from sftp import parse_url
 import gpu
-from utils import extension, suppress_output, wait_for_all_threads_to_finish, wait_for_one_thread_to_finish, is_audio_filename
-from vcon import Vcon
+from utils import extension, suppress_output, block_until_threads_finish, is_audio_filename
+from vcon import Vcon as VconBase
 from vcon.dialog import Dialog
 from vcon.party import Party
+import threading
 
-def get_size(vcon):
-    return vcon["size"]
-
-def get_filename(vcon):
-    return vcon["dialog"][0]["filename"]
-
-def set_filename(vcon, filename):
-    vcon["dialog"][0]["filename"] = filename
-    return vcon
-
-def get_audio(vcon):
-    return vcon["dialog"][0]["body"]
-
-def set_audio(vcon, audio):
-    vcon["dialog"][0]["body"] = audio
-    return vcon
-
-def get_transcript_text(vcon):
-    return vcon["dialog"][0]["transcript"]["text"]
-
-def set_transcript_text(vcon, text):
-    vcon["dialog"][0]["transcript"]["text"] = text
-    return vcon
-
-def get_languages(vcon):
-    return vcon["dialog"][0]["transcript"]["languages"]
-
-def set_languages(vcon, langs):
-    vcon["dialog"][0]["transcript"]["languages"] = langs
-    return vcon
-
-def get_collection_name():
-    return secrets_utils.secrets.get('mongo_db', {}).get('vcons_collection')
-
-def get_collection():
-    collection_name = get_collection_name()
-    return mongo_utils.get_collection(collection_name)
-
-def set_transcript(vcon, transcript):
-    vcon["dialog"][0]["transcript"]["text"] = transcript
-    return vcon
-
-def set_transcript_dict(vcon, transcript_dict):
-    vcon["dialog"][0]["transcript"] = transcript_dict
-    return vcon
-
-def set_done(vcon):
-    vcon["done"] = True
-    return vcon
 
 def is_mono(vcon):
-    return audio.is_mono(get_audio(vcon))
+    audio_data = vcon.audio
+    return audio.is_mono(audio_data)
 
 def convert_to_mono_maybe(vcon):
     if not is_mono(vcon):
-        audio_data_val = audio.convert_to_mono(get_audio(vcon))
-        vcon = set_audio(vcon, audio_data_val)
+        audio_data = vcon.audio
+        audio_data_mono = audio.convert_to_mono(audio_data)
+        vcon.audio = audio_data_mono
     return vcon
 
 def convert_to_mono_many(vcons):
@@ -125,12 +84,12 @@ def resample_many(vcons):
     return resampled_vcons
 
 def downloading_filename(vcon):
-    vcon_filename = get_filename(vcon)
+    vcon_filename = vcon.filename
     audio_extension = extension(vcon_filename)
-    return cache.filename_to_downloading_filename(vcon["uuid"] + "." + audio_extension)
+    return cache.filename_to_downloading_filename(vcon.uuid + "." + audio_extension)
 
-def cache_vcon_audio(vcon, sftp):
-    source_filename = get_filename(vcon)
+def cache_audio(vcon: Vcon, sftp: sftp.SftpClient):
+    source_filename = vcon.filename
     dest_filename = downloading_filename(vcon)
     sftp_utils.download(source_filename, dest_filename, sftp)
 
@@ -145,23 +104,22 @@ def cache_vcon_audio_many(vcons, sftp):
     print(f"Finished caching {total_count} vcons.")
     return vcons
 
-def processing_filename(vcon):
-    vcon_filename = get_filename(vcon)
+def processing_filename(vcon: Vcon):
+    vcon_filename = vcon.filename
     audio_extension = extension(vcon_filename)
-    return cache.filename_to_processing_filename(vcon["uuid"] + "." + audio_extension)
+    return cache.filename_to_processing_filename(vcon.uuid + "." + audio_extension)
 
-def mark_vcon_as_invalid(vcon):
-    collection = get_collection()
-    collection.update_one({"uuid": vcon["uuid"]}, {"$set": {"corrupt": True, "done": True}})
+def mark_vcon_as_invalid(vcon: Vcon):
+    db.update_one({"uuid": vcon["uuid"]}, {"$set": {"corrupt": True, "done": True}})
 
-def remove_vcon_from_processing(vcon):
+def remove_vcon_from_processing(vcon: Vcon):
     os.remove(processing_filename(vcon))
 
 def is_audio_valid(vcon):
     audio_data = get_audio(vcon)
     return audio.is_valid(audio_data)
 
-def process_invalids(vcons):
+def process_invalids(vcons: List[Vcon]):
     vcons_valid = []
     for vcon in vcons:
         filename = processing_filename(vcon)
@@ -176,17 +134,45 @@ def process_invalids(vcons):
     return vcons_valid
 
 def unmarked_all_reserved():
-    collection = get_collection()
-    collection.update_many({"processed_by": settings.hostname, "done": {"$ne": True}}, {"$unset": {"processed_by": ""}})
+    logging.info(f"Unmarking all reserved.")
+    db.update_many({"processed_by": settings.hostname, "done": {"$ne": True}}, {"$unset": {"processed_by": ""}})
 
-def insert_many_maybe(vcons):
+def insert_one(vcon: Vcon):
+    vcon_dict = vcon.to_dict()
+    db.insert_one(vcon_dict)
+
+def insert_many(vcons: List[Vcon]):
+    dicts = []
+    for vcon in vcons:
+        vcon_dict = vcon.to_dict()
+        dicts.append(vcon_dict)
+    db.insert_many(dicts)
+
+def insert_many_maybe(vcons: List[Vcon] | None):
     if vcons:
-        collection = get_collection()
-        collection.insert_many(vcons)
+        to_insert = []
+        for vcon in vcons:
+            filename = vcon.filename
+            if not exists_by_filename(filename):
+                to_insert.append(vcon)
+        insert_many(to_insert)  
+
+def insert_many_maybe_async(vcons: List[Vcon] | None):
+    if vcons:
+        thread = threading.Thread(target=insert_many_maybe, args=(vcons,), daemon=True)
+        thread.start()
+        return thread
+
+def insert_maybe(vcon):
+    """Insert a vcon if it doesn't already exist (accepts Vcon object or dict)"""
+    if vcon:
+        # Get filename whether it's a Vcon object or dict
+        filename = vcon.filename if hasattr(vcon, 'filename') else vcon["dialog"][0]["filename"]
+        if not exists_by_filename(filename):
+            insert_one(vcon)  # insert_one now handles the conversion
 
 def get_by_filename(filename):
-    collection = get_collection()
-    return collection.find_one({"dialog.0.filename": filename})
+    return db.find_one({"dialog.0.filename": filename})
 
 def exists_by_filename(filename):
     return get_by_filename(filename) is not None
@@ -194,7 +180,7 @@ def exists_by_filename(filename):
 def create(url):
     vcon = None
     with suppress_output(should_suppress=True):
-        vcon_obj = Vcon.build_new()
+        vcon_obj = VconBase.build_new()
         party = Party(name="Unknown", role="participant")
         vcon_obj.add_party(party)
         now = datetime.datetime.now(datetime.timezone.utc)
@@ -214,40 +200,6 @@ def create(url):
         set_transcript_dict(vcon, {})
         print(vcon)
     return vcon
-
-def discover(url, keep_running):
-    try:
-        sftp = sftp_utils.connect_keep_trying(url)
-        parsed = sftp_utils.parse_url(url)
-        path = parsed["path"]
-        vcons = []
-        count = 0
-        for filename, size in sftp_utils.get_all_filenames(path, sftp):
-            if not keep_running.is_set():
-                if sftp:
-                    sftp.close()
-                return
-            if is_audio_filename(filename):
-                if not exists_by_filename(filename):
-                    count += 1
-                    vcon = create(filename)
-                    vcon["size"] = size
-                    vcons.append(vcon)
-                    if count % 50 == 0:
-                        logging.info(f"discovered {count} vcons")
-        logging.info(f"inserting {len(vcons)} vcons")
-        insert_many_maybe(vcons)
-        logging.info(f"done inserting {len(vcons)} vcons")
-    finally:
-        if sftp:
-            sftp.close()
-    
-    logging.info(f"Discover complete. {len(vcons)} vcons discovered.")
-
-def start_discover(url, keep_running):
-    discover_thread = threading.Thread(target=discover, args=(url, keep_running), daemon=False)
-    discover_thread.start()
-    return discover_thread
 
 def load_processing_into_ram(vcons):
     logging.info(f"Loading {len(vcons)} vcons into RAM.")
@@ -277,11 +229,6 @@ def apply_vad_many(vcons):
             vcons_vad.append(future.result())
     return vcons_vad
 
-def move_to_gpu_maybe(vcon):
-    vcon_audio_data = get_audio(vcon)
-    vcon_audio_data = gpu.move_to_gpu_maybe(vcon_audio_data)
-    set_audio(vcon, vcon_audio_data)
-    return vcon
 
 def move_to_gpu_many(vcons):
     vcons_on_gpu = []
@@ -302,10 +249,9 @@ def split_by_language(vcons):
 
 def mark_vcons_as_done(vcons):
     for vcon in vcons:
-        set_done(vcon)
+        vcon.done = True
 
 def update_vcons_on_db(vcons):
-    collection = get_collection()
     operations = []
     for vcon in vcons:
         #pprint(vcon)
@@ -315,38 +261,32 @@ def update_vcons_on_db(vcons):
         operations.append(ReplaceOne({"uuid": vcon_uuid_val}, 
                                      vcon,
                                      upsert=True))
-    collection.bulk_write(operations)
-    # thread = threading.Thread(target=collection.bulk_write, args=(operations,))
+    db.bulk_write(operations)
+    # thread = threading.Thread(target=db.bulk_write, args=(operations,))
     # thread.start()
 
-def delete_all():
-    collection = get_collection()
-    result = collection.delete_many({})
-    print(f"Deleted {result.deleted_count} documents from the collection.")
-
 def load_all():
-    collection = get_collection()
-    return list(collection.find())
+    return list(db.find())
 
 def load_and_print_all():
-    collection = get_collection()
     vcons = load_all()
     pprint(vcons)
 
 def all_urls():
-    collection = get_collection()
-    return [get_filename(vcon) for vcon in collection.find({"dialog.0.filename": 1})]
+    return [vcon.filename for vcon in db.find({"dialog.0.filename": 1})]
 
-def find_and_reserve():
-    collection = get_collection()
-    result = collection.find_one_and_update(
+def find_and_reserve() -> Vcon | None:
+    dict = db.find_one_and_update(
         {"done": {"$ne": True}, "processed_by": {"$exists": False}},
         {"$set": {"processed_by": settings.hostname}},
         return_document=True
     )
-    return result
+    if dict:
+        vcon = Vcon.from_dict(dict)
+        return vcon
+    return None
 
-def find_and_reserve_many(size_bytes):
+def find_and_reserve_many(size_bytes: int) -> List[Vcon]:
     total_bytes = 0
     reserved = []
     while total_bytes < size_bytes:
@@ -354,34 +294,34 @@ def find_and_reserve_many(size_bytes):
         if not some_vcon:
             return reserved
         reserved.append(some_vcon)
-        total_bytes += get_size(some_vcon)
+        total_bytes += some_vcon.size
     return reserved
 
-def get_longest_duration(vcons):
+def get_longest_duration(vcons: List[Vcon]) -> float:
     longest_duration = 0
     for vcon in vcons:
-        audio_data = get_audio(vcon)
-        duration = audio.get_duration(get_filename(vcon))
+        audio_data = vcon.audio
+        duration = audio.get_duration(vcon.filename)
         if duration > longest_duration:
             longest_duration = duration
     return longest_duration
 
-def pad_vcon(vcon, longest_duration):
-    audio_data = get_audio(vcon)
+def pad_vcon(vcon: Vcon, longest_duration: float) -> Vcon:
+    audio_data = vcon.audio
     audio_data = audio.pad_audio(audio_data, settings.sample_rate, longest_duration)
-    vcon = set_audio(vcon, audio_data)
+    vcon.audio = audio_data
     return vcon
 
-def pad_many(vcons):
+def pad_many(vcons: List[Vcon]) -> List[Vcon]:
     longest_duration = get_longest_duration(vcons)    
     vcons_padded = []
     for vcon in vcons:
         vcons_padded.append(pad_vcon(vcon, longest_duration))
     return vcons_padded
 
-def print_audio_duration_many(vcons):
+def print_audio_duration_many(vcons: List[Vcon]):
     for vcon in vcons:
-        audio_data = get_audio(vcon)
+        audio_data = vcon.audio
         print(f"duration: {audio_data.shape[1]}")
         print(f"channels: {audio_data.shape[0]}")
 
@@ -391,65 +331,21 @@ def unbatch(vcons_batched):
         vcons.extend(vcon_batch)
     return vcons
 
-def preprocess_vcon_one(vcon_cur, _):
-    try:
-        print(f"Preprocessing {vcon_cur['uuid']}")
-        filename = processing_filename(vcon_cur)
-        cache.move_filename_to_processing(filename)
-        audio_data, sample_rate = audio.load_to_gpu(filename)
-        vcon_cur = set_audio(vcon_cur, audio_data)
-        vcon_cur["sample_rate"] = sample_rate
-        duration = audio.audio_data_duration(audio_data, sample_rate)
-        vcon_cur = convert_to_mono_maybe(vcon_cur)
-        vcon_cur = resample_vcon_one(vcon_cur)
-        #vcon_cur = apply_vad_one(vcon_cur, vad)
-        bytes = audio.get_size(audio_data)
-        vcon_cur["size"] = bytes
-        audio_data = get_audio(vcon_cur)
-        audio_data = audio_data.squeeze()
-        set_audio(vcon_cur, audio_data)
-        return vcon_cur, bytes, duration
-    except RuntimeError:
-        mark_vcon_as_invalid(vcon_cur)
-        remove_vcon_from_processing(vcon_cur)
-        return None, 0, 0
+def delete_all():
+    result = db.delete_many({})
+    print(f"Deleted {result.deleted_count} documents from the collection.")
 
-def preprocess_many(vcons):
-    vcons_preprocessed = []
-    total_bytes = 0
-    total_duration = 0
-    total_vcons = len(vcons)
-    count = 0
+def move_to_gpu_maybe(self):
+    audio_data = self.audio
+    audio_data = gpu.move_to_gpu_maybe(audio_data)
+    self.audio = audio_data
+    return self 
 
-    futures = []
-    for vcon_cur in vcons:
-        vcon_cur, bytes, duration = preprocess_vcon_one(vcon_cur, None)
-        if vcon_cur is not None:
-            vcons_preprocessed.append(vcon_cur)
-            total_bytes += bytes
-            total_duration += duration
-            count += 1
-            if count % 50 == 0:
-                logging.info(f"Preprocessed {count}/{total_vcons} vcons")
-        else:
-            print(f"Failed to preprocess vcon")
-            total_vcons -= 1
-    return vcons_preprocessed, total_bytes, total_duration, total_vcons
-    # Using ProcessPoolExecutor to leverage multiple CPU cores for the preprocessing tasks.
-    # This is beneficial because audio processing is CPU-intensive.
-    # with ProcessPoolExecutor(max_workers=audio.cpu_cores_for_preprocessing()) as executor:
-    #     for vcon_cur in vcons:
-    #         futures.append(executor.submit(preprocess_vcon_one, vcon_cur, None))
+def is_mono(vcon):
+    if vcon.audio is None:
+        return False
+    return audio.is_mono(vcon.audio)
 
-    #     for future in as_completed(futures):
-    #         count += 1
-    #         if count % 50 == 0:
-    #             logging.info(f"Preprocessed {count}/{total_vcons} vcons")
-
-    #         vcon_cur, bytes, duration = future.result()
-    #         if vcon_cur is not None:
-    #             vcons_preprocessed.append(vcon_cur)
-    #             total_bytes += bytes
-    #             total_duration += duration
-    
-    
+def move_to_processing(vcon):
+    filename = processing_filename(vcon)
+    cache.move_filename_to_processing(filename)

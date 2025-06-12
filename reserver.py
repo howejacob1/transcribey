@@ -1,47 +1,46 @@
-from sftp import connect
-import cache
+from process import ShutdownException
+import stats
+from stats import report_blocking_time
+from time import perf_counter
+from sftp import connect_keep_trying
 import vcon_utils as vcon
-from utils import dump_thread_stacks
-import threading
 import time
+from utils import dont_overwhelm_server
 import logging
-import queue
-import settings
+import process
+import cache
 
-def actually_start(sftp_url, vcons_ready_queue, vcons_lock, keep_running, once=False):
-    logging.info(f"Starting reserver")
-    
+def start(sftp_url, vcons_ready_queue, stats_queue):
+    cache.init()
     try:
         sftp = None
-        while keep_running.is_set():
+        vcons_count = 0
+        vcons_bytes = 0
+        while True:
             while sftp is None:
                 try:
-                    sftp = connect(sftp_url)
+                    sftp = connect_keep_trying(sftp_url)
                 except Exception as e:
                     sftp = None
-                    time.sleep(1)
-            #logging.info(f"attempting to reserve {settings.cache_size_bytes} bytes")
-            vcons = vcon.find_and_reserve_many(settings.cache_size_bytes)
-            if vcons:
-                print(f"Reserving {len(vcons)} vcons")
-                vcon.cache_vcon_audio_many(vcons, sftp)
-                print(f"Finished caching {len(vcons)} vcons. Putting.")
-                while keep_running.is_set():
-                    try:
-                        vcons_ready_queue.put(vcons, timeout=0.1)
-                        break
-                    except queue.Full:
-                        pass
-            if once:
-                break
-            time.sleep(1) # don't overwhelm network
+                    dont_overwhelm_server()
+            vcon_cur = vcon.find_and_reserve()
+            if vcon_cur:
+                vcon.cache_audio(vcon_cur, sftp)
+                vcons_count += 1
+                vcons_bytes += vcon_cur.size
+                stats.add(stats_queue, "vcons_count", vcons_count)
+                stats.add(stats_queue, "vcons_bytes", vcons_bytes)
+                with report_blocking_time(stats_queue):
+                    vcons_ready_queue.put(vcon_cur)
+            else:
+                dont_overwhelm_server()
+    except ShutdownException:
+        pass
     finally:
         if sftp is not None:
             sftp.close()
+        stats.add(stats_queue, "stop_time", time.time())
 
-def start(sftp_url, vcons_ready_queue, vcons_lock, keep_running):
-    thread = threading.Thread(target=actually_start, args=(sftp_url,vcons_ready_queue, vcons_lock, keep_running), daemon=False)
-    thread.name = "reserver_thread"
-    thread.start()
-    return thread
-
+def start_process(sftp_url, vcons_ready_queue, stats_queue):
+    stats.add(stats_queue, "start_time", time.time())
+    return process.start(target=start, args=(sftp_url, vcons_ready_queue, stats_queue))

@@ -1,4 +1,5 @@
 from vcon import Vcon as VconBase
+import gpu
 from vcon.dialog import Dialog
 from vcon.party import Party
 import uuid
@@ -13,7 +14,10 @@ class Vcon(VconBase):
     @classmethod
     def build_new(cls):
         """Create a new Vcon instance"""
-        return cls()
+        # Use the parent's build_new method which properly initializes all fields including UUID
+        vcon_base = VconBase.build_new()
+        # Create our custom class instance from the properly initialized vcon_dict
+        return cls(vcon_dict=vcon_base.vcon_dict)
 
     @classmethod
     def from_dict(cls, vcon_dict):
@@ -29,12 +33,12 @@ class Vcon(VconBase):
 
     def to_dict(self):
         """Convert the Vcon to a dictionary"""
-        return self.vcon_dict
+        return super().to_dict()
 
     @property
     def uuid(self):
         """Get the UUID of the vcon"""
-        return self.vcon_dict.get("uuid")
+        return super().uuid
 
     @property
     def size(self):
@@ -175,11 +179,6 @@ class Vcon(VconBase):
         """Set the processed_by field of the vcon"""
         self.vcon_dict["processed_by"] = value
 
-    def is_mono(self):
-        """Check if the audio is mono"""
-        if self.audio is None:
-            return False
-        return audio.is_mono(self.audio)
 
     def mark_as_done(self):
         """Mark the vcon as done"""
@@ -230,8 +229,54 @@ class Vcon(VconBase):
     def __str__(self):
         return self.__repr__()
 
+    # Dictionary interface methods for MongoDB compatibility
+    def __getitem__(self, key):
+        """Make the Vcon behave like a dict for MongoDB serialization"""
+        return self.vcon_dict[key]
+    
+    def __setitem__(self, key, value):
+        """Allow dict-like assignment"""
+        self.vcon_dict[key] = value
+    
+    def __delitem__(self, key):
+        """Allow dict-like deletion"""
+        del self.vcon_dict[key]
+    
+    def __iter__(self):
+        """Allow iteration over keys like a dict"""
+        return iter(self.vcon_dict)
+    
+    def __len__(self):
+        """Return the length like a dict"""
+        return len(self.vcon_dict)
+    
+    def keys(self):
+        """Return keys like a dict"""
+        return self.vcon_dict.keys()
+    
+    def values(self):
+        """Return values like a dict"""
+        return self.vcon_dict.values()
+    
+    def items(self):
+        """Return items like a dict"""
+        return self.vcon_dict.items()
+    
+    def get(self, key, default=None):
+        """Get method like a dict"""
+        return self.vcon_dict.get(key, default)
+    
+    def __contains__(self, key):
+        """Support 'in' operator like a dict"""
+        return key in self.vcon_dict
+
     def add_party(self, party):
-        self.parties.append(party)
+        # Use the parent class method which properly manages the parties list
+        super().add_party(party)
 
     def add_dialog(self, dialog):
-        self.dialog.append(dialog)
+        # Use the parent class method which properly manages the dialog list
+        super().add_dialog(dialog)
+
+
+

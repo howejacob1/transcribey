@@ -1,6 +1,9 @@
 import os
+import time
+from settings import dont_overwhelm_server_time_seconds
 import socket
 from contextlib import contextmanager
+import multiprocessing
 
 def get_all_filenames(directory):
     """
@@ -157,3 +160,6 @@ def clear_screen():
         os.system('cls')
     else:
         os.system('clear')
+
+def dont_overwhelm_server():
+    time.sleep(dont_overwhelm_server_time_seconds)

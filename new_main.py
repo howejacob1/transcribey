@@ -1,4 +1,15 @@
 import argparse
+import preprocess
+from process import stop_threads_and_processes
+import stats
+import multiprocessing
+import send_results
+import transcribe_en
+import transcribe_non_en
+import lang_detect
+import discover
+import reserver
+from vcon_queue import VconQueue
 import gpu
 from concurrent.futures import as_completed, ThreadPoolExecutor
 import logging
@@ -9,80 +20,36 @@ import numpy as np
 import torch
 import torchaudio
 import cache
-import reserver
-import secrets_utils
 import settings
 from utils import dump_thread_stacks, dir_size_bytes, size_of_file, clear_screen
 import vcon_utils as vcon
-import audio
 import ai
-import sftp as sftp_utils
 from log_utils import info_header, with_timing
 import threading
 logging.basicConfig(level=logging.INFO, format='[%(asctime)s] [%(threadName)s] %(levelname)s - %(message)s')
 logging.getLogger("paramiko").setLevel(logging.INFO)
 
-def main(sftp_url, keep_running, measure=False):
-    torch.cuda.empty_cache()
-    torch.cuda.synchronize()
+def main(sftp_url, stats_queue=None):
     # sftp = sftp_utils.connect_keep_trying(sftp_url)
-    with with_timing("Unmarking all reserved."):
-        vcon.unmarked_all_reserved()
-
-    vcons_ready_queue = Queue(maxsize=1)
-    vcons_lock = threading.Lock()
-
-    info_header(f"Starting reserver thread for {sftp_url}")
-    reserver_thread = reserver.start(sftp_url, vcons_ready_queue, vcons_lock, keep_running)
-    # lang_detect_model = None
-    # lang_detect_processor = None
-    # with with_timing("Loading whisper."):
-    #     lang_detect_model, lang_detect_processor = ai.load_whisper_tiny()
-
-    lang_detect_model = None
-    with with_timing("Loading langid model."):
-        lang_detect_model = ai.load_nvidia_ambernet()
-
-    en_model = None
-    with with_timing("Loading en whisper model."):
-        en_model = ai.load_nvidia(settings.en_model_name)
-
-    non_en_model = None
-    with with_timing("Loading non-en model."):
-        non_en_model = ai.load_nvidia(settings.non_en_model_name)
+    vcon.unmarked_all_reserved()
     
-    info_header("Starting main loop.")
-
-    total_vcons = 0
-    total_duration = 0
-    total_bytes = 0
-
-    while True:                                                                                                                     
-        program_start_time = time.time()
-
-        vcons = None
-        # move_downloading_to_processing_start_time = time.time()
-        vcons = vcons_ready_queue.get()
-        
-        # cache.move_downloading_to_processing()
-        # move_downloading_to_processing_time = time.time() - move_downloading_to_processing_start_time
-        
-        preprocess_start_time = time.time()
-        vcons_preprocessed = []
-        total_bytes = 0
-        total_duration = 0
-        total_vcons = 0
-        with with_timing("Preprocessing."):
-            vcons_preprocessed, total_bytes, total_duration, total_vcons = vcon.preprocess_many(vcons)
-        preprocess_time = time.time() - preprocess_start_time
-
-        # processing_invalids_start_time = time.time()
-        # vcons_len = len(vcons)
-        # valid_vcons = None
-        # with with_timing("Processing invalids."):
-        #     valid_vcons = vcon.process_invalids(vcons)
-        # logging.info(f"Eliminated {vcons_len - len(valid_vcons)} invalid vcons")
-        # processing_invalids_time = time.time() - processing_invalids_start_time
+    programs = []
+    reserved_vcons_queue = VconQueue(process=True)
+    programs.append(reserver.start_process(sftp_url, reserved_vcons_queue, stats_queue))
+    preprocessed_vcons_queue = VconQueue(process=True)
+    programs.append(preprocess.start_thread(reserved_vcons_queue, preprocessed_vcons_queue, stats_queue))
+    lang_detected_en_vcons_queue = VconQueue(process=False)
+    lang_detected_non_en_vcons_queue = VconQueue(process=False)
+    programs.append(lang_detect.start_thread(preprocessed_vcons_queue, lang_detected_en_vcons_queue, lang_detected_non_en_vcons_queue, stats_queue))
+    transcribed_vcons_queue = VconQueue(process=True)
+    programs.append(transcribe_en.start_thread(lang_detected_en_vcons_queue, transcribed_vcons_queue, stats_queue))
+    programs.append(transcribe_non_en.start_thread(lang_detected_non_en_vcons_queue, transcribed_vcons_queue, stats_queue))
+    programs.append(send_results.start_process(transcribed_vcons_queue, stats_queue))
+    try:
+        stats.run(stats_queue)
+    except KeyboardInterrupt:
+        pass
+    stop_threads_and_processes(programs)
 
         # measurement_start_time = time.time()
         # if measure:
@@ -277,35 +244,31 @@ if __name__ == "__main__":
         args.url = "sftp://bantaim@127.0.0.1:22/home/bantaim/conserver/openslr-12/"
     elif args.dataset == "slow":
         args.url = "sftp://bantaim@127.0.0.1:22/home/bantaim/conserver/fake_wavs_medlarge/"
-
+    print("wtf")
     debug = not args.production
-    keep_running = threading.Event()
-    keep_running.set()
-    discover_thread = None
-    try:
-        cache.init()
-        with with_timing("Clearing cache."):
-            cache.clear()
+    stats_queue = multiprocessing.Queue()
+    discover_process = None
 
-        if args.mode == "head":
-            if debug:
-                vcon.delete_all()
-            discover_thread = vcon.start_discover(args.url, keep_running)
-            main(args.url, keep_running)
-        elif args.mode == "measure":
-            if debug:
-                vcon.delete_all()
-            discover_thread = vcon.start_discover(args.url, keep_running)
-            main(args.url, keep_running, measure=True)
-        elif args.mode == "worker":
-            main(args.url, keep_running)
-        elif args.mode == "discover":
-            if debug:
-                vcon.delete_all()
-            discover_thread = vcon.start_discover(args.url, keep_running)
-        elif args.mode == "print":
-            vcon.load_and_print_all()
-        elif args.mode == "delete_all":
+    logging.info(f"Start in mode {args.mode}.")
+    if args.mode == "head":
+        if debug:
             vcon.delete_all()
-    except KeyboardInterrupt:
-        keep_running.clear()
+        discover_process = discover.start_process(args.url, stats_queue)
+        main(args.url, stats_queue)
+    elif args.mode == "measure":
+        if debug:
+            vcon.delete_all()
+        discover_process = discover.start_process(args.url, stats_queue)
+        main(args.url, stats_queue)
+    elif args.mode == "worker":
+        main(args.url, stats_queue)
+    elif args.mode == "discover":
+        if debug:
+            vcon.delete_all()
+        discover.start(args.url, stats_queue)
+    elif args.mode == "print":
+        vcon.load_and_print_all()
+    elif args.mode == "delete_all":
+        vcon.delete_all()
+
+        
