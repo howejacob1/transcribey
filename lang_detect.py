@@ -22,10 +22,11 @@ from multiprocessing import Queue
 from gpu import gpu_ram_free_bytes, move_to_gpu_maybe, we_have_a_gpu, gc_collect_maybe
 from process import ShutdownException
 from stats import with_blocking_time
-from utils import let_other_threads_run, dump_thread_stacks
+from utils import let_other_threads_run, dump_thread_stacks, suppress_output
 from vcon_class import Vcon
 from vcon_queue import VconQueue
 from vcon_utils import batch_to_audio_data, is_english
+from nemo.collections.asr.models import EncDecSpeakerLabelModel
 
 def load():
     model_name = "langid_ambernet"
@@ -76,7 +77,7 @@ def process_audio_batch_gpu(audio_data_batch):
     
     return gpu_audio_batch
 
-def identify_languages(batch: List[Vcon], model):
+def identify_languages(vcon_cur: Vcon, model):
     """
     Identify languages using NVIDIA AmberNet model with GPU acceleration.
     Returns vcons with standard language codes like ["en", "es", etc.]
@@ -103,7 +104,7 @@ def identify_languages(batch: List[Vcon], model):
         )
 
     #print(f"Using language map with {len(language_map)} languages: {language_map[:10]}...")
-    
+    batch = [vcon_cur]
     print(f"identifying languages for {len(batch)} vcons (gpu memory: {gpu_ram_free_bytes()})")
     audio_data_batch = batch_to_audio_data(batch)
     
@@ -237,60 +238,33 @@ def is_batch_ready(batch : List[Vcon], batch_start : float, total_size : int):
         return True
     return False
 
-def collect_vcons(preprocessed_vcons_queue : Queue, target_vcon: Vcon | None, stats_queue: Queue):
-    try:
-        if not target_vcon:
-            with with_blocking_time(stats_queue):
-                target_vcon = preprocessed_vcons_queue.get(timeout=settings.lang_detect_batch_timeout_seconds)
-    except Empty:
-        return [target_vcon], None
-    
-    batch_start : float = perf_counter()
-    total_size : int = 0
-    batch : List = [target_vcon]
-        
-    while not is_batch_ready(batch, batch_start, total_size):
-        try:
-            with with_blocking_time(stats_queue):
-                cur_vcon = preprocessed_vcons_queue.get(timeout=settings.lang_detect_batch_timeout_seconds)
-            if cur_vcon.size == target_vcon.size:
-                # Audio data is already on GPU from preprocessing
-                batch.append(cur_vcon)
-                total_size += cur_vcon.size
-            else: 
-                return batch, cur_vcon
-        except TimeoutError:
-            return batch, target_vcon
-    return batch, target_vcon
-
-
 def lang_detect(preprocessed_vcons_queue: Queue,
                 lang_detected_en_vcons_queue: Queue,
                 lang_detected_non_en_vcons_queue: Queue,
                 stats_queue: Queue):
     stats.add(stats_queue, "start_time", time.time())
     model = load()
-    target_vcon : Vcon | None = None
     vcons_bytes : int = 0
     vcons_count : int = 0
     vcons_duration : int = 0
+    vcon_cur : Vcon | None = None
     try:
         while True: # just run thread forever
-            batch, target_vcon = collect_vcons(preprocessed_vcons_queue, target_vcon, stats_queue)
-            lang_detected_vcons = identify_languages(batch, model)
-            for vcon_cur in lang_detected_vcons:                
-                vcons_count += 1
-                vcons_bytes += vcon_cur.size
-                vcons_duration += vcon_cur.duration
-                stats.add(stats_queue, "vcons_count", vcons_count)
-                stats.add(stats_queue, "vcons_bytes", vcons_bytes)
-                stats.add(stats_queue, "vcons_duration", vcons_duration)
-                if is_english(vcon_cur):
-                    with with_blocking_time(stats_queue):
-                        lang_detected_en_vcons_queue.put(vcon_cur)
-                else:
-                    with with_blocking_time(stats_queue):
-                        lang_detected_non_en_vcons_queue.put(vcon_cur)        
+            with with_blocking_time(stats_queue):
+                vcon_cur = preprocessed_vcons_queue.get()
+            vcon_cur = identify_languages(vcon_cur, model)[0]
+            vcons_count += 1
+            vcons_bytes += vcon_cur.size
+            vcons_duration += vcon_cur.duration
+            stats.add(stats_queue, "vcons_count", vcons_count)
+            stats.add(stats_queue, "vcons_bytes", vcons_bytes)
+            stats.add(stats_queue, "vcons_duration", vcons_duration)
+            if is_english(vcon_cur):
+                with with_blocking_time(stats_queue):
+                    lang_detected_en_vcons_queue.put(vcon_cur)
+            else:
+                with with_blocking_time(stats_queue):
+                    lang_detected_non_en_vcons_queue.put(vcon_cur)        
     except ShutdownException:
         pass
 
@@ -298,3 +272,19 @@ def start_thread(preprocessed_vcons_queue, lang_detected_en_vcons_queue, lang_de
     thread = threading.Thread(target=lang_detect, args=(preprocessed_vcons_queue, lang_detected_en_vcons_queue, lang_detected_non_en_vcons_queue, stats_queue))
     thread.start()
     return thread
+
+def start_process(preprocessed_vcons_queue: Queue,
+                  lang_detected_en_vcons_queue: Queue,
+                  lang_detected_non_en_vcons_queue: Queue,
+                  stats_queue: Queue):
+    """Spawn the language detection worker as a separate process (instead of a thread)."""
+    import time  # Local import to avoid polluting global namespace when spawned
+    stats.add(stats_queue, "start_time", time.time())
+    return process.start_process(
+        target=lang_detect,
+        args=(preprocessed_vcons_queue,
+              lang_detected_en_vcons_queue,
+              lang_detected_non_en_vcons_queue,
+              stats_queue,
+              )
+    )

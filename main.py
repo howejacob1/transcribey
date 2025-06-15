@@ -39,24 +39,24 @@ def main(sftp_url, stats_queue=None):
     programs.append(reserver.start_process(sftp_url, reserved_vcons_queue, stats_queue))
     preprocessed_vcons_queue = multiprocessing.Queue()
     programs.append(preprocess.start_process(reserved_vcons_queue, preprocessed_vcons_queue, stats_queue))
+    lang_detected_en_vcons_queue = multiprocessing.Queue()
+    lang_detected_non_en_vcons_queue = multiprocessing.Queue()
+    programs.append(lang_detect.start_process(preprocessed_vcons_queue, lang_detected_en_vcons_queue, lang_detected_non_en_vcons_queue, stats_queue))
+
     # Simple queue watching function instead of watch_vcon_queue
-    def watch_queue():
+    def watch_queue(queue_to_watch):
         try:
             while True:
-                vcon = preprocessed_vcons_queue.get()
-                print(vcon)
+                vcon_item = queue_to_watch.get()
+                print(vcon_item)
         except KeyboardInterrupt:
             print("Stopped watching queue.")
         except Exception as e:
             print(f"Error in watch_queue: {e}")
+
+    # Uncomment to see queue flow during debugging
+    # watch_queue(preprocessed_vcons_queue)
     
-    watch_thread = threading.Thread(target=watch_queue)
-    watch_thread.daemon = True
-    watch_thread.start()
-    
-    # lang_detected_en_vcons_queue = multiprocessing.Queue()
-    # lang_detected_non_en_vcons_queue = multiprocessing.Queue()
-    # programs.append(lang_detect.start_thread(preprocessed_vcons_queue, lang_detected_en_vcons_queue, lang_detected_non_en_vcons_queue, stats_queue))
     # transcribed_vcons_queue = multiprocessing.Queue()
     # programs.append(transcribe_en.start_thread(lang_detected_en_vcons_queue, transcribed_vcons_queue, stats_queue))
     # programs.append(transcribe_non_en.start_thread(lang_detected_non_en_vcons_queue, transcribed_vcons_queue, stats_queue))
