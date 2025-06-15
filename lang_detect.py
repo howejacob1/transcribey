@@ -17,7 +17,8 @@ from process import ShutdownException
 from stats import with_blocking_time
 from vcon_class import Vcon
 from vcon_queue import VconQueue
-from vcon_utils import batch_to_audio_data, gpu_ram_free_bytes, gc_collect_maybe, set_languages
+from gpu import move_to_gpu_maybe, gpu_ram_free_bytes, gc_collect_maybe
+from vcon_utils import batch_to_audio_data
 
 def load():
     model_name = "langid_ambernet"
