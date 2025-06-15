@@ -9,3 +9,4 @@ secrets.toml
 working_memory/*
 broken_wavs/
 cache/
+.venv/

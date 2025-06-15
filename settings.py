@@ -19,7 +19,7 @@ gc_limit_bytes = 3*(1024**3)
 vcon_queue_max_bytes = 100*(1024**2)
 
 # SFTP connection settings for make_vcons_from_sftp.py
-sftp_url = "sftp://jhowe@127.0.0.1:22/home/jhowe/conserver/fake_wavs_cute/"
+sftp_url = "sftp://bantaim@127.0.0.1:22/home/bantaim/conserver/fake_wavs_cute/"
 sample_rate = 16000
 max_discover_workers = 1
 discover_batch_size = 50
