@@ -54,8 +54,31 @@ def resample(audio: torch.Tensor,
         audio = resampler(audio)
     return audio
 
-def get_size(audio: torch.Tensor):
-    return audio.element_size() * audio.numel()
+def get_size(audio):
+    """Return the size in bytes of the audio tensor/array.
+
+    Supports torch.Tensor, NumPy ndarray, CuPy ndarray and other array-like
+    objects that expose an ``nbytes`` attribute.
+    """
+
+    # PyTorch tensor
+    if isinstance(audio, torch.Tensor):
+        return audio.element_size() * audio.numel()
+
+    # Objects (e.g. NumPy/CuPy arrays) exposing ``nbytes``
+    nbytes = getattr(audio, "nbytes", None)
+    if nbytes is not None:
+        return int(nbytes)
+
+    # Fallback: use ``size`` × ``itemsize`` if available
+    if hasattr(audio, "size") and hasattr(audio, "itemsize"):
+        try:
+            return int(audio.size * audio.itemsize)  # type: ignore[attr-defined]
+        except Exception:
+            pass
+
+    # Unknown type – return 0 to avoid hard failure
+    return 0
 
 def is_mono(audio_data: torch.Tensor):
     return audio_data.shape[0] == 1
@@ -111,7 +134,8 @@ def pad_audio(audio_data, sample_rate: int, duration: float):
         
         # Convert back to CuPy if original was CuPy
         if is_cupy:
-            return cp.asarray(padded_tensor.detach())
+            # CuPy cannot convert PyTorch tensors directly; go through NumPy first.
+            return cp.asarray(padded_tensor.detach().cpu().numpy())
         else:
             return padded_tensor
     

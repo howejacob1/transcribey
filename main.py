@@ -6,7 +6,7 @@ import logging
 import threading
 import time
 from concurrent.futures import as_completed, ThreadPoolExecutor
-from queue import Queue, Empty
+from queue import Empty
 
 import cupy as np
 import torch
@@ -35,10 +35,10 @@ def main(sftp_url, stats_queue=None):
     # sftp = sftp_utils.connect_keep_trying(sftp_url)
     vcon.unmarked_all_reserved()
     programs = []
-    reserved_vcons_queue = multiprocessing.Queue(maxsize=100)
+    reserved_vcons_queue = multiprocessing.Queue()
     programs.append(reserver.start_process(sftp_url, reserved_vcons_queue, stats_queue))
-    preprocessed_vcons_queue = multiprocessing.Queue(maxsize=100)
-    programs.append(preprocess.start_thread(reserved_vcons_queue, preprocessed_vcons_queue, stats_queue))
+    preprocessed_vcons_queue = multiprocessing.Queue()
+    programs.append(preprocess.start_process(reserved_vcons_queue, preprocessed_vcons_queue, stats_queue))
     # Simple queue watching function instead of watch_vcon_queue
     def watch_queue():
         try:

@@ -27,15 +27,13 @@ def start(sftp_url, vcons_ready_queue, stats_queue):
             if vcon_cur:
                 vcon.cache_audio(vcon_cur, sftp)
                 vcons_count += 1
-                vcons_bytes += vcon_cur.size
+                vcons_bytes += vcon_cur.size if vcon_cur.size is not None else 0
                 stats.add(stats_queue, "vcons_count", vcons_count)
                 stats.add(stats_queue, "vcons_bytes", vcons_bytes)
-                print(f"Reserved {vcon_cur}")
                 with with_blocking_time(stats_queue):
                     vcons_ready_queue.put(vcon_cur)
             else:
                 dont_overwhelm_server()
-            let_other_threads_run()
     except ShutdownException:
         dump_thread_stacks()
     finally:

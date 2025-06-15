@@ -1,5 +1,5 @@
 import time
-from queue import Empty
+from utils import suppress_output
 from time import perf_counter
 from typing import List
 

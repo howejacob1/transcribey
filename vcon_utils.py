@@ -342,9 +342,17 @@ def move_to_processing(vcon: Vcon):
     cache.move_filename_to_processing(filename)
 
 def size_of_list(vcons : List[Vcon]) -> int:
+    """Compute total size in bytes of all vcons in the list.
+
+    Historically we attempted to read a non-existent ``bytes`` attribute which
+    caused an ``AttributeError`` that killed the preprocess process.  Each
+    ``Vcon`` already stores its size in the ``size`` property, so that is what
+    we should aggregate here instead.
+    """
     total = 0
     for vcon_cur in vcons:
-        total += vcon_cur.bytes
+        # ``size`` is explicitly defined as a property on ``Vcon``.  Use it.
+        total += vcon_cur.size if vcon_cur.size is not None else 0
     return total
 
 def batch_to_audio_data(batch):

@@ -39,7 +39,7 @@ def discover(url, stats_queue):
                 vcons_bytes += bytes
                 stats.add(stats_queue, "vcons_bytes", vcons_bytes)
                 vcons.append(vcon)
-                print(f"Discovered {vcon}")
+                #print(f"Discovered {vcon}")
                 if len(vcons) > discover_batch_size:
                     add_many(vcons)
                     vcons = []
