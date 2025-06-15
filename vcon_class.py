@@ -1,11 +1,13 @@
-from vcon import Vcon as VconBase
-import gpu
-from vcon.dialog import Dialog
-from vcon.party import Party
-import uuid
 import datetime
 import mimetypes
+import uuid
+
+from vcon import Vcon as VconBase
+from vcon.dialog import Dialog
+from vcon.party import Party
+
 import audio
+import gpu
 
 class Vcon(VconBase):
     def __init__(self, vcon_dict=None, property_handling=None):

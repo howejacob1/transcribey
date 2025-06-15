@@ -1,10 +1,11 @@
-import queue
 import multiprocessing
+import queue
 import threading
 import time
 from typing import List, Optional
-from vcon_class import Vcon
+
 import settings
+from vcon_class import Vcon
 
 class VconQueue:
     def __init__(self, max_bytes: int = settings.vcon_queue_max_bytes, process: bool = False):

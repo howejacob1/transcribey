@@ -1,6 +1,8 @@
+import gc
+
 import GPUtil
 import torch
-import gc
+
 import settings
 
 def get_device():

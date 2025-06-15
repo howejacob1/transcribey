@@ -1,9 +1,11 @@
+import logging
+
 import torch
 import torchaudio
+
 import gpu
 import settings
 from utils import num_cores
-import logging
 
 def get_duration(filename):
     """

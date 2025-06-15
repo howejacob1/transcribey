@@ -1,18 +1,28 @@
+import logging
+import threading
+import time
+from multiprocessing import Queue
+
 import settings
-# import time
-# from utils import suppress_output, move_to_gpu_maybe
-# import logging
-# from log_utils import with_timing
-from transcribe import load_nvidia
+import stats
+from transcribe import load, transcribe
+from vcon_queue import VconQueue
 
-def load():
-    en_model = load_nvidia(settings.en_model_name)
-    return en_model
-
-def start_thread(lang_detected_en_vcons_queue, transcribed_vcons_queue):
-    logging.info("Starting transcribe en thread.")
-    en_model = load()
-    while True:
-        vcons = lang_detected_en_vcons_queue.get()
-        transcribe_en(vcons, en_model)
-        transcribed_vcons_queue.put(vcons)
+def start_thread(lang_detected_en_vcons_queue: VconQueue, transcribed_vcons_queue: VconQueue, stats_queue: Queue):
+    """Start transcription thread for English vcons"""
+    stats.add(stats_queue, "start_time", time.time())
+    model = load()
+    
+    def transcribe_worker():
+        try:
+            while True:
+                vcon_cur = lang_detected_en_vcons_queue.get()
+                # Process transcription here
+                transcribed_vcons_queue.put(vcon_cur)
+        except Exception as e:
+            logging.error(f"Error in transcribe worker: {e}")
+    
+    thread = threading.Thread(target=transcribe_worker)
+    thread.daemon = True
+    thread.start()
+    return thread

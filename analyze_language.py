@@ -1,11 +1,13 @@
-import sys
 import os
-import ai
-import vcon_utils
-import audio
-import settings
+import sys
+
 import cupy as np
 import torch
+
+import ai
+import audio
+import settings
+import vcon_utils
 
 def print_audio_duration_many_patch(vcons):
     for vcon in vcons:

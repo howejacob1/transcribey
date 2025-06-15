@@ -1,10 +1,12 @@
-import os
 import logging
+import os
 import time
-from urllib.parse import urlparse
-import paramiko
-import settings
 from concurrent.futures import ThreadPoolExecutor, as_completed, wait, FIRST_COMPLETED
+from urllib.parse import urlparse
+
+import paramiko
+
+import settings
 
 def parse_url(sftp_url):
     parsed = urlparse(sftp_url)

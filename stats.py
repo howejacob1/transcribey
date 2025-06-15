@@ -1,17 +1,18 @@
 import multiprocessing
-import settings
-from utils import seconds_to_days, seconds_to_hours
 import time
-from queue import Empty
 from contextlib import contextmanager
+from queue import Empty
 from time import perf_counter
-from process import our_program_name
 
 try:
     import GPUtil
     gpu_available = True
 except ImportError:
     gpu_available = False
+
+from process import our_program_name
+import settings
+from utils import seconds_to_days, seconds_to_hours
 
 def make_stats_queue():
     return multiprocessing.Queue()

@@ -2,33 +2,34 @@ import multiprocessing
 multiprocessing.set_start_method("spawn", force=True)
 
 import argparse
-import preprocess
-from process import stop_threads_and_processes
-import stats
-import multiprocessing
-import send_results
-import transcribe_en
-import transcribe_non_en
-import lang_detect
-import discover
-import reserver
-from vcon_queue import VconQueue
-import gpu
-from concurrent.futures import as_completed, ThreadPoolExecutor
 import logging
 import threading
 import time
+from concurrent.futures import as_completed, ThreadPoolExecutor
 from queue import Queue, Empty
+
 import cupy as np
 import torch
 import torchaudio
-import cache
-import settings
-from utils import dump_thread_stacks, dir_size_bytes, size_of_file, clear_screen
-import vcon_utils as vcon
+
 import ai
+import cache
+import discover
+import gpu
+import lang_detect
+import preprocess
+import reserver
+import send_results
+import settings
+import stats
+import transcribe_en
+import transcribe_non_en
+import vcon_utils as vcon
 from log_utils import info_header, with_timing
-import threading
+from process import stop_threads_and_processes
+from utils import dump_thread_stacks, dir_size_bytes, size_of_file, clear_screen
+from vcon_queue import VconQueue
+
 logging.basicConfig(level=logging.INFO, format='[%(asctime)s] [%(threadName)s] %(levelname)s - %(message)s')
 logging.getLogger("paramiko").setLevel(logging.INFO)
 

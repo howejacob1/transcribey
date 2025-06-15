@@ -1,24 +1,25 @@
-from queue import Empty
-import torch
-import time
-import settings
-from time import perf_counter
-from gpu import move_to_gpu_maybe
-import threading
-from typing import List
-from process import ShutdownException
-import cupy as cp
-
 import logging
-from stats import with_blocking_time
+import threading
+import time
+from multiprocessing import Queue
+from queue import Empty
+from time import perf_counter
+from typing import List
+
+import cupy as cp
+import torch
+
 import audio
+import cache
+import process
+import settings
 import stats
 import vcon_utils as vcon
-import cache
+from gpu import move_to_gpu_maybe
+from process import ShutdownException
+from stats import with_blocking_time
 from vcon_class import Vcon
-from multiprocessing import Queue
 from vcon_queue import VconQueue
-import process
 
 def preprocess_vcon_one(vcon_cur: Vcon, stats_queue: Queue):
     try:

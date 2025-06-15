@@ -1,27 +1,23 @@
 import gc
-import numpy as np
-import torch
-from queue import Empty
-from stats import with_blocking_time
-from typing import List
-from vcon_class import Vcon
-from time import perf_counter
-from multiprocessing import Queue
-from process import ShutdownException
-from vcon_queue import VconQueue
-import stats
+import logging
 import threading
 import time
-#import gpu
-# import torch
+from multiprocessing import Queue
+from queue import Empty
+from time import perf_counter
+from typing import List
+
+import numpy as np
+import torch
 from nemo.collections.asr.models import EncDecSpeakerLabelModel
-from vcon_utils import batch_to_audio_data, gpu_ram_free_bytes, gc_collect_maybe, batch_to_audio_data, set_languages
-import logging
-#import process
-# from utils import gpu_ram_free_bytes, gc_collect_maybe
-#import vcon_utils
+
 import settings
-#from utils import move_to_gpu_maybe, suppress_output
+import stats
+from process import ShutdownException
+from stats import with_blocking_time
+from vcon_class import Vcon
+from vcon_queue import VconQueue
+from vcon_utils import batch_to_audio_data, gpu_ram_free_bytes, gc_collect_maybe, set_languages
 
 def load():
     model_name = "langid_ambernet"
@@ -159,7 +155,7 @@ def collect_vcons(preprocessed_vcons_queue : VconQueue, target_vcon: Vcon | None
         try:
             with with_blocking_time(stats_queue):
                 cur_vcon = preprocessed_vcons_queue.get(timeout=settings.lang_detect_batch_timeout_seconds)
-            if cur_vcon.duration == target_vcon.duration:
+            if cur_vcon.size == target_vcon.size:
                 batch.append(cur_vcon)
                 total_size += cur_vcon.size
             else: 

@@ -1,4 +1,5 @@
 from pymongo import MongoClient
+
 from secrets_utils import secrets
 
 config = secrets.get('mongo_db', {})

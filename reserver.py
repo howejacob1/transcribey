@@ -1,14 +1,15 @@
-from process import ShutdownException
-import stats
-from stats import with_blocking_time
-from time import perf_counter
-from sftp import connect_keep_trying
-import vcon_utils as vcon
-import time
-from utils import dont_overwhelm_server
 import logging
-import process
+import time
+from time import perf_counter
+
 import cache
+import process
+import stats
+import vcon_utils as vcon
+from process import ShutdownException
+from sftp import connect_keep_trying
+from stats import with_blocking_time
+from utils import dont_overwhelm_server
 
 def start(sftp_url, vcons_ready_queue, stats_queue):
     cache.init()

@@ -1,7 +1,8 @@
 import os
-from gtts import gTTS
+
 import cupy as np
 import soundfile as sf
+from gtts import gTTS
 
 # Directory to save wav files
 output_dir = os.path.expanduser('~/conserver/fake_wavs_cute')

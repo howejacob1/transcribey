@@ -1,8 +1,8 @@
-import multiprocessing
-import sys
 import ctypes
-import signal
 import logging
+import multiprocessing
+import signal
+import sys
 import threading
 import time
 

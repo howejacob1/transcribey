@@ -4,19 +4,20 @@ SuperGPU - GPU Saturation Script for Language Identification
 Continuously runs language identification inference to maximize GPU utilization.
 """
 
-import torch
-import cupy as np
-import time
-import threading
 import queue
 import signal
 import sys
+import threading
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
+
+import cupy as np
+import torch
 from transformers import AutoModelForSpeechSeq2Seq, AutoProcessor
 
-import settings
 import ai
 import gpu
+import settings
 from utils import suppress_output
 
 class SuperGPU:

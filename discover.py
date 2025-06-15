@@ -1,14 +1,15 @@
-import sftp
+import logging
 import time
 from time import perf_counter
+from typing import List
+
+import process
+import sftp
+import stats
+from process import ShutdownException, block_until_threads_and_processes_finish, setup_signal_handlers
+from settings import discover_batch_size
 from vcon_class import Vcon
 from vcon_utils import insert_many_maybe_async, is_audio_filename
-import logging
-from settings import discover_batch_size
-from typing import List
-import stats
-import process
-from process import ShutdownException, block_until_threads_and_processes_finish, setup_signal_handlers
 
 def discover(url, stats_queue):
     """Discover audio files and create vcons, with clean shutdown handling"""    

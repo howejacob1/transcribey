@@ -1,9 +1,13 @@
-import os
-import time
-from settings import dont_overwhelm_server_time_seconds
-import socket
-from contextlib import contextmanager
 import multiprocessing
+import os
+import socket
+import sys
+import threading
+import time
+import traceback
+from contextlib import contextmanager
+
+from settings import dont_overwhelm_server_time_seconds
 
 def get_all_filenames(directory):
     """
@@ -130,10 +134,6 @@ def num_cores():
 def is_audio_filename(filename):
     ext = extension(filename)
     return ext in ["wav", "mp3", "ogg", "m4a", "flac", "aac", "wma", "aiff", "au", "raw", "pcm"]
-
-import sys
-import traceback
-import threading
 
 def dump_thread_stacks():
     """Dumps the stack trace of all running threads to the console."""

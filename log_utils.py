@@ -1,8 +1,9 @@
 import logging
 import time
 from contextlib import contextmanager
-from utils import seconds_to_ydhms
+
 import gpu
+from utils import seconds_to_ydhms
 
 def info_header(message):
     logging.info(f"--------------------{message}.--------------------")

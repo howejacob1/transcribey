@@ -1,6 +1,7 @@
-from transcribe import load_nvidia
-import settings
 import logging
+
+import settings
+from transcribe import load_nvidia
 
 def load():
     non_en_model_name = settings.non_en_model_name
