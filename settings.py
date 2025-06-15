@@ -16,19 +16,19 @@ non_en_model_name = "nvidia/canary-1b-flash"
 gpu_ram_unusable = 3*(1024**3) # 5GB
 max_download_threads = 1
 gc_limit_bytes = 3*(1024**3)
-vcon_queue_max_bytes = 100*(1024**2)
+vcon_queue_max_bytes = 1
 
 # SFTP connection settings for make_vcons_from_sftp.py
 sftp_url = "sftp://bantaim@127.0.0.1:22/home/bantaim/conserver/fake_wavs_cute/"
 sample_rate = 16000
 max_discover_workers = 1
-discover_batch_size = 1
-dont_overwhelm_server_time_seconds = 5
+discover_batch_size = 1  # Smaller batches for more streaming
+dont_overwhelm_server_time_seconds = 0.1
 
 # MongoDB connection settings
 preprocess_batch_timeout_seconds = 0.1
-preprocess_batch_max_size = 50
-preprocess_batch_max_len = 32
+preprocess_batch_max_size = 25  # Smaller batch size
+preprocess_batch_max_len = 16   # Smaller max length
 
 min_audio_duration_seconds = 1.0
 status_update_seconds = 0.3

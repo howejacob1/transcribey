@@ -1,7 +1,6 @@
-import logging
 import time
-from time import perf_counter
 
+from utils import let_other_threads_run
 import cache
 import process
 import stats
@@ -9,7 +8,7 @@ import vcon_utils as vcon
 from process import ShutdownException
 from sftp import connect_keep_trying
 from stats import with_blocking_time
-from utils import dont_overwhelm_server
+from utils import dont_overwhelm_server, dump_thread_stacks
 
 def start(sftp_url, vcons_ready_queue, stats_queue):
     cache.init()
@@ -36,8 +35,9 @@ def start(sftp_url, vcons_ready_queue, stats_queue):
                     vcons_ready_queue.put(vcon_cur)
             else:
                 dont_overwhelm_server()
+            let_other_threads_run()
     except ShutdownException:
-        pass
+        dump_thread_stacks()
     finally:
         if sftp is not None:
             sftp.close()

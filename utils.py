@@ -163,3 +163,6 @@ def clear_screen():
 
 def dont_overwhelm_server():
     time.sleep(dont_overwhelm_server_time_seconds)
+
+def let_other_threads_run():
+    time.sleep(0)

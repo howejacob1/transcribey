@@ -27,7 +27,6 @@ import vcon_utils as vcon
 from log_utils import info_header, with_timing
 from process import stop_threads_and_processes
 from utils import dump_thread_stacks, dir_size_bytes, size_of_file, clear_screen
-from vcon_queue import VconQueue, watch_vcon_queue
 
 logging.basicConfig(level=logging.INFO, format='[%(asctime)s] [%(threadName)s] %(levelname)s - %(message)s')
 logging.getLogger("paramiko").setLevel(logging.INFO)
@@ -36,15 +35,29 @@ def main(sftp_url, stats_queue=None):
     # sftp = sftp_utils.connect_keep_trying(sftp_url)
     vcon.unmarked_all_reserved()
     programs = []
-    reserved_vcons_queue = VconQueue(process=True)
+    reserved_vcons_queue = multiprocessing.Queue(maxsize=100)
     programs.append(reserver.start_process(sftp_url, reserved_vcons_queue, stats_queue))
-    preprocessed_vcons_queue = VconQueue(process=False)
+    preprocessed_vcons_queue = multiprocessing.Queue(maxsize=100)
     programs.append(preprocess.start_thread(reserved_vcons_queue, preprocessed_vcons_queue, stats_queue))
-    watch_vcon_queue(preprocessed_vcons_queue)
-    # lang_detected_en_vcons_queue = VconQueue(process=False)
-    # lang_detected_non_en_vcons_queue = VconQueue(process=False)
+    # Simple queue watching function instead of watch_vcon_queue
+    def watch_queue():
+        try:
+            while True:
+                vcon = preprocessed_vcons_queue.get()
+                print(vcon)
+        except KeyboardInterrupt:
+            print("Stopped watching queue.")
+        except Exception as e:
+            print(f"Error in watch_queue: {e}")
+    
+    watch_thread = threading.Thread(target=watch_queue)
+    watch_thread.daemon = True
+    watch_thread.start()
+    
+    # lang_detected_en_vcons_queue = multiprocessing.Queue()
+    # lang_detected_non_en_vcons_queue = multiprocessing.Queue()
     # programs.append(lang_detect.start_thread(preprocessed_vcons_queue, lang_detected_en_vcons_queue, lang_detected_non_en_vcons_queue, stats_queue))
-    # transcribed_vcons_queue = VconQueue(process=True)
+    # transcribed_vcons_queue = multiprocessing.Queue()
     # programs.append(transcribe_en.start_thread(lang_detected_en_vcons_queue, transcribed_vcons_queue, stats_queue))
     # programs.append(transcribe_non_en.start_thread(lang_detected_non_en_vcons_queue, transcribed_vcons_queue, stats_queue))
     # programs.append(send_results.start_process(transcribed_vcons_queue, stats_queue))
@@ -52,8 +65,8 @@ def main(sftp_url, stats_queue=None):
         while True:
             pass
         # stats.run(stats_queue)
-    except KeyboardInterrupt:
-        pass
+    except Exception as e:
+        print(e)
     stop_threads_and_processes(programs)
 
     print("Done.")

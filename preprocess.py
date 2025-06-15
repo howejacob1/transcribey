@@ -1,4 +1,5 @@
 import logging
+import torchaudio
 import threading
 from multiprocessing import Queue
 from queue import Empty
@@ -14,30 +15,31 @@ import process
 import settings
 import stats
 import vcon_utils as vcon
+from utils import let_other_threads_run, dump_thread_stacks
 from gpu import move_to_gpu_maybe
 from process import ShutdownException
 from stats import with_blocking_time
 from vcon_class import Vcon
-from vcon_queue import VconQueue
 
 def preprocess_vcon_one(vcon_cur: Vcon, stats_queue: Queue):
     try:
         filename = vcon.processing_filename(vcon_cur)
         vcon.move_to_processing(vcon_cur)
-        audio_data, sample_rate = audio.load_to_cpu(filename)
         audio_data : torch.Tensor
         sample_rate : int
+        audio_data, sample_rate = audio.load_to_cpu(filename)
         duration = audio.duration(audio_data, sample_rate)
         audio_data = audio.ensure_mono(audio_data)
-        audio_data = audio.resample(audio_data)
+        resampler = torchaudio.transforms.Resample(sample_rate, settings.sample_rate)
+        audio_data = resampler(audio_data)
         audio_data = audio.vad(audio_data)
+        bytes = audio.get_size(audio_data)
         audio_data = cp.asarray(audio_data.detach())
         audio_data = audio_data.squeeze()
         if audio_data.ndim != 1:
             audio_data = audio_data[0]
         audio_data = audio_data.astype(cp.float32)
         audio_data = move_to_gpu_maybe(audio_data)
-        bytes = audio.get_size(audio_data)
         vcon_cur.size = bytes
         vcon_cur.duration = duration
         vcon_cur.audio = audio_data
@@ -67,8 +69,8 @@ def is_batch_ready(batch: List[Vcon], time_passed: float) -> bool:
     return False
 
 # Technically may have some max size problems but whatever
-def start(reserved_vcons_queue: VconQueue,
-          preprocessed_vcons_queue: VconQueue,
+def start(reserved_vcons_queue: Queue,
+          preprocessed_vcons_queue: Queue,
           stats_queue: Queue):
     batch : List[Vcon] = []
     try:
@@ -77,6 +79,7 @@ def start(reserved_vcons_queue: VconQueue,
         vcons_duration : int = 0
         time_start : float = perf_counter()
         while True:
+            print("-------------------------start of loop!")
             time_now : float = perf_counter()
             time_passed : float = time_now - time_start
             if is_batch_ready(batch, time_passed):
@@ -94,20 +97,19 @@ def start(reserved_vcons_queue: VconQueue,
                     batch = []
                     time_start = perf_counter()
             with with_blocking_time(stats_queue):
-                vcon_cur = None  # Initialize before the loop
-                while True:
-                    try:
-                        vcon_cur = reserved_vcons_queue.get(timeout=settings.preprocess_batch_timeout_seconds)
-                    except (TimeoutError, Empty):
-                        break
+                try:
+                    vcon_cur = reserved_vcons_queue.get(block=True, timeout=settings.preprocess_batch_timeout_seconds)
+                except Empty:
+                    vcon_cur = None
             if vcon_cur:
                 vcon_cur = preprocess_vcon_one(vcon_cur, stats_queue)
                 if vcon_cur:
                     batch.append(vcon_cur)
+            let_other_threads_run()
     except ShutdownException:
-        pass
+        dump_thread_stacks()
 
-def start_thread(reserved_vcons_queue: VconQueue, preprocessed_vcons_queue: VconQueue, stats_queue: Queue):
+def start_thread(reserved_vcons_queue: Queue, preprocessed_vcons_queue: Queue, stats_queue: Queue):
     import time
     stats.add(stats_queue, "start_time", time.time())
     thread = threading.Thread(target=start, args=(reserved_vcons_queue, preprocessed_vcons_queue, stats_queue,))

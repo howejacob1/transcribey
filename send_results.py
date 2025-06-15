@@ -7,13 +7,12 @@ import vcon_utils
 import process
 import stats
 from vcon_class import Vcon
-from vcon_queue import VconQueue
 from stats import with_blocking_time
 
 def start_thread(transcribed_vcons_queue):
     logging.info("Starting send results thread.")
 
-def send_results(transcribed_vcons_queue: VconQueue, stats_queue: Queue):
+def send_results(transcribed_vcons_queue: Queue, stats_queue: Queue):
     vcons_count = 0
     vcons_bytes = 0
     vcons_duration = 0

@@ -1,21 +1,23 @@
 import time
-from multiprocessing import Queue
 from queue import Empty
 from time import perf_counter
 from typing import List
 
-import numpy as np
-from nemo.collections.asr.models import ASRModel
+import cupy as cp
+import torch
+import whisper
 
+import gpu
+import process
 import settings
 import stats
 import vcon_utils
-from gpu import gc_collect_maybe, gpu_ram_free_bytes
+from multiprocessing import Queue
+from gpu import move_to_gpu_maybe, we_have_a_gpu, gc_collect_maybe, gpu_ram_free_bytes
 from process import ShutdownException
 from stats import with_blocking_time
-from utils import suppress_output
+from utils import let_other_threads_run, dump_thread_stacks
 from vcon_class import Vcon
-from vcon_queue import VconQueue
 
 def load_nvidia(model_name):
     """Load nvidia model using NVIDIA NeMo."""
@@ -82,7 +84,7 @@ def is_batch_ready(batch: List[Vcon], batch_start: float, total_size: int):
         return True
     return False
 
-def collect_vcons(lang_detected_queue: VconQueue, target_vcon: Vcon | None, stats_queue: Queue):
+def collect_vcons(lang_detected_queue: Queue, target_vcon: Vcon | None, stats_queue: Queue):
     try:
         if not target_vcon:
             with with_blocking_time(stats_queue):
@@ -90,41 +92,37 @@ def collect_vcons(lang_detected_queue: VconQueue, target_vcon: Vcon | None, stat
     except Empty:
         return [target_vcon], None
     
-    batch_start: float = perf_counter()
-    total_size: int = target_vcon.size if target_vcon else 0
-    batch: List[Vcon] = [target_vcon] if target_vcon else []
-    
+    batch_start : float = perf_counter()
+    total_size : int = 0
+    batch : List = [target_vcon]
+        
     while not is_batch_ready(batch, batch_start, total_size):
         try:
             with with_blocking_time(stats_queue):
                 cur_vcon = lang_detected_queue.get(timeout=settings.transcribe_batch_timeout_seconds)
             if cur_vcon.size == target_vcon.size:
+                # Audio data is already on GPU from preprocessing
                 batch.append(cur_vcon)
                 total_size += cur_vcon.size
             else: 
                 return batch, cur_vcon
-        except (Empty, TimeoutError):
-            pass
-    return batch, None
+        except TimeoutError:
+            return batch, target_vcon
+    return batch, target_vcon
 
-def transcribe(lang_detected_queue: VconQueue,
-               transcribed_queue: VconQueue,
-               model,
+def transcribe(lang_detected_queue: Queue,
+               transcribed_queue: Queue,
                stats_queue: Queue):
-    stats.add(stats_queue, "start_time", time.time())
-    target_vcon: Vcon | None = None
-    vcons_bytes: int = 0
-    vcons_count: int = 0
-    vcons_duration: int = 0
+    model = load_nvidia()
     
+    target_vcon : Vcon | None = None
+    vcons_bytes : int = 0
+    vcons_count : int = 0
+    vcons_duration : int = 0
     try:
-        while True:  # just run thread forever
+        while True: # just run thread forever
             batch, target_vcon = collect_vcons(lang_detected_queue, target_vcon, stats_queue)
-            if not batch:
-                continue
-                
             transcribed_vcons = transcribe_batch(batch, model)
-            
             for vcon_cur in transcribed_vcons:
                 vcons_count += 1
                 vcons_bytes += vcon_cur.size
@@ -132,7 +130,6 @@ def transcribe(lang_detected_queue: VconQueue,
                 stats.add(stats_queue, "vcons_count", vcons_count)
                 stats.add(stats_queue, "vcons_bytes", vcons_bytes)
                 stats.add(stats_queue, "vcons_duration", vcons_duration)
-                vcon_utils.remove_audio(vcon_cur)
                 with with_blocking_time(stats_queue):
                     transcribed_queue.put(vcon_cur)
     except ShutdownException:

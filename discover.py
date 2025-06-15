@@ -8,8 +8,10 @@ import sftp
 import stats
 from process import ShutdownException, block_until_threads_and_processes_finish, setup_signal_handlers
 from settings import discover_batch_size
+from utils import let_other_threads_run
 from vcon_class import Vcon
 from vcon_utils import insert_many_maybe_async, is_audio_filename
+from utils import dump_thread_stacks
 
 def discover(url, stats_queue):
     """Discover audio files and create vcons, with clean shutdown handling"""    
@@ -41,13 +43,14 @@ def discover(url, stats_queue):
                 if len(vcons) > discover_batch_size:
                     add_many(vcons)
                     vcons = []
+            let_other_threads_run()
         # Process any remaining vcons
         if vcons:
             add_many(vcons)
             
         block_until_threads_and_processes_finish(threads)
     except ShutdownException as e:
-        pass
+        dump_thread_stacks()
     finally: 
         if sftp_client:
             sftp_client.close()

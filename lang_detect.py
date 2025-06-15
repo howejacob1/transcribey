@@ -1,8 +1,8 @@
 import gc
 import logging
+import multiprocessing
 import threading
 import time
-from multiprocessing import Queue
 from queue import Empty
 from time import perf_counter
 from typing import List
@@ -10,14 +10,19 @@ from typing import List
 import cupy as cp
 import numpy as np
 import torch
-from nemo.collections.asr.models import EncDecSpeakerLabelModel
+import nemo.collections.asr as nemo_asr
 
+import audio
+import gpu
+import process
 import settings
 import stats
-from gpu import move_to_gpu_maybe, gpu_ram_free_bytes, gc_collect_maybe, we_have_a_gpu
+import vcon_utils
+from multiprocessing import Queue
+from gpu import gpu_ram_free_bytes, move_to_gpu_maybe, we_have_a_gpu, gc_collect_maybe
 from process import ShutdownException
 from stats import with_blocking_time
-from utils import suppress_output
+from utils import let_other_threads_run, dump_thread_stacks
 from vcon_class import Vcon
 from vcon_queue import VconQueue
 from vcon_utils import batch_to_audio_data, is_english
@@ -232,7 +237,7 @@ def is_batch_ready(batch : List[Vcon], batch_start : float, total_size : int):
         return True
     return False
 
-def collect_vcons(preprocessed_vcons_queue : VconQueue, target_vcon: Vcon | None, stats_queue: Queue):
+def collect_vcons(preprocessed_vcons_queue : Queue, target_vcon: Vcon | None, stats_queue: Queue):
     try:
         if not target_vcon:
             with with_blocking_time(stats_queue):
@@ -259,9 +264,9 @@ def collect_vcons(preprocessed_vcons_queue : VconQueue, target_vcon: Vcon | None
     return batch, target_vcon
 
 
-def lang_detect(preprocessed_vcons_queue: VconQueue,
-                lang_detected_en_vcons_queue: VconQueue,
-                lang_detected_non_en_vcons_queue: VconQueue,
+def lang_detect(preprocessed_vcons_queue: Queue,
+                lang_detected_en_vcons_queue: Queue,
+                lang_detected_non_en_vcons_queue: Queue,
                 stats_queue: Queue):
     stats.add(stats_queue, "start_time", time.time())
     model = load()

@@ -26,12 +26,14 @@ class VconQueue:
 
     def put(self, vcon: Vcon, block: bool = True, timeout: Optional[float] = None) -> None:
         vcon_size = vcon.size
+        if not vcon_size:
+            vcon_size = 5*(1024**2)
         
         with self._not_full:
             if timeout is not None:
                 endtime = time.time() + timeout
                 
-            while self.current_bytes + vcon_size > self.max_bytes:
+            while (self.current_bytes + vcon_size > self.max_bytes) and not self._queue.empty():
                 if not block:
                     raise queue.Full
                 if timeout is not None:

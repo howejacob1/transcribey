@@ -19,7 +19,13 @@ def get_duration(filename):
         return None
 
 def duration(audio_data, sample_rate):
-    return audio_data.shape[1] / sample_rate
+    # Handle both 1D and 2D audio data
+    if audio_data.ndim == 1:
+        # 1D audio data: shape is [samples]
+        return audio_data.shape[0] / sample_rate
+    else:
+        # 2D audio data: shape is [channels, samples]
+        return audio_data.shape[1] / sample_rate
 
 def is_valid(file_path):
     try:
@@ -67,13 +73,47 @@ def cpu_cores_for_resampling():
 def cpu_cores_for_vad():
     return num_cores() - 2
 
-def pad_audio(audio_data: torch.Tensor, sample_rate: int, duration: float):
+def pad_audio(audio_data, sample_rate: int, duration: float):
     """Pads audio data on the right to ensure it has a minimum duration."""
+    import cupy as cp
+    
     target_samples = int(duration * sample_rate)
     
-    if audio_data.shape[1] < target_samples:
-        padding_needed = target_samples - audio_data.shape[1]
-        return torch.nn.functional.pad(audio_data, (0, padding_needed))
+    # Handle CuPy arrays by converting to PyTorch tensor
+    is_cupy = hasattr(audio_data, 'get')  # CuPy arrays have .get() method
+    if is_cupy:
+        # Convert CuPy array to PyTorch tensor
+        if hasattr(audio_data, 'device'):
+            # If CuPy array is on GPU, create GPU tensor
+            audio_tensor = torch.as_tensor(audio_data, device='cuda')
+        else:
+            # Convert to CPU tensor
+            audio_tensor = torch.from_numpy(audio_data.get())
+    else:
+        audio_tensor = audio_data
+    
+    # Handle both 1D and 2D audio data
+    if audio_tensor.ndim == 1:
+        # 1D audio data: shape is [samples]
+        current_samples = audio_tensor.shape[0]
+    else:
+        # 2D audio data: shape is [channels, samples]
+        current_samples = audio_tensor.shape[1]
+    
+    if current_samples < target_samples:
+        padding_needed = target_samples - current_samples
+        if audio_tensor.ndim == 1:
+            # For 1D: pad on the right (last dimension)
+            padded_tensor = torch.nn.functional.pad(audio_tensor, (0, padding_needed))
+        else:
+            # For 2D: pad on the right (last dimension)
+            padded_tensor = torch.nn.functional.pad(audio_tensor, (0, padding_needed))
+        
+        # Convert back to CuPy if original was CuPy
+        if is_cupy:
+            return cp.asarray(padded_tensor.detach())
+        else:
+            return padded_tensor
     
     return audio_data
 
