@@ -50,8 +50,7 @@ fake_wavs/
 fake_wavs_large/
 working_memory/
 broken_wavs/
-.secrets.toml
-secrets.toml
+
 
 # Git
 .git/

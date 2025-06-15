@@ -13,6 +13,7 @@ import vcon_utils
 from gpu import gc_collect_maybe, gpu_ram_free_bytes
 from process import ShutdownException
 from stats import with_blocking_time
+from utils import suppress_output
 from vcon_class import Vcon
 from vcon_queue import VconQueue
 
@@ -20,7 +21,8 @@ def load_nvidia(model_name):
     """Load nvidia model using NVIDIA NeMo."""
     total_start_time = time.time()
     print(f"Loading model {model_name}.")
-    model = ASRModel.from_pretrained(model_name=model_name)
+    with suppress_output(should_suppress=False):
+        model = ASRModel.from_pretrained(model_name=model_name)
     model.eval()
     print(f"Model {model_name} loaded in {time.time() - total_start_time:.2f} seconds total")
     return model
@@ -102,14 +104,13 @@ def collect_vcons(lang_detected_queue: VconQueue, target_vcon: Vcon | None, stat
             else: 
                 return batch, cur_vcon
         except (Empty, TimeoutError):
-            return batch, None
+            pass
     return batch, None
 
 def transcribe(lang_detected_queue: VconQueue,
                transcribed_queue: VconQueue,
                model,
-               stats_queue: Queue,
-               language="en"):
+               stats_queue: Queue):
     stats.add(stats_queue, "start_time", time.time())
     target_vcon: Vcon | None = None
     vcons_bytes: int = 0
@@ -122,7 +123,7 @@ def transcribe(lang_detected_queue: VconQueue,
             if not batch:
                 continue
                 
-            transcribed_vcons = transcribe_batch(batch, model, language)
+            transcribed_vcons = transcribe_batch(batch, model)
             
             for vcon_cur in transcribed_vcons:
                 vcons_count += 1
@@ -131,6 +132,7 @@ def transcribe(lang_detected_queue: VconQueue,
                 stats.add(stats_queue, "vcons_count", vcons_count)
                 stats.add(stats_queue, "vcons_bytes", vcons_bytes)
                 stats.add(stats_queue, "vcons_duration", vcons_duration)
+                vcon_utils.remove_audio(vcon_cur)
                 with with_blocking_time(stats_queue):
                     transcribed_queue.put(vcon_cur)
     except ShutdownException:

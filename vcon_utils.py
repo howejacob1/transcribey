@@ -251,19 +251,9 @@ def mark_vcons_as_done(vcons):
     for vcon in vcons:
         vcon.done = True
 
-def update_vcons_on_db(vcons):
-    operations = []
-    for vcon in vcons:
-        #pprint(vcon)
-        del vcon["dialog"][0]['body']
-        #print(f"vcon: {vcon}")
-        vcon_uuid_val = vcon["uuid"]
-        operations.append(ReplaceOne({"uuid": vcon_uuid_val}, 
-                                     vcon,
-                                     upsert=True))
-    db.bulk_write(operations)
-    # thread = threading.Thread(target=db.bulk_write, args=(operations,))
-    # thread.start()
+def update_vcon_on_db(vcon: Vcon):
+    vcon_uuid_val = vcon.uuid
+    db.replace_one({"uuid": vcon_uuid_val}, vcon.to_dict(), upsert=True)
 
 def load_all():
     return list(db.find())
@@ -370,3 +360,7 @@ def is_english(vcon: Vcon):
             if languages[0] == 'en':
                 return True
     return False
+
+def remove_audio(vcon: Vcon):
+    vcon.audio = None
+    return vcon

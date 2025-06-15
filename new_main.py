@@ -35,7 +35,6 @@ logging.getLogger("paramiko").setLevel(logging.INFO)
 def main(sftp_url, stats_queue=None):
     # sftp = sftp_utils.connect_keep_trying(sftp_url)
     vcon.unmarked_all_reserved()
-    
     programs = []
     reserved_vcons_queue = VconQueue(process=True)
     programs.append(reserver.start_process(sftp_url, reserved_vcons_queue, stats_queue))
