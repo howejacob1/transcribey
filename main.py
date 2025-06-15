@@ -38,9 +38,9 @@ def main(sftp_url, stats_queue=None):
     programs = []
     reserved_vcons_queue = VconQueue(process=True)
     programs.append(reserver.start_process(sftp_url, reserved_vcons_queue, stats_queue))
-    watch_vcon_queue(reserved_vcons_queue)
-    # preprocessed_vcons_queue = VconQueue(process=False)
-    # programs.append(preprocess.start_thread(reserved_vcons_queue, preprocessed_vcons_queue, stats_queue))
+    preprocessed_vcons_queue = VconQueue(process=False)
+    programs.append(preprocess.start_thread(reserved_vcons_queue, preprocessed_vcons_queue, stats_queue))
+    watch_vcon_queue(preprocessed_vcons_queue)
     # lang_detected_en_vcons_queue = VconQueue(process=False)
     # lang_detected_non_en_vcons_queue = VconQueue(process=False)
     # programs.append(lang_detect.start_thread(preprocessed_vcons_queue, lang_detected_en_vcons_queue, lang_detected_non_en_vcons_queue, stats_queue))

@@ -34,6 +34,8 @@ def discover(url, stats_queue):
                 stats.add(stats_queue, "vcons_count", vcons_count)
                 vcon = Vcon.create_from_url(filename)
                 vcon.size = bytes
+                vcons_bytes += bytes
+                stats.add(stats_queue, "vcons_bytes", vcons_bytes)
                 vcons.append(vcon)
                 print(f"Discovered {vcon}")
                 if len(vcons) > discover_batch_size:
@@ -44,8 +46,6 @@ def discover(url, stats_queue):
             add_many(vcons)
             
         block_until_threads_and_processes_finish(threads)
-        stats.add(stats_queue, "vcons_count", vcons_count)
-        stats.add(stats_queue, "vcons_bytes", vcons_bytes)
     except ShutdownException as e:
         pass
     finally: 

@@ -88,3 +88,11 @@ def ensure_mono(audio_data: torch.Tensor) -> torch.Tensor:
 def vad(audio_data: torch.Tensor) -> torch.Tensor:
     vad_fun = torchaudio.transforms.Vad(sample_rate=settings.sample_rate, trigger_level=0.5)
     return vad_fun(audio_data)
+
+def format_bytes(size):
+    # 2**10 = 1024
+    for unit in ['B', 'KB', 'MB', 'GB', 'TB', 'PB']:
+        if size < 1024.0:
+            return f"{size:3.1f} {unit}"
+        size /= 1024.0
+    return f"{size:.1f} PB"

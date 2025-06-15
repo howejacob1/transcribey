@@ -83,24 +83,27 @@ def start(reserved_vcons_queue: VconQueue,
                 batch = process_batch(batch, stats_queue)
                 for vcon_cur in batch:
                     vcons_count += 1
-                    vcons_bytes += vcon_cur.bytes
+                    vcons_bytes += vcon_cur.size
                     vcons_duration += vcon_cur.duration
                     stats.add(stats_queue, "vcons_count", vcons_count)
                     stats.add(stats_queue, "vcons_bytes", vcons_bytes)
                     stats.add(stats_queue, "vcons_duration", vcons_duration)
                     print(f"Preprocessed {vcon_cur}")
-                    with with_blocking_time():
+                    with with_blocking_time(stats_queue):
                         preprocessed_vcons_queue.put(vcon_cur)
                     batch = []
                     time_start = perf_counter()
-            with with_blocking_time():
-                try:
-                    vcon_cur : Vcon | None = reserved_vcons_queue.get(timeout=settings.preprocess_batch_timeout_seconds)
-                except Empty:
-                    pass
-            vcon_cur = preprocess_vcon_one(vcon_cur, stats_queue)
+            with with_blocking_time(stats_queue):
+                vcon_cur = None  # Initialize before the loop
+                while True:
+                    try:
+                        vcon_cur = reserved_vcons_queue.get(timeout=settings.preprocess_batch_timeout_seconds)
+                    except (TimeoutError, Empty):
+                        break
             if vcon_cur:
-                batch.append(vcon_cur)
+                vcon_cur = preprocess_vcon_one(vcon_cur, stats_queue)
+                if vcon_cur:
+                    batch.append(vcon_cur)
     except ShutdownException:
         pass
 
