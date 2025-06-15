@@ -1,4 +1,5 @@
 import gc
+import numpy as np
 import torch
 from queue import Empty
 from stats import with_blocking_time
@@ -14,7 +15,7 @@ import time
 #import gpu
 # import torch
 from nemo.collections.asr.models import EncDecSpeakerLabelModel
-from vcon_utils import batch_to_audio_data, gpu_ram_free_bytes, gc_collect_maybe
+from vcon_utils import batch_to_audio_data, gpu_ram_free_bytes, gc_collect_maybe, batch_to_audio_data, set_languages
 import logging
 #import process
 # from utils import gpu_ram_free_bytes, gc_collect_maybe
@@ -61,31 +62,12 @@ def identify_languages(all_vcons_batched, model):
     vcons = []
     for vcon_batch in all_vcons_batched:
         print(f"identifying languages for {len(vcon_batch)} vcons (gpu memory: {gpu_ram_free_bytes()})")
-        audio_data_batch = vcon_utils.batch_to_audio_data(vcon_batch)
+        audio_data_batch = batch_to_audio_data(vcon_batch)
         results = []
         
         # Process each audio sample
         for audio_data in audio_data_batch:
             try:
-                # Ensure audio is numpy array and convert to proper format
-                if isinstance(audio_data, torch.Tensor):
-                    audio_data = audio_data.cpu().numpy()
-                
-                # Ensure audio is 1D and float32
-                audio_data = audio_data.squeeze()
-                if audio_data.ndim != 1:
-                    # If still not 1D, take the first channel (assume mono)
-                    audio_data = audio_data[0]
-                audio_data = audio_data.astype(np.float32)
-                
-                # Check if audio is long enough (minimum duration check)
-                min_samples = 1024  # Minimum samples for reliable language detection
-                if len(audio_data) < min_samples:
-                    #print(f"Audio too short ({len(audio_data)} samples), padding to {min_samples}")
-                    # Pad with zeros or repeat the audio
-                    padding_needed = min_samples - len(audio_data)
-                    audio_data = np.pad(audio_data, (0, padding_needed), mode='constant')
-                
                 # Use the model's built-in inference method instead of direct forward()
                 # This is more appropriate for NeMo models
                 with torch.no_grad():
@@ -140,11 +122,11 @@ def identify_languages(all_vcons_batched, model):
                 # Always return as list for consistency (e.g., ["en"])
                 language_list = [detected_lang]
                 #print(f"Detected language for vcon {i}: {language_list}")
-                vcon_utils.set_languages(vcon_cur, language_list)
+                set_languages(vcon_cur, language_list)
                 vcons.append(vcon_cur)  # Fixed: append the vcon, not the list
             else:
                 #print(f"Warning: No result for vcon {i}, defaulting to ['en']")
-                vcon_utils.set_languages(vcon_cur, ['en'])
+                set_languages(vcon_cur, ['en'])
                 vcons.append(vcon_cur)
         
         gc_collect_maybe()

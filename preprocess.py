@@ -7,6 +7,7 @@ from gpu import move_to_gpu_maybe
 import threading
 from typing import List
 from process import ShutdownException
+import cupy as cp
 
 import logging
 from stats import with_blocking_time
@@ -30,12 +31,11 @@ def preprocess_vcon_one(vcon_cur: Vcon, stats_queue: Queue):
         audio_data = audio.ensure_mono(audio_data)
         audio_data = audio.resample(audio_data)
         audio_data = audio.vad(audio_data)
-        audio_data = audio_data.cpu()
-        audio_data = audio_data.numpy()
+        audio_data = cp.asarray(audio_data.detach())
         audio_data = audio_data.squeeze()
         if audio_data.ndim != 1:
             audio_data = audio_data[0]
-        audio_data = audio_data.astype(torch.float32)
+        audio_data = audio_data.astype(cp.float32)
         audio_data = move_to_gpu_maybe(audio_data)
         bytes = audio.get_size(audio_data)
         vcon_cur.size = bytes
