@@ -172,16 +172,34 @@ def lang_detect(preprocessed_vcons_queue: VconQueue,
     stats.add(stats_queue, "start_time", time.time())
     model = load()
     target_vcon : Vcon | None = None
+    vcons_bytes : int = 0
+    vcons_count : int = 0
+    vcons_duration : int = 0
     try:
         while True: # just run thread forever
             batch, target_vcon = collect_vcons(preprocessed_vcons_queue, target_vcon, stats_queue)
-            lang_detected_en_vcons, lang_detected_non_en_vcons = identify_languages(batch, model)
+            lang_detected_vcons = identify_languages(batch, model)
 
-            for vcon_cur in lang_detected_en_vcons:
-                lang_detected_en_vcons_queue.put(vcon_cur)
-
-            for vcon_cur in lang_detected_en_vcons:
-                lang_detected_non_en_vcons_queue.put(vcon_cur)
+            for vcon_cur in lang_detected_vcons:
+                languages = vcon_cur.languages or []
+                if 'en' in languages:
+                    vcons_count += 1
+                    vcons_bytes += vcon_cur.size
+                    vcons_duration += vcon_cur.duration
+                    stats.add(stats_queue, "vcons_count", vcons_count)
+                    stats.add(stats_queue, "vcons_bytes", vcons_bytes)
+                    stats.add(stats_queue, "vcons_duration", vcons_duration)
+                    with with_blocking_time(stats_queue):
+                        lang_detected_en_vcons_queue.put(vcon_cur)
+                else:
+                    vcons_count += 1
+                    vcons_bytes += vcon_cur.size
+                    vcons_duration += vcon_cur.duration
+                    stats.add(stats_queue, "vcons_count", vcons_count)
+                    stats.add(stats_queue, "vcons_bytes", vcons_bytes)
+                    stats.add(stats_queue, "vcons_duration", vcons_duration)
+                    with with_blocking_time(stats_queue):
+                        lang_detected_non_en_vcons_queue.put(vcon_cur)
     except ShutdownException:
         pass
 

@@ -71,26 +71,45 @@ def collect_vcons(preprocessed_vcons_queue : VconQueue, target_vcon: Vcon | None
             return batch, target_vcon
     return batch, target_vcon
 
+def transcribe_batch(vcon_batch, model):
+    """Transcribe a batch of vcons using the model"""
+    # This is a placeholder - actual transcription logic would depend on the model
+    # For now, just return the vcons with placeholder transcripts
+    for vcon in vcon_batch:
+        # In real implementation, you'd process audio through the model
+        # vcon.transcript_text = model.transcribe(vcon.audio)
+        vcon.transcript_text = f"Transcribed audio for {vcon.filename}"
+    return vcon_batch
 
-def transcribe(lang_detected_en_vcons_queue: VconQueue,
-              model,
-              stats_queue: Queue):
+def transcribe(lang_detected_queue: VconQueue,
+               transcribed_queue: VconQueue,
+               model,
+               stats_queue: Queue):
     stats.add(stats_queue, "start_time", time.time())
     target_vcon : Vcon | None = None
+    vcons_bytes : int = 0
+    vcons_count : int = 0
+    vcons_duration : int = 0
     try:
         while True: # just run thread forever
-            batch, target_vcon = collect_vcons(preprocessed_vcons_queue, target_vcon, stats_queue)
-            lang_detected_en_vcons, lang_detected_non_en_vcons = identify_languages(batch, model)
-
-            for vcon_cur in lang_detected_en_vcons:
-                lang_detected_en_vcons_queue.put(vcon_cur)
-
-            for vcon_cur in lang_detected_en_vcons:
-                lang_detected_non_en_vcons_queue.put(vcon_cur)
+            batch, target_vcon = collect_vcons(lang_detected_queue, target_vcon, stats_queue)
+            transcribed_vcons = transcribe_batch(batch, model)
+            
+            for vcon_cur in transcribed_vcons:
+                vcons_count += 1
+                vcons_bytes += vcon_cur.size
+                vcons_duration += vcon_cur.duration
+                stats.add(stats_queue, "vcons_count", vcons_count)
+                stats.add(stats_queue, "vcons_bytes", vcons_bytes)
+                stats.add(stats_queue, "vcons_duration", vcons_duration)
+                with with_blocking_time(stats_queue):
+                    transcribed_queue.put(vcon_cur)
     except ShutdownException:
         pass
 
-def start_thread(preprocessed_vcons_queue, lang_detected_en_vcons_queue, lang_detected_non_en_vcons_queue, stats_queue):
-    thread = threading.Thread(target=lang_detect, args=(preprocessed_vcons_queue, lang_detected_en_vcons_queue, lang_detected_non_en_vcons_queue, stats_queue))
+def start_thread(lang_detected_queue: VconQueue,
+                 transcribed_queue: VconQueue,
+                 stats_queue: Queue):
+    thread = threading.Thread(target=transcribe, args=(lang_detected_queue, transcribed_queue, model, stats_queue))
     thread.start()
     return thread
