@@ -10,6 +10,12 @@ try:
 except ImportError:
     gpu_available = False
 
+try:
+    import psutil
+    psutil_available = True
+except ImportError:
+    psutil_available = False
+
 from process import our_program_name
 import settings
 from utils import seconds_to_days, seconds_to_hours
@@ -65,16 +71,37 @@ def actually_print_status(program,
 def print_gpu_stats():
     """Print GPU memory and power statistics"""
     if gpu_available:
-        gpu = GPUtil.getGPUs()[0]
+        gpus = GPUtil.getGPUs()
+        if not gpus:
+            print("No GPU detected.")
+            return False
+        gpu = gpus[0]
         memory_used = gpu.memoryUsed
         memory_total = gpu.memoryTotal
         memory_percent = (memory_used / memory_total) * 100 if memory_total > 0 else 0
         temperature = gpu.temperature
         load = gpu.load * 100
-    
-    print(f"Mem: {memory_used:,}MB/{memory_total:,}MB ({memory_percent:.1f}%) | "
-            f"Load: {load:.1f}% | "
-            f"Temp: {temperature}°C")
+        print(f"Mem: {memory_used:,}MB/{memory_total:,}MB ({memory_percent:.1f}%) | "
+              f"Load: {load:.1f}% | "
+              f"Temp: {temperature}°C")
+        return True
+    else:
+        print("GPUtil not available.")
+        return False
+
+def print_cpu_stats():
+    """Print basic CPU statistics."""
+    if psutil_available:
+        cpu_percent = psutil.cpu_percent(interval=0.1)
+        mem = psutil.virtual_memory()
+        print(f"CPU Usage: {cpu_percent:.1f}% | RAM: {mem.used // (1024**2):,}MB/{mem.total // (1024**2):,}MB ({mem.percent:.1f}%)")
+    else:
+        print("CPU stats: psutil not available.")
+
+def print_xpu_stats():
+    """Print GPU stats if available, otherwise CPU stats."""
+    if not print_gpu_stats():
+        print_cpu_stats()
 
 def print_status(status):
     # Clear screen and move cursor to top
@@ -102,8 +129,8 @@ def print_status(status):
         actually_print_status(program, vcons_count, vcons_bytes, is_blocking, is_alive, processing_duration, total_runtime, percent_processing, vcons_rate, vcons_bytes_rate_mb, vcons_duration)
         line_number += 1
     
-    # Print GPU statistics at the end
-    print_gpu_stats()
+    # Print XPU statistics at the end
+    print_xpu_stats()
 
 def run(stats_queue):
     status = {}

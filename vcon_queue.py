@@ -69,3 +69,14 @@ class VconQueue:
     def bytes(self) -> int:
         with self._lock:
             return self.current_bytes
+
+def watch_vcon_queue(vcon_queue):
+    """Continuously watch the given VconQueue and print each Vcon as it is received."""
+    try:
+        while True:
+            vcon = vcon_queue.get()
+            print(vcon)
+    except KeyboardInterrupt:
+        print("Stopped watching VconQueue.")
+    except Exception as e:
+        print(f"Error in watch_vcon_queue: {e}")

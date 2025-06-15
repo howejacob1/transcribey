@@ -1,15 +1,21 @@
 import gc
-
-import GPUtil
 import torch
+
+try:
+    import GPUtil
+except ModuleNotFoundError:
+    GPUtil = None
 
 import settings
 
 def get_device():
-    return "cuda" if torch.cuda.is_available() else "cpu"
+    """Return 'cuda' when CUDA is available else 'cpu'.
+    This helper is used throughout the codebase.
+    """
+    return 'cuda' if torch.cuda.is_available() else 'cpu'
 
 def we_have_a_gpu():
-    return get_device() != "cpu"
+    return torch.cuda.is_available()
 
 def tensor_on_gpu(tensor):
     return tensor.device.type == "cuda"
@@ -39,25 +45,65 @@ def move_to_gpu_maybe(obj):
     return obj
 
 def gpu_ram_total_bytes():
-    return torch.cuda.get_device_properties(torch.cuda.current_device()).total_memory
+    """Return total GPU memory in bytes or 0 if no GPU.
+
+    When CUDA is available but GPUtil is absent, fall back to torch.
+    When CUDA is unavailable, return 0 so downstream code can decide.
+    """
+    if not torch.cuda.is_available():
+        return 0
+    try:
+        return torch.cuda.get_device_properties(torch.cuda.current_device()).total_memory
+    except Exception:  # pragma: no cover – catch any CUDA querying issues
+        return 0
 
 def gpu_ram_allocated_bytes():
+    if not torch.cuda.is_available():
+        return 0
     return torch.cuda.memory_allocated(get_device())
 
 def gpu_ram_free_bytes():
-    gpus = GPUtil.getGPUs()
-    gpu = gpus[0]
-    memory_used_mb = gpu.memoryUsed
-    #print(f"memory_used_mb: {memory_used_mb}")
-    memory_used_bytes = memory_used_mb * 1024 * 1024
-    #print(f"memory_used_bytes: {memory_used_bytes}")
-    free = gpu_ram_total_bytes() - memory_used_bytes
-    #print(f"free: {free}")
-    return free
+    """Return free GPU memory in bytes or a reasonable default on CPU-only systems.
+
+    The logic tries, in order:
+    1. If no CUDA device, return a large constant (16 GB) to allow batching.
+    2. Use GPUtil if available to query precise usage.
+    3. Fall back to torch memory stats.
+    """
+    if not torch.cuda.is_available():
+        # Assume plenty of system RAM; 16 GB is a safe, conservative default.
+        return 16 * (1024 ** 3)
+
+    # If GPUtil is present, try to get memory info from the first GPU.
+    if GPUtil is not None:
+        try:
+            gpus = GPUtil.getGPUs()
+            if gpus:
+                gpu = gpus[0]
+                memory_used_bytes = gpu.memoryUsed * 1024 * 1024
+                total = gpu_ram_total_bytes()
+                free = total - memory_used_bytes
+                return max(free, 0)
+        except Exception:  # pragma: no cover – GPUtil may fail unexpectedly
+            pass
+
+    # Fallback: use torch's allocated memory to estimate free memory.
+    total = gpu_ram_total_bytes()
+    allocated = gpu_ram_allocated_bytes()
+    free = total - allocated
+    return max(free, 0)
 
 def batch_bytes():
+    """Return a batch size in bytes based on free GPU (or system) memory.
+    For CUDA systems we use half of the reported free GPU memory.
+    On CPU-only systems we default to 256 MB to keep memory usage reasonable.
+    """
     free_bytes = gpu_ram_free_bytes()
-    return free_bytes // 2
+    if not torch.cuda.is_available():
+        # Fixed batch size on CPU-only setups.
+        return 256 * (1024 ** 2)  # 256 MB
+    # On GPU systems, be conservative and use half of the free memory.
+    return max(free_bytes // 2, 32 * (1024 ** 2))  # At least 32 MB
 
 def max_gpu_memory_usage():
     if torch.cuda.is_available():
