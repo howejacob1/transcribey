@@ -1,6 +1,12 @@
 import datetime
 import mimetypes
 import uuid
+import torch
+import numpy as np
+try:
+    import cupy as cp
+except ImportError:
+    cp = None
 
 from vcon import Vcon as VconBase
 from vcon.dialog import Dialog
@@ -244,10 +250,43 @@ class Vcon(VconBase):
         return self._setup_from_url(url)
 
     def __repr__(self):
-        return f"Vcon(uuid={self.uuid}, filename={self.filename}, done={self.done})"
+        return self._summary_str()
 
     def __str__(self):
-        return self.__repr__()
+        return self._summary_str()
+
+    def _summary_str(self):
+        # Transcript
+        transcript = self.transcript_text
+        transcript_str = f"transcript: '{transcript[:30]}...'" if transcript else "no transcript"
+        # Audio data location
+        audio_data = self.audio
+        if audio_data is None:
+            audio_loc = "none"
+        elif cp is not None and hasattr(audio_data, 'get'):
+            audio_loc = "GPU (cupy)"
+        elif isinstance(audio_data, torch.Tensor):
+            if audio_data.is_cuda:
+                audio_loc = "GPU (torch)"
+            else:
+                audio_loc = "CPU (torch)"
+        elif isinstance(audio_data, np.ndarray):
+            audio_loc = "CPU (numpy)"
+        else:
+            audio_loc = type(audio_data).__name__
+        # Languages
+        langs = self.languages
+        langs_str = ','.join(langs) if langs else 'none'
+        # Duration
+        duration = self.duration if self.duration is not None else 'none'
+        # Size
+        size = self.size if self.size is not None else 'none'
+        # Filename
+        filename = self.filename if self.filename else 'none'
+        # UUID
+        uuid = self.uuid if self.uuid else 'none'
+        return (f"Vcon({transcript_str}, audio: {audio_loc}, lang: [{langs_str}], "
+                f"duration: {duration}, size: {size}, file: {filename}, uuid: {uuid})")
 
     # Dictionary interface methods for MongoDB compatibility
     def __getitem__(self, key):
