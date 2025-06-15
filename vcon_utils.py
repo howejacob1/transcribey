@@ -362,3 +362,11 @@ def batch_to_audio_data(batch):
         audio_data_val = vcon.audio
         audio_data_list.append(audio_data_val)
     return audio_data_list
+
+def is_english(vcon: Vcon):
+    languages = vcon.languages
+    if languages:
+        if len(languages) == 1:
+            if languages[0] == 'en':
+                return True
+    return False

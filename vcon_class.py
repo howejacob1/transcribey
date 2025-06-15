@@ -201,6 +201,14 @@ class Vcon(VconBase):
         self.corrupt = True
         self.done = True
 
+    def set_languages(self, languages):
+        """Set the languages for this vcon"""
+        self.languages = languages
+
+    def get_languages(self):
+        """Get the languages for this vcon"""
+        return self.languages
+
     def _setup_from_url(self, url):
         """Setup a vcon from a URL (internal method)"""
         # Add a party

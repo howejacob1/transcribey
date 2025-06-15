@@ -18,7 +18,7 @@ from process import ShutdownException
 from stats import with_blocking_time
 from vcon_class import Vcon
 from vcon_queue import VconQueue
-from vcon_utils import batch_to_audio_data, set_languages
+from vcon_utils import batch_to_audio_data, is_english
 
 def load():
     model_name = "langid_ambernet"
@@ -28,7 +28,7 @@ def load():
     langid_model.eval()
     return langid_model
 
-def identify_languages(all_vcons_batched, model):
+def identify_languages(batch: List[Vcon], model):
     """
     Identify languages using NVIDIA AmberNet model.
     Returns vcons with standard language codes like ["en", "es", etc.]
@@ -119,11 +119,11 @@ def identify_languages(all_vcons_batched, model):
                 # Always return as list for consistency (e.g., ["en"])
                 language_list = [detected_lang]
                 #print(f"Detected language for vcon {i}: {language_list}")
-                set_languages(vcon_cur, language_list)
+                vcon_cur.set_languages(language_list)
                 vcons.append(vcon_cur)  # Fixed: append the vcon, not the list
             else:
                 #print(f"Warning: No result for vcon {i}, defaulting to ['en']")
-                set_languages(vcon_cur, ['en'])
+                vcon_cur.set_languages(['en'])
                 vcons.append(vcon_cur)
         
         gc_collect_maybe()
@@ -182,23 +182,16 @@ def lang_detect(preprocessed_vcons_queue: VconQueue,
             lang_detected_vcons = identify_languages(batch, model)
 
             for vcon_cur in lang_detected_vcons:
-                languages = vcon_cur.languages or []
-                if 'en' in languages:
-                    vcons_count += 1
-                    vcons_bytes += vcon_cur.size
-                    vcons_duration += vcon_cur.duration
-                    stats.add(stats_queue, "vcons_count", vcons_count)
-                    stats.add(stats_queue, "vcons_bytes", vcons_bytes)
-                    stats.add(stats_queue, "vcons_duration", vcons_duration)
+                vcons_count += 1
+                vcons_bytes += vcon_cur.size
+                vcons_duration += vcon_cur.duration
+                stats.add(stats_queue, "vcons_count", vcons_count)
+                stats.add(stats_queue, "vcons_bytes", vcons_bytes)
+                stats.add(stats_queue, "vcons_duration", vcons_duration)
+                if is_english(vcon_cur):
                     with with_blocking_time(stats_queue):
                         lang_detected_en_vcons_queue.put(vcon_cur)
                 else:
-                    vcons_count += 1
-                    vcons_bytes += vcon_cur.size
-                    vcons_duration += vcon_cur.duration
-                    stats.add(stats_queue, "vcons_count", vcons_count)
-                    stats.add(stats_queue, "vcons_bytes", vcons_bytes)
-                    stats.add(stats_queue, "vcons_duration", vcons_duration)
                     with with_blocking_time(stats_queue):
                         lang_detected_non_en_vcons_queue.put(vcon_cur)
     except ShutdownException:
