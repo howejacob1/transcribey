@@ -262,36 +262,27 @@ class Vcon(VconBase):
 
     def _summary_str(self):
         # Transcript
-        transcript = self.transcript_text
-        transcript_str = f"transcript: '{transcript[:30]}...'" if transcript else "no transcript"
-        # Audio data location
-        audio_data = self.audio
-        if audio_data is None:
-            audio_loc = "none"
-        elif cp is not None and hasattr(audio_data, 'get'):
-            audio_loc = "GPU (cupy)"
-        elif isinstance(audio_data, torch.Tensor):
-            if audio_data.is_cuda:
-                audio_loc = "GPU (torch)"
-            else:
-                audio_loc = "CPU (torch)"
-        elif isinstance(audio_data, np.ndarray):
-            audio_loc = "CPU (numpy)"
-        else:
-            audio_loc = type(audio_data).__name__
-        # Languages
-        langs = self.languages
-        langs_str = ','.join(langs) if langs else 'none'
-        # Duration
-        duration = self.duration if self.duration is not None else 'none'
-        # Size
-        size = self.size if self.size is not None else 'none'
-        # Filename
-        filename = self.filename if self.filename else 'none'
-        # UUID
-        uuid = self.uuid if self.uuid else 'none'
-        return (f"Vcon({transcript_str}, audio: {audio_loc}, lang: [{langs_str}], "
-                f"duration: {duration}, size: {size}, file: {filename}, uuid: {uuid})")
+        transcript_str = ""
+        if self.transcript:
+            transcript_str = self.transcript
+            # Limit to 50 characters
+            if len(transcript_str) > 50:
+                transcript_str = transcript_str[:50] + "..."
+
+        # Duration, handling None
+        duration_str = f"{self.duration:.2f}s" if self.duration is not None else "N/A"
+
+        # Size, handling None
+        size_str = audio.format_bytes(self.size) if self.size is not None else "N/A"
+
+        # Languages, handling None or empty
+        languages_str = ', '.join(self.languages) if self.languages else "N/A"
+
+        # UUID, showing first 8 chars
+        uuid_str = str(self.uuid)[:8] if self.uuid else "N/A"
+
+        return (f"Vcon({uuid_str}, {duration_str}, {size_str}, "
+                f"lang={languages_str}, transcript='{transcript_str}')")
 
     # Dictionary interface methods for MongoDB compatibility
     def __getitem__(self, key):

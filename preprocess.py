@@ -88,6 +88,7 @@ def start(reserved_vcons_queue: VconQueue,
                     stats.add(stats_queue, "vcons_count", vcons_count)
                     stats.add(stats_queue, "vcons_bytes", vcons_bytes)
                     stats.add(stats_queue, "vcons_duration", vcons_duration)
+                    print(f"Preprocessed {vcon_cur}")
                     with with_blocking_time():
                         preprocessed_vcons_queue.put(vcon_cur)
                     batch = []
