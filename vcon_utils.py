@@ -356,3 +356,10 @@ def size_of_list(vcons : List[Vcon]) -> int:
     for vcon_cur in vcons:
         total += vcon_cur.bytes
     return total
+
+def batch_to_audio_data(batch):
+    audio_data_list = []
+    for vcon in batch:
+        audio_data_val = vcon.audio
+        audio_data_list.append(audio_data_val)
+    return audio_data_list
