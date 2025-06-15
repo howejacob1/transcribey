@@ -3,6 +3,8 @@ import mimetypes
 import uuid
 import torch
 import numpy as np
+from utils import suppress_output
+
 try:
     import cupy as cp
 except ImportError:
@@ -23,21 +25,24 @@ class Vcon(VconBase):
     def build_new(cls):
         """Create a new Vcon instance"""
         # Use the parent's build_new method which properly initializes all fields including UUID
-        vcon_base = VconBase.build_new()
+        with suppress_output():
+            vcon_base = VconBase.build_new()
         # Create our custom class instance from the properly initialized vcon_dict
         return cls(vcon_dict=vcon_base.vcon_dict)
 
     @classmethod
     def from_dict(cls, vcon_dict):
         """Create a Vcon instance from a dictionary (standard vcon format)"""
-        return cls(vcon_dict=vcon_dict)
+        with suppress_output():
+            return cls(vcon_dict=vcon_dict)
 
     @classmethod
     def create_from_url(cls, url):
         """Create a new Vcon instance from a URL (class method version)"""
-        vcon = cls.build_new()
-        vcon._setup_from_url(url)
-        return vcon
+        with suppress_output():
+            vcon = cls.build_new()
+            vcon._setup_from_url(url)
+            return vcon
 
     def to_dict(self):
         """Convert the Vcon to a dictionary"""

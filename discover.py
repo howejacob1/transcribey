@@ -35,6 +35,7 @@ def discover(url, stats_queue):
                 vcon = Vcon.create_from_url(filename)
                 vcon.size = bytes
                 vcons.append(vcon)
+                print(f"Discovered {vcon}")
                 if len(vcons) > discover_batch_size:
                     add_many(vcons)
                     vcons = []
@@ -51,6 +52,7 @@ def discover(url, stats_queue):
         if sftp_client:
             sftp_client.close()
         stats.add(stats_queue, "stop_time", time.time())
+    print(f"Done discovering {url} with {vcons_count} vcons and {vcons_bytes} bytes")
 
 def start_process(url, stats_queue):
     """Start discovery process"""

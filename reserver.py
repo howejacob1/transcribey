@@ -31,6 +31,7 @@ def start(sftp_url, vcons_ready_queue, stats_queue):
                 vcons_bytes += vcon_cur.size
                 stats.add(stats_queue, "vcons_count", vcons_count)
                 stats.add(stats_queue, "vcons_bytes", vcons_bytes)
+                print(f"Reserved {vcon_cur}")
                 with with_blocking_time(stats_queue):
                     vcons_ready_queue.put(vcon_cur)
             else:

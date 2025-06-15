@@ -272,6 +272,7 @@ def find_and_reserve() -> Vcon | None:
         return_document=True
     )
     if dict:
+        dict["_id"] = str(dict["_id"])
         vcon = Vcon.from_dict(dict)
         return vcon
     return None
