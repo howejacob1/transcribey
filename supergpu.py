@@ -5,7 +5,7 @@ Continuously runs language identification inference to maximize GPU utilization.
 """
 
 import torch
-import numpy as np
+import cupy as np
 import time
 import threading
 import queue

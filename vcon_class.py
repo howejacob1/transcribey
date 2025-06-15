@@ -46,9 +46,19 @@ class Vcon(VconBase):
         return self.vcon_dict.get("size")
 
     @size.setter
-    def size(self, value):
+    def size(self, value: int):
         """Set the size of the vcon"""
         self.vcon_dict["size"] = value
+
+    @property
+    def duration(self):
+        """Get the duration of the vcon"""
+        return self.vcon_dict.get("duration")
+
+    @duration.setter
+    def duration(self, value: float):
+        """Set the duration of the vcon"""
+        self.vcon_dict["duration"] = value
 
     @property
     def filename(self):

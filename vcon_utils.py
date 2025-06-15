@@ -1,12 +1,12 @@
 from multiprocessing import Event, Process
+import paramiko
 import logging
-from log_utils import with_blocking_time
+from stats import with_blocking_time
 import threading
 from typing import List
 from mongo_utils import db
 import sftp
 from vcon_class import Vcon
-from utils import block_until_threads_finish
 import logging
 import datetime
 import mimetypes
@@ -25,7 +25,8 @@ from settings import hostname
 import sftp as sftp_utils
 from sftp import parse_url
 import gpu
-from utils import extension, suppress_output, block_until_threads_finish, is_audio_filename
+from utils import extension, suppress_output, is_audio_filename
+from process import block_until_threads_and_processes_finish
 from vcon import Vcon as VconBase
 from vcon.dialog import Dialog
 from vcon.party import Party
@@ -36,7 +37,7 @@ def is_mono(vcon):
     audio_data = vcon.audio
     return audio.is_mono(audio_data)
 
-def convert_to_mono_maybe(vcon):
+def ensure_mono(vcon: Vcon):
     if not is_mono(vcon):
         audio_data = vcon.audio
         audio_data_mono = audio.convert_to_mono(audio_data)
@@ -64,10 +65,10 @@ def make_batches(vcons, batch_bytes):
     return binpacking.to_constant_volume(vcons, batch_bytes, key=get_size)
 
 def resample_vcon_one(vcon):
-    audio_data_val = get_audio(vcon)
+    audio_data_val = vcon.audio
     sample_rate_val = vcon["sample_rate"]
     resampled_audio_data = audio.resample_audio(audio_data_val, sample_rate_val)
-    set_audio(vcon, resampled_audio_data)
+    vcon.audio = resampled_audio_data
     return vcon
 
 def resample_many(vcons):
@@ -88,7 +89,7 @@ def downloading_filename(vcon):
     audio_extension = extension(vcon_filename)
     return cache.filename_to_downloading_filename(vcon.uuid + "." + audio_extension)
 
-def cache_audio(vcon: Vcon, sftp: sftp.SftpClient):
+def cache_audio(vcon: Vcon, sftp: paramiko.SFTPClient):
     source_filename = vcon.filename
     dest_filename = downloading_filename(vcon)
     sftp_utils.download(source_filename, dest_filename, sftp)
@@ -116,7 +117,7 @@ def remove_vcon_from_processing(vcon: Vcon):
     os.remove(processing_filename(vcon))
 
 def is_audio_valid(vcon):
-    audio_data = get_audio(vcon)
+    audio_data = vcon.audio
     return audio.is_valid(audio_data)
 
 def process_invalids(vcons: List[Vcon]):
@@ -306,9 +307,9 @@ def get_longest_duration(vcons: List[Vcon]) -> float:
             longest_duration = duration
     return longest_duration
 
-def pad_vcon(vcon: Vcon, longest_duration: float) -> Vcon:
+def pad_vcon(vcon: Vcon, duration: float) -> Vcon:
     audio_data = vcon.audio
-    audio_data = audio.pad_audio(audio_data, settings.sample_rate, longest_duration)
+    audio_data = audio.pad_audio(audio_data, settings.sample_rate, duration)
     vcon.audio = audio_data
     return vcon
 
@@ -346,6 +347,12 @@ def is_mono(vcon):
         return False
     return audio.is_mono(vcon.audio)
 
-def move_to_processing(vcon):
+def move_to_processing(vcon: Vcon):
     filename = processing_filename(vcon)
     cache.move_filename_to_processing(filename)
+
+def size_of_list(vcons : List[Vcon]) -> int:
+    total = 0
+    for vcon_cur in vcons:
+        total += vcon_cur.bytes
+    return total

@@ -4,7 +4,7 @@ import ai
 import vcon_utils
 import audio
 import settings
-import numpy as np
+import cupy as np
 import torch
 
 def print_audio_duration_many_patch(vcons):

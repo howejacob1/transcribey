@@ -4,12 +4,11 @@ from time import perf_counter
 from vcon_class import Vcon
 from vcon_utils import insert_many_maybe_async, is_audio_filename
 import logging
-from utils import block_until_threads_finish
 from settings import discover_batch_size
 from typing import List
 import stats
 import process
-from process import ShutdownException, block_until_threads_finish
+from process import ShutdownException, block_until_threads_and_processes_finish, setup_signal_handlers
 
 def discover(url, stats_queue):
     """Discover audio files and create vcons, with clean shutdown handling"""    
@@ -42,7 +41,7 @@ def discover(url, stats_queue):
         if vcons:
             add_many(vcons)
             
-        block_until_threads_finish(threads)
+        block_until_threads_and_processes_finish(threads)
         stats.add(stats_queue, "vcons_count", vcons_count)
         stats.add(stats_queue, "vcons_bytes", vcons_bytes)
     except ShutdownException as e:
@@ -55,4 +54,4 @@ def discover(url, stats_queue):
 def start_process(url, stats_queue):
     """Start discovery process"""
     stats.add(stats_queue, "start_time", time.time())
-    return process.start(target=discover, args=(url, stats_queue))
+    return process.start_process(target=discover, args=(url, stats_queue))

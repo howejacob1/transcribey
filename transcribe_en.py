@@ -1,12 +1,11 @@
 import settings
-import time
-from utils import suppress_output, move_to_gpu_maybe
-import logging
-from log_utils import with_timing
+# import time
+# from utils import suppress_output, move_to_gpu_maybe
+# import logging
+# from log_utils import with_timing
 from transcribe import load_nvidia
 
 def load():
-    
     en_model = load_nvidia(settings.en_model_name)
     return en_model
 

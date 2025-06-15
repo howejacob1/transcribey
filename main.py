@@ -1,3 +1,6 @@
+import multiprocessing
+multiprocessing.set_start_method("spawn", force=True)
+
 import argparse
 import gpu
 from concurrent.futures import as_completed, ThreadPoolExecutor
@@ -5,7 +8,7 @@ import logging
 import threading
 import time
 from queue import Queue, Empty
-import numpy as np
+import cupy as np
 import torch
 import torchaudio
 import cache
@@ -265,7 +268,7 @@ def main(sftp_url, keep_running, measure=False):
         
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Transcribey main entry point")
-    parser.add_argument("mode", choices=["head", "worker", "discover", "print", "delete_all", "measure"], help="head:slurp and run worker. ")
+    parser.add_argument("mode", choices=["head", "worker", "discover", "print", "delete_all"], help="head:slurp and run worker. ")
     parser.add_argument("--url", type=str, default=settings.sftp_url, help="Override SFTP URL (applies to both head and worker)")
     parser.add_argument("--production", action="store_true", default=False, help="Enable production mode (applies to both head and worker)")
     parser.add_argument("--dataset", choices=["fast", "med", "slow"], help="use precompiled dataset")
@@ -292,11 +295,6 @@ if __name__ == "__main__":
                 vcon.delete_all()
             discover_thread = vcon.start_discover(args.url, keep_running)
             main(args.url, keep_running)
-        elif args.mode == "measure":
-            if debug:
-                vcon.delete_all()
-            discover_thread = vcon.start_discover(args.url, keep_running)
-            main(args.url, keep_running, measure=True)
         elif args.mode == "worker":
             main(args.url, keep_running)
         elif args.mode == "discover":

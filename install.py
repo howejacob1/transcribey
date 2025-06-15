@@ -3,39 +3,41 @@ import sys
 
 def install_packages():
     packages = [
-        ["numpy<2.0.0"],
-        ["binpacking"],
-        ["paramiko"],
-        ["torch", "--index-url", "https://download.pytorch.org/whl/cu128"],
-        ["torchvision", "--index-url", "https://download.pytorch.org/whl/cu128"],
-        ["torchaudio", "--index-url", "https://download.pytorch.org/whl/cu128"],
-        ["nemo_toolkit[all]"],
-        ["openai"],
-        ["toml"],
-        ["librosa"],
-        ["soundfile"],
-        ["transformers"],
-        ["matplotlib"],
-        ["scikit-learn"],
-        ["sentencepiece"],
-        ["huggingface_hub[hf_xet]"],
-        ["pydub"],
-        ["ffmpeg-python"],
-        ["jiwer"],
-        ["speechbrain"],
-        ["pyannote-audio"],
-        ["pymongo"],
-        ["vcon"],
-        ["cuda-python"],
-        ["lightning"],
-        ["omegaconf"],
-        ["hydra-core"],
-        ["openai-whisper"],
+        ["torch", "torchvision", "torchaudio", "--index-url", "https://download.pytorch.org/whl/cu128"],
+        ["openai", 
+         "cupy-cuda12x",
+         "toml", 
+         "librosa", 
+         "soundfile", 
+         "transformers", 
+         "matplotlib", 
+         "scikit-learn",
+         "sentencepiece", 
+         "huggingface_hub[hf_xet]", 
+         "pydub", 
+         "ffmpeg-python", 
+         "jiwer", 
+         "speechbrain", 
+         "pyannote-audio",
+         "pymongo", 
+         "vcon", 
+         "cuda-python",
+         "lightning",
+         "omegaconf",
+         "hydra-core",
+         "openai-whisper",
+         "GPUtil", 
+         "numpy<2.0.0",
+         "binpacking", 
+         "paramiko", 
+         "nemo_toolkit[all]"]
     ]
 
+    #cmd = [sys.executable, "source", ".venv/bin/activate"]
+    #subprocess.run(cmd, check=True)
     for pkg in packages:
         print(f"Installing: {pkg[0]}")
-        cmd = [sys.executable, "-m", "pip", "install", "--break-system-packages"] + pkg
+        cmd = [sys.executable, "-m", "pip", "install"] + pkg
         subprocess.run(cmd, check=True)
 
 #def preinstall_all_models():
@@ -47,6 +49,14 @@ def install_packages():
 
 if __name__ == "__main__":
     install_packages()
-    #import torch
-    #import ai
-    #preinstall_all_models()
+    import lang_detect
+    import transcribe_en
+    import transcribe_non_en
+
+    print("Loading models...")
+    lang_detect.load()
+    transcribe_en.load()
+    transcribe_non_en.load()
+    # import torch
+    # import ai
+    # preinstall_all_models()

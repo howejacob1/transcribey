@@ -8,7 +8,7 @@ from gpu import move_to_gpu_maybe, gc_collect_maybe
 from utils import suppress_output
 import vcon_utils
 import audio
-import numpy as np
+import cupy as np
 from gpu import gpu_ram_free_bytes
 import nemo.collections.asr as nemo_asr
 

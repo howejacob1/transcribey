@@ -27,3 +27,13 @@ discover_batch_size = 50
 dont_overwhelm_server_time_seconds = 5
 
 # MongoDB connection settings
+preprocess_batch_timeout_seconds = 0.1
+preprocess_batch_max_size = 100 * (1024**2)
+preprocess_batch_max_len = 32
+
+min_audio_duration_seconds = 1.0
+status_update_seconds = 0.3
+
+lang_detect_batch_timeout_seconds = 0.1
+lang_detect_batch_max_size = 100 * (1024**2)
+land_detect_batch_max_len = 32

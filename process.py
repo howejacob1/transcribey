@@ -22,15 +22,17 @@ def setup_signal_handlers():
     signal.signal(signal.SIGTERM, signal_handler)
     signal.signal(signal.SIGINT, signal_handler)
 
-def process_start_wrapper(target):
-    def wrapper(*args):
-        setup_signal_handlers()
-        return target(*args)
-    return wrapper
+def process_wrapper_with_signal_handlers(target_and_args):
+    """Top-level wrapper function that can be pickled for multiprocessing spawn"""
+    target, args = target_and_args
+    setup_signal_handlers()
+    return target(*args)
 
 def start_process(target, args):
-    multiprocessing.set_start_method("spawn")
-    process = multiprocessing.Process(target=process_start_wrapper(target), args=args, daemon=True)
+    assert multiprocessing.get_start_method() == "spawn", f"Expected spawn, got {multiprocessing.get_start_method()}"
+    # Pack target and args together so they can be unpacked in the wrapper
+    target_and_args = (target, args)
+    process = multiprocessing.Process(target=process_wrapper_with_signal_handlers, args=(target_and_args,))
     process.name = str(target)
     process.start()
     return process

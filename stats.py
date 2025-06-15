@@ -1,4 +1,5 @@
 import multiprocessing
+import settings
 from utils import seconds_to_days, seconds_to_hours
 import time
 from queue import Empty
@@ -107,6 +108,8 @@ def run(stats_queue):
     status = {}
     while True:
         try: 
+            print_status(status)
+            time.sleep(settings.status_update_seconds)
             measurement = stats_queue.get(block=False)
             program = measurement["program"]
             name = measurement["name"]
@@ -129,6 +132,6 @@ def run(stats_queue):
             else:
                 status[program][name] = value
                 
-            print_status(status)
+            
         except Empty:
             continue

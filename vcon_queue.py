@@ -4,17 +4,24 @@ import threading
 import time
 from typing import List, Optional
 from vcon_class import Vcon
+import settings
 
 class VconQueue:
-    def __init__(self, max_bytes: int, process: bool = False):
+    def __init__(self, max_bytes: int = settings.vcon_queue_max_bytes, process: bool = False):
         if multiprocessing:
             self._queue = multiprocessing.Queue()
         else:
             self._queue = queue.Queue()
         self.max_bytes: int = max_bytes
         self.current_bytes: int = 0
-        self._lock: threading.Lock = threading.Lock()
-        self._not_full: threading.Condition = threading.Condition(self._lock)
+        self._lock: multiprocessing.Lock | threading.Lock = None
+        self._not_full: multiprocessing.Condition | threading.Condition = None
+        if process:
+            self._lock = multiprocessing.Lock()
+            self._not_full = multiprocessing.Condition(self._lock)
+        else:
+            self._lock = threading.Lock()
+            self._not_full = threading.Condition(self._lock)
 
     def put(self, vcon: Vcon, block: bool = True, timeout: Optional[float] = None) -> None:
         vcon_size = vcon.size
@@ -58,6 +65,6 @@ class VconQueue:
     def qsize(self) -> int:
         return self._queue.qsize()
         
-    def bytes_used(self) -> int:
+    def bytes(self) -> int:
         with self._lock:
             return self.current_bytes

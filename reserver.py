@@ -1,6 +1,6 @@
 from process import ShutdownException
 import stats
-from stats import report_blocking_time
+from stats import with_blocking_time
 from time import perf_counter
 from sftp import connect_keep_trying
 import vcon_utils as vcon
@@ -30,7 +30,7 @@ def start(sftp_url, vcons_ready_queue, stats_queue):
                 vcons_bytes += vcon_cur.size
                 stats.add(stats_queue, "vcons_count", vcons_count)
                 stats.add(stats_queue, "vcons_bytes", vcons_bytes)
-                with report_blocking_time(stats_queue):
+                with with_blocking_time(stats_queue):
                     vcons_ready_queue.put(vcon_cur)
             else:
                 dont_overwhelm_server()
@@ -43,4 +43,4 @@ def start(sftp_url, vcons_ready_queue, stats_queue):
 
 def start_process(sftp_url, vcons_ready_queue, stats_queue):
     stats.add(stats_queue, "start_time", time.time())
-    return process.start(target=start, args=(sftp_url, vcons_ready_queue, stats_queue))
+    return process.start_process(target=start, args=(sftp_url, vcons_ready_queue, stats_queue))

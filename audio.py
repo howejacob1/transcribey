@@ -16,7 +16,7 @@ def get_duration(filename):
     except Exception as e:
         return None
 
-def audio_data_duration(audio_data, sample_rate):
+def duration(audio_data, sample_rate):
     return audio_data.shape[1] / sample_rate
 
 def is_valid(file_path):
@@ -36,22 +36,23 @@ def load_to_cpu(filename):
     audio, sample_rate = torchaudio.load(filename)
     return audio, sample_rate
 
-def resample_audio(audio, sample_rate):
+def resample(audio: torch.Tensor, 
+             original_sample_rate: int, 
+             resampler: torchaudio.transforms.Resample | None = None) -> torch.Tensor:
     target_sample_rate = settings.sample_rate
-    if sample_rate != target_sample_rate:
-        resampler = torchaudio.transforms.Resample(sample_rate, target_sample_rate).to(gpu.get_device())
-        resampled_audio = resampler(audio)
-        return resampled_audio
-    else:
-        return audio
+    if original_sample_rate != target_sample_rate:
+        if not resampler:
+            resampler = torchaudio.transforms.Resample(original_sample_rate, target_sample_rate)
+        audio = resampler(audio)
+    return audio
 
-def get_size(audio):
+def get_size(audio: torch.Tensor):
     return audio.element_size() * audio.numel()
 
-def is_mono(audio_data):
+def is_mono(audio_data: torch.Tensor):
     return audio_data.shape[0] == 1
 
-def convert_to_mono(audio_data):
+def convert_to_mono(audio_data: torch.Tensor):
     audio_data = audio_data.mean(dim=0, keepdim=True)
     return audio_data
 
@@ -64,7 +65,7 @@ def cpu_cores_for_resampling():
 def cpu_cores_for_vad():
     return num_cores() - 2
 
-def pad_audio(audio_data, sample_rate, duration):
+def pad_audio(audio_data: torch.Tensor, sample_rate: int, duration: float):
     """Pads audio data on the right to ensure it has a minimum duration."""
     target_samples = int(duration * sample_rate)
     
@@ -76,3 +77,12 @@ def pad_audio(audio_data, sample_rate, duration):
 
 def cpu_cores_for_preprocessing():
     return num_cores() - 1
+
+def ensure_mono(audio_data: torch.Tensor) -> torch.Tensor:
+    if not is_mono(audio_data):
+        audio_data = convert_to_mono(audio_data)
+    return audio_data
+
+def vad(audio_data: torch.Tensor) -> torch.Tensor:
+    vad_fun = torchaudio.transforms.Vad(sample_rate=settings.sample_rate, trigger_level=0.5)
+    return vad_fun(audio_data)

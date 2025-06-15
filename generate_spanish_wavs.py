@@ -1,6 +1,6 @@
 import os
 from gtts import gTTS
-import numpy as np
+import cupy as np
 import soundfile as sf
 
 # Directory to save wav files
