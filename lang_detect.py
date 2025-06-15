@@ -13,12 +13,12 @@ from nemo.collections.asr.models import EncDecSpeakerLabelModel
 
 import settings
 import stats
+from gpu import move_to_gpu_maybe, gpu_ram_free_bytes, gc_collect_maybe
 from process import ShutdownException
 from stats import with_blocking_time
 from vcon_class import Vcon
 from vcon_queue import VconQueue
-from gpu import move_to_gpu_maybe, gpu_ram_free_bytes, gc_collect_maybe
-from vcon_utils import batch_to_audio_data
+from vcon_utils import batch_to_audio_data, set_languages
 
 def load():
     model_name = "langid_ambernet"
@@ -135,7 +135,7 @@ def is_batch_ready(batch : List[Vcon], batch_start : float, total_size : int):
     time_passed = perf_counter() - batch_start
     if time_passed > settings.lang_detect_batch_ready:
         return True
-    if len(batch) > settings.land_detect_batch_max_len:
+    if len(batch) > settings.lang_detect_batch_max_len:
         return True
     if total_size > settings.lang_detect_batch_max_size:
         return True

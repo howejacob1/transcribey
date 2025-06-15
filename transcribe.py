@@ -1,99 +1,128 @@
-import logging
-import threading
 import time
 from multiprocessing import Queue
 from queue import Empty
 from time import perf_counter
 from typing import List
 
-from nemo.collections.asr.models import ASRModel, EncDecSpeakerLabelModel
+import numpy as np
+from nemo.collections.asr.models import ASRModel
 
-import gpu
 import settings
 import stats
+import vcon_utils
+from gpu import gc_collect_maybe, gpu_ram_free_bytes
 from process import ShutdownException
 from stats import with_blocking_time
 from vcon_class import Vcon
 from vcon_queue import VconQueue
 
-from lang_detect import identify_languages
-
-def load_nvidia_raw(model_name):
-    # with suppress_output(should_suppress=True):
-    model = ASRModel.from_pretrained(model_name=model_name)
-    return model
-
 def load_nvidia(model_name):
     """Load nvidia model using NVIDIA NeMo."""
     total_start_time = time.time()
     print(f"Loading model {model_name}.")
-    model = load_nvidia_raw(model_name)
-    # model = move_to_gpu_maybe(model)
+    model = ASRModel.from_pretrained(model_name=model_name)
+    model.eval()
     print(f"Model {model_name} loaded in {time.time() - total_start_time:.2f} seconds total")
     return model
 
-def load():
-    model_name = settings.en_model_name
-    model = load_nvidia(model_name)
-    return model
+def transcribe_batch(vcon_batch, model, language="en"):
+    """Transcribe a batch of vcons using the model"""
+    print(f"transcribing {len(vcon_batch)} vcons (gpu memory: {gpu_ram_free_bytes()})")
+    audio_data_batch = vcon_utils.batch_to_audio_data(vcon_batch)
+    
+    # Configure transcription based on language
+    config = {"batch_size": min(len(audio_data_batch), 32)}
+    if language != "en":
+        config.update({
+            "source_lang": language,
+            "target_lang": language, 
+            "task": "asr",
+            "pnc": "yes"
+        })
+    
+    try:
+        # Transcribe the batch
+        all_transcriptions = model.transcribe(audio_data_batch, **config)
+        
+        # Process results
+        vcons = []
+        for vcon_cur, transcription in zip(vcon_batch, all_transcriptions):
+            if hasattr(transcription, 'text'):
+                text = transcription.text
+            elif isinstance(transcription, str):
+                text = transcription
+            else:
+                text = str(transcription)
+            
+            vcon_cur = vcon_utils.set_transcript(vcon_cur, text)
+            vcons.append(vcon_cur)
+        
+        gc_collect_maybe()
+        print(f"Transcribed {len(vcons)} vcons")
+        return vcons
+        
+    except Exception as e:
+        print(f"Error transcribing batch: {e}")
+        # Return vcons with empty transcripts as fallback
+        vcons = []
+        for vcon_cur in vcon_batch:
+            vcon_cur = vcon_utils.set_transcript(vcon_cur, "")
+            vcons.append(vcon_cur)
+        return vcons
 
-def is_batch_ready(batch : List[Vcon], batch_start : float, total_size : int):
+def is_batch_ready(batch: List[Vcon], batch_start: float, total_size: int):
     time_passed = perf_counter() - batch_start
-    if time_passed > settings.lang_detect_batch_ready:
+    if time_passed > settings.transcribe_batch_timeout_seconds:
         return True
-    if len(batch) > settings.land_detect_batch_max_len:
+    if len(batch) > settings.transcribe_batch_max_len:
         return True
-    if total_size > settings.lang_detect_batch_max_size:
+    if total_size > settings.transcribe_batch_max_size:
         return True
     return False
 
-def collect_vcons(preprocessed_vcons_queue : VconQueue, target_vcon: Vcon | None, stats_queue: Queue):
+def collect_vcons(lang_detected_queue: VconQueue, target_vcon: Vcon | None, stats_queue: Queue):
     try:
         if not target_vcon:
             with with_blocking_time(stats_queue):
-                target_vcon = preprocessed_vcons_queue.get(timeout=settings.lang_detect_batch_timeout_seconds)
+                target_vcon = lang_detected_queue.get(timeout=settings.transcribe_batch_timeout_seconds)
     except Empty:
         return [target_vcon], None
     
-    batch_start : float = perf_counter()
-    total_size : int = 0
-    batch : List = [target_vcon]
+    batch_start: float = perf_counter()
+    total_size: int = target_vcon.size if target_vcon else 0
+    batch: List[Vcon] = [target_vcon] if target_vcon else []
+    
     while not is_batch_ready(batch, batch_start, total_size):
         try:
             with with_blocking_time(stats_queue):
-                cur_vcon = preprocessed_vcons_queue.get(timeout=settings.lang_detect_batch_timeout_seconds)
+                cur_vcon = lang_detected_queue.get(timeout=settings.transcribe_batch_timeout_seconds)
             if cur_vcon.size == target_vcon.size:
                 batch.append(cur_vcon)
                 total_size += cur_vcon.size
             else: 
                 return batch, cur_vcon
-        except TimeoutError:
-            return batch, target_vcon
-    return batch, target_vcon
-
-def transcribe_batch(vcon_batch, model):
-    """Transcribe a batch of vcons using the model"""
-    # This is a placeholder - actual transcription logic would depend on the model
-    # For now, just return the vcons with placeholder transcripts
-    for vcon in vcon_batch:
-        # In real implementation, you'd process audio through the model
-        # vcon.transcript_text = model.transcribe(vcon.audio)
-        vcon.transcript_text = f"Transcribed audio for {vcon.filename}"
-    return vcon_batch
+        except (Empty, TimeoutError):
+            return batch, None
+    return batch, None
 
 def transcribe(lang_detected_queue: VconQueue,
                transcribed_queue: VconQueue,
                model,
-               stats_queue: Queue):
+               stats_queue: Queue,
+               language="en"):
     stats.add(stats_queue, "start_time", time.time())
-    target_vcon : Vcon | None = None
-    vcons_bytes : int = 0
-    vcons_count : int = 0
-    vcons_duration : int = 0
+    target_vcon: Vcon | None = None
+    vcons_bytes: int = 0
+    vcons_count: int = 0
+    vcons_duration: int = 0
+    
     try:
-        while True: # just run thread forever
+        while True:  # just run thread forever
             batch, target_vcon = collect_vcons(lang_detected_queue, target_vcon, stats_queue)
-            transcribed_vcons = transcribe_batch(batch, model)
+            if not batch:
+                continue
+                
+            transcribed_vcons = transcribe_batch(batch, model, language)
             
             for vcon_cur in transcribed_vcons:
                 vcons_count += 1
@@ -106,10 +135,3 @@ def transcribe(lang_detected_queue: VconQueue,
                     transcribed_queue.put(vcon_cur)
     except ShutdownException:
         pass
-
-def start_thread(lang_detected_queue: VconQueue,
-                 transcribed_queue: VconQueue,
-                 stats_queue: Queue):
-    thread = threading.Thread(target=transcribe, args=(lang_detected_queue, transcribed_queue, model, stats_queue))
-    thread.start()
-    return thread

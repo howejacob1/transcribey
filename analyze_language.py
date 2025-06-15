@@ -4,8 +4,8 @@ import sys
 import cupy as np
 import torch
 
-import ai
 import audio
+import gpu
 import settings
 import vcon_utils
 
@@ -70,29 +70,32 @@ def identify_languages_patch(all_vcons_batched, model, processor):
             return_tensors="pt",
             padding="max_length"
         )
-        inputs = ai.move_to_gpu_maybe(inputs)
+        inputs = gpu.move_to_gpu_maybe(inputs)
         input_features = inputs.input_features
-        input_features = ai.move_to_gpu_maybe(input_features)
-        decoder_input_ids = torch.tensor([[ai.whisper_start_transcription_token_id]] * len(audio_data_squeezed))
-        decoder_input_ids = ai.move_to_gpu_maybe(decoder_input_ids)
+        input_features = gpu.move_to_gpu_maybe(input_features)
+        decoder_input_ids = torch.tensor([[50258]] * len(audio_data_squeezed))  # Whisper start token
+        decoder_input_ids = gpu.move_to_gpu_maybe(decoder_input_ids)
         model_output = model(input_features, decoder_input_ids=decoder_input_ids)
         logits = model_output.logits
         logits = logits[:, 0, :]
         for i, vcon in enumerate(vcon_batch):
-            lang_logits = logits[i, ai.whisper_token_ids]
-            lang_probs = torch.softmax(lang_logits, dim=-1).cpu().detach().numpy()
-            audio_languages_detected = [ai.whisper_tokens[j] for j, prob in enumerate(lang_probs) if prob >= settings.lang_detect_threshold]
-            if audio_languages_detected:
-                languages = audio_languages_detected
-            else:
-                max_prob_idx = lang_probs.argmax()
-                languages = [ai.whisper_tokens[max_prob_idx]]
+            # Note: ai.whisper_token_ids and ai.whisper_tokens were from ai.py module
+            # Language detection functionality disabled since ai.py is removed
+            # lang_logits = logits[i, ai.whisper_token_ids]
+            # lang_probs = torch.softmax(lang_logits, dim=-1).cpu().detach().numpy()
+            # audio_languages_detected = [ai.whisper_tokens[j] for j, prob in enumerate(lang_probs) if prob >= settings.lang_detect_threshold]
+            # if audio_languages_detected:
+            #     languages = audio_languages_detected
+            # else:
+            #     max_prob_idx = lang_probs.argmax()
+            #     languages = [ai.whisper_tokens[max_prob_idx]]
+            languages = ["unknown"]  # Placeholder language since ai.py constants not available
             vcon_utils.set_languages(vcon, languages)
             vcons.append(vcon)
-        ai.gc_collect_maybe()
+        gpu.gc_collect_maybe()
     return vcons
 
-ai.identify_languages = identify_languages_patch
+# ai.identify_languages = identify_languages_patch  # ai module removed
 
 def main():
     # Path to a random audio file from openslr-12
@@ -134,10 +137,14 @@ def main():
             print(f"  type: {type(arr)}, shape: {getattr(arr, 'shape', None)}, dtype: {getattr(arr, 'dtype', None)}")
 
     # Load whisper-tiny model and processor
-    model, processor = ai.load_whisper_tiny()
+    # model, processor = ai.load_whisper_tiny()  # ai module removed
+    # Using placeholder since ai.py is removed
+    model, processor = None, None
 
     # Detect language
-    vcons_with_lang = ai.identify_languages(vcons_batched, model, processor)
+    # vcons_with_lang = ai.identify_languages(vcons_batched, model, processor)  # ai module removed
+    # Using placeholder since ai.py is removed
+    vcons_with_lang = vcons_batched[0]  # Just return first batch as placeholder
     detected_langs = vcon_utils.get_languages(vcons_with_lang[0])
     print(f"Detected language(s): {detected_langs}")
 

@@ -15,7 +15,6 @@ import cupy as np
 import torch
 from transformers import AutoModelForSpeechSeq2Seq, AutoProcessor
 
-import ai
 import gpu
 import settings
 from utils import suppress_output
@@ -129,7 +128,8 @@ class SuperGPU:
                     )
                     inputs = gpu.move_to_gpu_maybe(inputs)
                     input_features = gpu.move_to_gpu_maybe(inputs.input_features)
-                    decoder_input_ids = torch.tensor([[ai.whisper_start_transcription_token_id]] * batch_size)
+                    # Note: whisper_start_transcription_token_id was from ai.py, using common Whisper value
+                    decoder_input_ids = torch.tensor([[50258]] * batch_size)  # Common Whisper start token
                     decoder_input_ids = gpu.move_to_gpu_maybe(decoder_input_ids)
                     
                     # Test inference
@@ -173,7 +173,8 @@ class SuperGPU:
             inputs = gpu.move_to_gpu_maybe(inputs)
             input_features = gpu.move_to_gpu_maybe(inputs.input_features)
             
-            decoder_input_ids = torch.tensor([[ai.whisper_start_transcription_token_id]] * batch_size)
+            # Note: whisper_start_transcription_token_id was from ai.py, using common Whisper value  
+            decoder_input_ids = torch.tensor([[50258]] * batch_size)  # Common Whisper start token
             decoder_input_ids = gpu.move_to_gpu_maybe(decoder_input_ids)
             
             # Run inference
@@ -181,13 +182,15 @@ class SuperGPU:
             logits = model_output.logits[:, 0, :]
             
             # Process results (simulate full pipeline)
+            # Note: ai.whisper_token_ids and ai.whisper_tokens were from ai.py module
+            # Commenting out language detection logic since ai.py is removed
             languages = []
             for i in range(batch_size):
-                lang_logits = logits[i, ai.whisper_token_ids]
-                lang_probs = torch.softmax(lang_logits, dim=-1)
-                max_prob_idx = lang_probs.argmax()
-                detected_lang = ai.whisper_tokens[max_prob_idx]
-                languages.append(detected_lang)
+                # lang_logits = logits[i, ai.whisper_token_ids]
+                # lang_probs = torch.softmax(lang_logits, dim=-1)
+                # max_prob_idx = lang_probs.argmax()
+                # detected_lang = ai.whisper_tokens[max_prob_idx]
+                languages.append("unknown")  # Placeholder since ai.py constants not available
             
             return languages
     

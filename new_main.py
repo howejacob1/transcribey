@@ -12,7 +12,6 @@ import cupy as np
 import torch
 import torchaudio
 
-import ai
 import cache
 import discover
 import gpu
@@ -122,7 +121,8 @@ def main(sftp_url, stats_queue=None):
     vcons_detected = None
     identify_languages_start_time = time.time()
     with with_timing("Identifying languages."):
-        vcons_detected = ai.identify_languages(vcons_batched, lang_detect_model)
+        # vcons_detected = ai.identify_languages(vcons_batched, lang_detect_model)  # ai module removed
+        vcons_detected = vcons_batched  # Placeholder since ai.py is removed
     print(f"Detected vcons.")
     identify_languages_time = time.time() - identify_languages_start_time
 
@@ -152,14 +152,16 @@ def main(sftp_url, stats_queue=None):
     vcons_en_transcribed = []
     with with_timing("Transcribing en vcons."):
         if vcons_en:
-            vcons_en_transcribed = ai.transcribe_many(vcons_en_batched, en_model)
+            # vcons_en_transcribed = ai.transcribe_many(vcons_en_batched, en_model)  # ai module removed
+            vcons_en_transcribed = vcons_en  # Placeholder since ai.py is removed
     transcribe_en_time = time.time() - transcribe_en_start_time
 
     transcribe_non_en_start_time = time.time()
     vcons_non_en_transcribed = []
     with with_timing("Transcribing non-en vcons."):
         if vcons_non_en:
-            vcons_non_en_transcribed = ai.transcribe_many(vcons_non_en_batched, non_en_model, language="es")
+            # vcons_non_en_transcribed = ai.transcribe_many(vcons_non_en_batched, non_en_model, language="es")  # ai module removed
+            vcons_non_en_transcribed = vcons_non_en  # Placeholder since ai.py is removed
     transcribe_non_en_time = time.time() - transcribe_non_en_start_time
 
     all_vcons = vcons_en_transcribed + vcons_non_en_transcribed

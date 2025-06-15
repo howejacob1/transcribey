@@ -1,6 +1,5 @@
 import logging
 import threading
-import time
 from multiprocessing import Queue
 from queue import Empty
 from time import perf_counter
@@ -54,7 +53,7 @@ def preprocess_vcon_one(vcon_cur: Vcon, stats_queue: Queue):
 # We will batch in groups of 512 or so.
 # Do not wait too long between batches.
 
-def process_batch(batch: List[Vcon]) -> List[Vcon]:
+def process_batch(batch: List[Vcon], stats_queue: Queue) -> List[Vcon]:
     batch = vcon.pad_many(batch)
     return batch
 
@@ -105,6 +104,7 @@ def start(reserved_vcons_queue: VconQueue,
         pass
 
 def start_thread(reserved_vcons_queue: VconQueue, preprocessed_vcons_queue: VconQueue, stats_queue: Queue):
+    import time
     stats.add(stats_queue, "start_time", time.time())
     thread = threading.Thread(target=start, args=(reserved_vcons_queue, preprocessed_vcons_queue, stats_queue,))
     thread.name = "preprocess"

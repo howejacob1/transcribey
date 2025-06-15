@@ -36,4 +36,9 @@ status_update_seconds = 0.3
 
 lang_detect_batch_timeout_seconds = 0.1
 lang_detect_batch_max_size = 100 * (1024**2)
-land_detect_batch_max_len = 32
+lang_detect_batch_max_len = 32
+lang_detect_batch_ready = 0.1
+
+transcribe_batch_timeout_seconds = 0.1
+transcribe_batch_max_size = 100 * (1024**2)
+transcribe_batch_max_len = 32
