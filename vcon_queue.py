@@ -9,7 +9,7 @@ from vcon_class import Vcon
 
 class VconQueue:
     def __init__(self, max_bytes: int = settings.vcon_queue_max_bytes, process: bool = False):
-        if multiprocessing:
+        if process:
             self._queue = multiprocessing.Queue()
         else:
             self._queue = queue.Queue()

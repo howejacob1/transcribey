@@ -22,22 +22,22 @@ vcon_queue_max_bytes = 100*(1024**2)
 sftp_url = "sftp://bantaim@127.0.0.1:22/home/bantaim/conserver/fake_wavs_cute/"
 sample_rate = 16000
 max_discover_workers = 1
-discover_batch_size = 50
+discover_batch_size = 1
 dont_overwhelm_server_time_seconds = 5
 
 # MongoDB connection settings
 preprocess_batch_timeout_seconds = 0.1
-preprocess_batch_max_size = 100 * (1024**2)
+preprocess_batch_max_size = 50
 preprocess_batch_max_len = 32
 
 min_audio_duration_seconds = 1.0
 status_update_seconds = 0.3
 
 lang_detect_batch_timeout_seconds = 0.1
-lang_detect_batch_max_size = 100 * (1024**2)
+lang_detect_batch_max_size = 50
 lang_detect_batch_max_len = 32
 lang_detect_batch_ready = 0.1
 
 transcribe_batch_timeout_seconds = 0.1
-transcribe_batch_max_size = 100 * (1024**2)
+transcribe_batch_max_size = 50
 transcribe_batch_max_len = 32
