@@ -81,12 +81,10 @@ def actually_print_status(program,
     # Debug RTF calculation - uncomment to debug
     # if program == "transcribe.MainThread" and vcons_count > 0:
     #     print(f"DEBUG {program}: vcons_duration={vcons_duration:.3f}s, processing_duration={processing_duration:.3f}s, rtf={rtf:.3f}")
-
     print(f"{status_char} {program:25} | "
-          f"{rtf:6.2f}x {count:8,} {rate:6.1f}/s {bytes_rate_mb:8.2f}MB/s | "
-          f"{bytes_mb:8.2f}MB "
-          f"{duration_minutes:13.1f}m | "
-          f"{total_runtime_minutes:13.1f}m ({percent_running:6.1f}%)")
+          f"{rtf:7.2f}x {count:9,} {rate:7.1f}/s {bytes_rate_mb:9.2f}MB/s | "
+          f"{bytes_mb:10.2f}MB "
+          f"{duration_minutes:13.1f}m | ({percent_running:6.1f}%)")
 
 def print_gpu_stats():
     """Print GPU memory and power statistics"""
@@ -125,7 +123,7 @@ def print_xpu_stats():
 
 def print_status(status):
     # Clear screen and move cursor to top
-    print("\033[2J\033[H", end="")
+    print("\033[2J\033[H", end="")    
     
     line_number = 0
     for program, measurements in status.items():
@@ -185,7 +183,7 @@ def run(stats_queue):
         count += 1
         # else:
         #     time.sleep(settings.status_update_seconds)
-        if time.time() - start_time > settings.status_update_seconds:
+        if time.time() - start_time > 3:
             print_status(status)
             start_time = time.time()
             continue

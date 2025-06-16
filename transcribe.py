@@ -86,7 +86,8 @@ def transcribe(lang_detected_queue: Queue,
 
             # Transcribe the batch
             with torch.no_grad():
-                transcription = model.transcribe(vcon_cur.audio, **config)
+                with suppress_output(should_suppress=True):
+                    transcription = model.transcribe(vcon_cur.audio, **config)
             
             # Handle different types of transcription results from NeMo
             if isinstance(transcription, list) and len(transcription) > 0:

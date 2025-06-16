@@ -36,7 +36,7 @@ def discover(url, stats_queue):
                 duration = vcon.size / (settings.sample_rate*2)
                 stats.count(stats_queue)
                 count += 1
-                print(f"Discovered {count} vcons")
+                #print(f"Discovered {count} vcons")
                 stats.duration(stats_queue, duration)
                 vcons.append(vcon)
                 if len(vcons) > discover_batch_size:

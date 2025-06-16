@@ -22,7 +22,8 @@ def reserver(sftp_url, vcons_ready_queue, stats_queue):
                     sftp = connect_keep_trying(sftp_url)
                 except Exception as e:
                     sftp = None
-                    dont_overwhelm_server()
+                    with with_blocking_time(stats_queue):
+                        dont_overwhelm_server()
             vcon_cur = vcon.find_and_reserve()
             if vcon_cur:
                 vcon.cache_audio(vcon_cur, sftp)
@@ -35,9 +36,11 @@ def reserver(sftp_url, vcons_ready_queue, stats_queue):
     except ShutdownException:
         dump_thread_stacks()
     finally:
+        stats.stop(stats_queue)
         if sftp is not None:
             sftp.close()
-        stats.stop(stats_queue)
+            
+
 
 def start_process(sftp_url, vcons_ready_queue, stats_queue):
     return process.start_process(target=reserver, args=(sftp_url, vcons_ready_queue, stats_queue))
