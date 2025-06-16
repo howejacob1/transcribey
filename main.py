@@ -8,7 +8,7 @@ import time
 from concurrent.futures import as_completed, ThreadPoolExecutor
 from queue import Empty
 
-import cupy as np
+import numpy as np
 import torch
 import torchaudio
 
@@ -21,8 +21,7 @@ import reserver
 import send_results
 import settings
 import stats
-import transcribe_en
-import transcribe_non_en
+import transcribe
 import vcon_utils as vcon
 from log_utils import info_header, with_timing
 from process import stop_threads_and_processes
@@ -35,13 +34,18 @@ def main(sftp_url, stats_queue=None):
     # sftp = sftp_utils.connect_keep_trying(sftp_url)
     vcon.unmarked_all_reserved()
     programs = []
-    reserved_vcons_queue = multiprocessing.Queue()
+    reserved_vcons_queue = multiprocessing.Queue(maxsize=settings.queue_max_size)
     programs.append(reserver.start_process(sftp_url, reserved_vcons_queue, stats_queue))
-    preprocessed_vcons_queue = multiprocessing.Queue()
+    preprocessed_vcons_queue = multiprocessing.Queue(maxsize=settings.queue_max_size)
     programs.append(preprocess.start_process(reserved_vcons_queue, preprocessed_vcons_queue, stats_queue))
-    lang_detected_en_vcons_queue = multiprocessing.Queue()
-    lang_detected_non_en_vcons_queue = multiprocessing.Queue()
+    lang_detected_en_vcons_queue = multiprocessing.Queue(maxsize=settings.queue_max_size)
+    lang_detected_non_en_vcons_queue = multiprocessing.Queue(maxsize=settings.queue_max_size)
     programs.append(lang_detect.start_process(preprocessed_vcons_queue, lang_detected_en_vcons_queue, lang_detected_non_en_vcons_queue, stats_queue))
+    transcribed_vcons_queue = multiprocessing.Queue(maxsize=settings.queue_max_size)
+    programs.append(transcribe.start_process(lang_detected_en_vcons_queue, transcribed_vcons_queue, stats_queue, "en"))
+    programs.append(transcribe.start_process(lang_detected_non_en_vcons_queue, transcribed_vcons_queue, stats_queue, "auto"))
+    programs.append(send_results.start_process(transcribed_vcons_queue, stats_queue))
+
 
     # Simple queue watching function instead of watch_vcon_queue
     def watch_queue(queue_to_watch):
@@ -55,19 +59,10 @@ def main(sftp_url, stats_queue=None):
             print(f"Error in watch_queue: {e}")
 
     # Uncomment to see queue flow during debugging
-    # watch_queue(preprocessed_vcons_queue)
-    
-    # transcribed_vcons_queue = multiprocessing.Queue()
-    # programs.append(transcribe_en.start_thread(lang_detected_en_vcons_queue, transcribed_vcons_queue, stats_queue))
-    # programs.append(transcribe_non_en.start_thread(lang_detected_non_en_vcons_queue, transcribed_vcons_queue, stats_queue))
-    # programs.append(send_results.start_process(transcribed_vcons_queue, stats_queue))
-    try:
-        while True:
-            pass
-        # stats.run(stats_queue)
-    except Exception as e:
-        print(e)
+    stats.run(stats_queue)
     stop_threads_and_processes(programs)
+    
+    
 
     print("Done.")
         
@@ -89,7 +84,7 @@ if __name__ == "__main__":
         args.url = "sftp://bantaim@127.0.0.1:22/home/bantaim/conserver/fake_wavs_medlarge/"
     print("wtf")
     debug = not args.production
-    stats_queue = multiprocessing.Queue()
+    stats_queue = multiprocessing.Queue(maxsize=100000000)
     discover_process = None
 
     logging.info(f"Start in mode {args.mode}.")

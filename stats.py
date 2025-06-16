@@ -2,7 +2,6 @@ import multiprocessing
 import time
 from contextlib import contextmanager
 from queue import Empty
-from time import perf_counter
 
 try:
     import GPUtil
@@ -18,7 +17,7 @@ except ImportError:
 
 from process import our_program_name
 import settings
-from utils import seconds_to_days, seconds_to_hours
+from utils import seconds_to_days, seconds_to_hours, seconds_to_minutes
 
 def make_stats_queue():
     return multiprocessing.Queue()
@@ -28,28 +27,45 @@ def add(stats_queue, key, value):
                      "name": key,
                      "value": value})
 
+def start_blocking(stats_queue):
+    add(stats_queue, "start_blocking", time.time())
+
+def stop_blocking(stats_queue):
+    add(stats_queue, "stop_blocking", time.time())
+
+def bytes(stats_queue, bytes):
+    add(stats_queue, "bytes", bytes)
+
+def duration(stats_queue, duration):
+    add(stats_queue, "duration", duration)
+
+def count(stats_queue, count=1):
+    add(stats_queue, "count", count)
+
+def start(stats_queue):
+    add(stats_queue, "start", time.time())
+
+def stop(stats_queue):
+    add(stats_queue, "stop", time.time())
+
 @contextmanager
 def with_blocking_time(stats_queue):
-    """Am fancy because I want perf_counter accuracy but I want stuff readable."""
-    add(stats_queue, "blocking_time_start", time.time())
-    blocking_time_start = perf_counter()
+    """Am fancy because I want time.time accuracy but I want stuff readable."""
+    start_blocking(stats_queue)
     yield
-    blocking_time_stop = perf_counter()
-    blocking_duration = blocking_time_stop - blocking_time_start
-    add(stats_queue, "blocking_time_stop", time.time())
-    add(stats_queue, "blocking_time_duration", blocking_duration)
+    stop_blocking(stats_queue)
 
 def actually_print_status(program,
-                         vcons_count,
-                         vcons_bytes,
+                         count,
+                         bytes,
                          is_blocking,
                          is_alive,
                          processing_duration,
                          total_runtime,
-                         percent_processing,
-                         vcons_rate,
-                         vcons_bytes_rate_mb, 
-                         vcons_duration):
+                         percent_running,
+                         rate,
+                         bytes_rate_mb, 
+                         duration):
     status_char = "🔴"
     if is_blocking:
         status_char = "⚪"
@@ -57,16 +73,20 @@ def actually_print_status(program,
         status_char = "🟢"
     
     # Convert bytes to MB for display
-    vcons_bytes_mb = vcons_bytes / 1024 / 1024
-    rtf = vcons_duration / processing_duration if processing_duration > 0 else 0
-    duration_days = seconds_to_days(vcons_duration)
-    total_runtime_hours = seconds_to_hours(total_runtime)
+    bytes_mb = bytes / 1024 / 1024
+    rtf = duration / processing_duration if processing_duration > 0 else 0
+    duration_minutes = seconds_to_minutes(duration)
+    total_runtime_minutes = seconds_to_minutes(total_runtime)
 
-    print(f"{status_char} {program:15} | "
-          f"{rtf:7.1f}x {vcons_count:8,} {vcons_rate:7.1f}/s {vcons_bytes_rate_mb:7.2f}MB/s | "
-          f"Totals: {vcons_bytes_mb:7.2f}MB "
-          f"{duration_days:7.1f}d "
-          f"| {total_runtime_hours:7.1f}h ({percent_processing:5.1%})%")
+    # Debug RTF calculation - uncomment to debug
+    # if program == "transcribe.MainThread" and vcons_count > 0:
+    #     print(f"DEBUG {program}: vcons_duration={vcons_duration:.3f}s, processing_duration={processing_duration:.3f}s, rtf={rtf:.3f}")
+
+    print(f"{status_char} {program:25} | "
+          f"{rtf:6.2f}x {count:8,} {rate:6.1f}/s {bytes_rate_mb:8.2f}MB/s | "
+          f"{bytes_mb:8.2f}MB "
+          f"{duration_minutes:13.1f}m | "
+          f"{total_runtime_minutes:13.1f}m ({percent_running:6.1f}%)")
 
 def print_gpu_stats():
     """Print GPU memory and power statistics"""
@@ -109,57 +129,102 @@ def print_status(status):
     
     line_number = 0
     for program, measurements in status.items():
-        vcons_count = measurements["vcons_count"]
-        vcons_bytes = measurements["vcons_bytes"]
-        is_blocking = measurements["blocking_start"] is not None
-        blocking_duration = measurements["blocking_duration"]
-        start_time = measurements["start_time"]
-        is_alive = measurements["stop_time"] is None
-        processing_duration = time.time() - start_time - blocking_duration
-        vcons_duration = measurements["vcons_duration"]
-        if is_blocking:
-            extra_blocking_duration = time.time() - measurements["blocking_start"]
-            processing_duration -= extra_blocking_duration
-        total_runtime = time.time() - start_time
-        percent_processing = processing_duration / total_runtime
-        vcons_rate = vcons_count / processing_duration if processing_duration > 0 else 0
-        vcons_bytes_rate = vcons_bytes / processing_duration if processing_duration > 0 else 0
-        vcons_bytes_rate_mb = vcons_bytes_rate / 1024 / 1024
+        count = float(measurements["count"])
+        bytes = float(measurements["bytes"])
+        blocking_duration = float(measurements["blocking_duration"])
+        if measurements.get("start_blocking"):
+            start_blocking = float(measurements["start_blocking"])
+        else:
+            start_blocking = None
+        start = float(measurements["start"])
+        if measurements.get("stop"):
+            stop = float(measurements["stop"])
+        else:
+            stop = None
+        duration = float(measurements["duration"])
+        is_alive = stop is None
         
-        actually_print_status(program, vcons_count, vcons_bytes, is_blocking, is_alive, processing_duration, total_runtime, percent_processing, vcons_rate, vcons_bytes_rate_mb, vcons_duration)
+
+        is_blocking =  start_blocking is not None
+        # Calculate total runtime
+        if stop:
+            total_runtime = stop - start
+        else:
+            total_runtime = time.time() - start
+        
+        # Calculate total blocking time (including current blocking session if any)
+        total_blocking_time = blocking_duration
+        if not stop:
+            if is_blocking:
+                cur_blocking_duration = time.time() - start_blocking
+                total_blocking_time += cur_blocking_duration
+
+        # Calculate processing time (time not spent blocking)
+        processing_duration = total_runtime - total_blocking_time
+        
+        # Calculate percentage of time spent blocking
+        percent_running = (processing_duration / total_runtime) * 100
+        
+        rate = count / processing_duration
+        bytes_rate = bytes / processing_duration
+        bytes_rate_mb = bytes_rate / 1024 / 1024
+        
+        actually_print_status(program, count, bytes, is_blocking, is_alive, processing_duration, total_runtime, percent_running, rate, bytes_rate_mb, duration)
         line_number += 1
     
     # Print XPU statistics at the end
     print_xpu_stats()
 
+global status 
+status = {}
+
 def run(stats_queue):
-    status = {}
+    count = 0
+    start_time = time.time()
     while True:
-        try: 
+        count += 1
+        # else:
+        #     time.sleep(settings.status_update_seconds)
+        if time.time() - start_time > settings.status_update_seconds:
             print_status(status)
-            time.sleep(settings.status_update_seconds)
-            measurement = stats_queue.get(block=False)
+            start_time = time.time()
+            continue
+        try: 
+            measurement = stats_queue.get(timeout=settings.status_update_seconds)
+            #print(f"Measurement: {measurement}")
             program = measurement["program"]
             name = measurement["name"]
             value = measurement["value"]
             
-            if program not in status:
+            if status.get(program, None) is None:
+                #print(f"New program: {program}")
+                assert name == "start"
                 status[program] = {
-                    "start_time": time.time(), 
-                    "vcons_count": 0, 
-                    "vcons_bytes": 0, 
-                    "vcons_duration": 0,
+                    "start": float(value), 
+                    "count": 0.0, 
+                    "bytes": 0.0, 
+                    "duration": 0.0,
+                    "start_blocking": None,
+                    "blocking_duration": 0.0,
+                    "stop": None,
                 }
-            if name == "blocking_time_start":
-                status[program]["blocking_start"] = value
-            elif name == "blocking_time_stop":
-                blocking_start = status[program]["blocking_start"]
-                blocking_duration = value - blocking_start
-                status[program]["blocking_duration"] += blocking_duration
-                status[program]["blocking_start"] = None
-            else:
-                status[program][name] = value
-                
-            
+            if name == "start":
+                status[program]["start"] = value
+            elif name == "stop":
+                status[program]["stop"] = value
+            elif name == "count":
+                status[program]["count"] += value
+            elif name == "bytes":
+                status[program]["bytes"] += value
+            elif name == "duration":
+                status[program]["duration"] += value
+            elif name == "start_blocking":
+                status[program]["start_blocking"] = value
+            elif name == "stop_blocking":
+                start_blocking = status[program]["start_blocking"]
+                if start_blocking is not None:
+                    this_blocking_duration = time.time() - start_blocking
+                    status[program]["blocking_duration"] += this_blocking_duration
+                    status[program]["start_blocking"] = None
         except Empty:
             continue

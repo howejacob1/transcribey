@@ -1,7 +1,7 @@
 import os
 import sys
 
-import cupy as np
+import numpy as np
 import torch
 
 import audio

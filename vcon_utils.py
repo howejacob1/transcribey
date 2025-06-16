@@ -179,7 +179,7 @@ def exists_by_filename(filename):
 
 def create(url):
     vcon = None
-    with suppress_output(should_suppress=True):
+    with suppress_output(should_suppress=False):
         vcon_obj = VconBase.build_new()
         party = Party(name="Unknown", role="participant")
         vcon_obj.add_party(party)
@@ -253,7 +253,11 @@ def mark_vcons_as_done(vcons):
 
 def update_vcon_on_db(vcon: Vcon):
     vcon_uuid_val = vcon.uuid
-    db.replace_one({"uuid": vcon_uuid_val}, vcon.to_dict(), upsert=True)
+    vcon_dict = vcon.to_dict()
+    # Remove _id field to prevent MongoDB immutability errors
+    if "_id" in vcon_dict:
+        del vcon_dict["_id"]
+    db.replace_one({"uuid": vcon_uuid_val}, vcon_dict, upsert=True)
 
 def load_all():
     return list(db.find())

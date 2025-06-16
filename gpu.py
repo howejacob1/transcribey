@@ -133,3 +133,46 @@ def gc_collect_maybe():
             torch.cuda.empty_cache()
             torch.cuda.synchronize()
             gc.collect()
+
+def cleanup_model(model, model_name="model"):
+    """Clean up a model by moving it to CPU and deleting it"""
+    if model is not None:
+        try:
+            print(f"CLEANUP: Cleaning up {model_name}")
+            # Move model to CPU to free GPU memory
+            if hasattr(model, 'cpu'):
+                model.cpu()
+            # Delete the model
+            del model
+            print(f"CLEANUP: {model_name} deleted")
+        except Exception as e:
+            print(f"CLEANUP: Error cleaning up {model_name}: {e}")
+
+def cleanup_gpu_memory():
+    """Comprehensive GPU memory cleanup"""
+    try:
+        if we_have_a_gpu():
+            print("CLEANUP: Cleaning up GPU memory")
+            torch.cuda.empty_cache()
+            torch.cuda.synchronize()
+            print("CLEANUP: GPU memory cleared")
+        else:
+            print("CLEANUP: No GPU, skipping GPU cleanup")
+    except Exception as e:
+        print(f"CLEANUP: Error during GPU memory cleanup: {e}")
+
+def cleanup_system_memory():
+    """Clean up system memory"""
+    try:
+        print("CLEANUP: Running garbage collection")
+        gc.collect()
+        print("CLEANUP: Garbage collection completed")
+    except Exception as e:
+        print(f"CLEANUP: Error during system memory cleanup: {e}")
+
+def exit_cleanup():
+    """Comprehensive cleanup function for graceful shutdown"""
+    print("CLEANUP: Starting comprehensive cleanup")
+    cleanup_gpu_memory()
+    cleanup_system_memory()
+    print("CLEANUP: Comprehensive cleanup completed")

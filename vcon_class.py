@@ -5,11 +5,6 @@ import torch
 import numpy as np
 from utils import suppress_output
 
-try:
-    import cupy as cp
-except ImportError:
-    cp = None
-
 from vcon import Vcon as VconBase
 from vcon.dialog import Dialog
 from vcon.party import Party

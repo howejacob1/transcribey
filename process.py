@@ -33,7 +33,7 @@ def start_process(target, args):
     # Pack target and args together so they can be unpacked in the wrapper
     target_and_args = (target, args)
     process = multiprocessing.Process(target=process_wrapper_with_signal_handlers, args=(target_and_args,))
-    process.name = str(target)
+    process.name = target.__name__  # Use function name instead of str(target)
     process.start()
     return process
 

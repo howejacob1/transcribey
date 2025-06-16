@@ -11,7 +11,7 @@ import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-import cupy as np
+import numpy as np
 import torch
 from transformers import AutoModelForSpeechSeq2Seq, AutoProcessor
 
