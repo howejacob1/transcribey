@@ -52,8 +52,10 @@ def stop(stats_queue):
 def with_blocking_time(stats_queue):
     """Am fancy because I want time.time accuracy but I want stuff readable."""
     start_blocking(stats_queue)
-    yield
-    stop_blocking(stats_queue)
+    try:
+        yield
+    finally:
+        stop_blocking(stats_queue)
 
 def actually_print_status(program,
                          count,
@@ -81,7 +83,7 @@ def actually_print_status(program,
     # Debug RTF calculation - uncomment to debug
     # if program == "transcribe.MainThread" and vcons_count > 0:
     #     print(f"DEBUG {program}: vcons_duration={vcons_duration:.3f}s, processing_duration={processing_duration:.3f}s, rtf={rtf:.3f}")
-    print(f"{status_char} {program:25} | "
+    print(f"{status_char} {program:28} | "
           f"{rtf:7.2f}x {count:9,} {rate:7.1f}/s {bytes_rate_mb:9.2f}MB/s | "
           f"{bytes_mb:10.2f}MB "
           f"{duration_minutes:13.1f}m | ({percent_running:6.1f}%)")

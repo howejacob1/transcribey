@@ -23,7 +23,7 @@ sftp_url = "sftp://bantaim@127.0.0.1:22/home/bantaim/conserver/fake_wavs_cute/"
 sample_rate = 16000
 max_discover_workers = 1
 discover_batch_size = 100  # Increased from 1 for much faster discovery
-dont_overwhelm_server_time_seconds = 0.1
+dont_overwhelm_server_time_seconds = 1
 
 # MongoDB connection settings
 preprocess_batch_timeout_seconds = 0.1

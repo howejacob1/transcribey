@@ -16,6 +16,7 @@ def reserver(sftp_url, vcons_ready_queue, stats_queue):
     cache.init()
     try:
         sftp = None
+        stats.start_blocking(stats_queue)
         while True:
             while sftp is None:
                 try:
@@ -26,13 +27,17 @@ def reserver(sftp_url, vcons_ready_queue, stats_queue):
                         dont_overwhelm_server()
             vcon_cur = vcon.find_and_reserve()
             if vcon_cur:
+                stats.stop_blocking(stats_queue)
                 vcon.cache_audio(vcon_cur, sftp)
+                stats.start_blocking(stats_queue)
                 stats.count(stats_queue)
                 stats.bytes(stats_queue, vcon_cur.size)
                 duration = vcon_cur.size / (settings.sample_rate*2)
                 stats.duration(stats_queue, duration)
-                with with_blocking_time(stats_queue):
-                    vcons_ready_queue.put(vcon_cur)
+                vcons_ready_queue.put(vcon_cur)
+            else:
+                dont_overwhelm_server()
+
     except ShutdownException:
         dump_thread_stacks()
     finally:

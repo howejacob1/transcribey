@@ -49,45 +49,20 @@ def load_nvidia(model_name):
         print(f"ERROR: Failed to load model {model_name}: {e}")
         raise
 
-def transcribe(lang_detected_queue: Queue,
-                transcribed_queue: Queue,
-                stats_queue: Queue,
-                model_name: str,
-                language: str):
-    print(f"TRANSCRIBE PROCESS STARTING: language={language}, model={model_name}")
-    stats.start(stats_queue)
-    model = None
-    vcons_in_memory = []
-    try:
-        setup_signal_handlers()
-        model = load_nvidia(model_name)
-        
-        config = {"batch_size": 32}
-        if language != "en" and language != "auto":
-            config.update({
-                "source_lang": language,
-                "target_lang": language, 
-                "task": "asr",
-                "pnc": "yes"
-            })
-        elif language == "auto":
-            # For auto language detection, don't specify source/target lang
-            config.update({
-                "task": "asr",
-                "pnc": "yes"
-            })
-
-        vcon_cur : Vcon | None = None
-        
-        while True: # just run thread forever
-            with with_blocking_time(stats_queue):
-                vcon_cur = lang_detected_queue.get()
-            vcons_in_memory.append(vcon_cur)
-
-            # Transcribe the batch
-            with torch.no_grad():
-                with suppress_output(should_suppress=True):
-                    transcription = model.transcribe(vcon_cur.audio, **config)
+def transcribe_batch(vcon_batch: List[Vcon], model, config: dict):
+    """Transcribe a batch of vcons at once"""
+    audio_data_batch = vcon_utils.batch_to_audio_data(vcon_batch)
+    
+    # Transcribe the entire batch at once
+    with torch.no_grad():
+        with suppress_output(should_suppress=True):
+            all_transcriptions = model.transcribe(audio_data_batch, **config)
+    
+    # Process results and assign to vcons
+    transcribed_vcons = []
+    for i, vcon_cur in enumerate(vcon_batch):
+        if i < len(all_transcriptions):
+            transcription = all_transcriptions[i]
             
             # Handle different types of transcription results from NeMo
             if isinstance(transcription, list) and len(transcription) > 0:
@@ -106,22 +81,76 @@ def transcribe(lang_detected_queue: Queue,
             else:
                 # Fallback - convert to string but this shouldn't happen
                 text = str(transcription)
-                
-            vcon_cur.transcript_text = text
+        else:
+            # Fallback if not enough transcriptions returned
+            text = ""
+            
+        vcon_cur.transcript_text = text
 
-            # Clean up audio data after transcription - no longer needed and prevents JSON serialization errors
-            if hasattr(vcon_cur, 'audio') and vcon_cur.audio is not None:
-                vcon_cur.audio = None
+        # Clean up audio data after transcription - no longer needed and prevents JSON serialization errors
+        if hasattr(vcon_cur, 'audio') and vcon_cur.audio is not None:
+            vcon_cur.audio = None
+            
+        transcribed_vcons.append(vcon_cur)
+    
+    return transcribed_vcons
 
-            stats.count(stats_queue)
-            stats.bytes(stats_queue, vcon_cur.size)
-            stats.duration(stats_queue, vcon_cur.duration)
+def transcribe(lang_detected_queue: Queue,
+                transcribed_queue: Queue,
+                stats_queue: Queue,
+                model_name: str,
+                language: str):
+    print(f"TRANSCRIBE PROCESS STARTING: language={language}, model={model_name}")
+    stats.start(stats_queue)
+    model = None
+    vcons_in_memory = []
+    try:
+        setup_signal_handlers()
+        model = load_nvidia(model_name)
+        
+        config = {"batch_size": 16}
+        if language != "en" and language != "auto":
+            config.update({
+                "source_lang": language,
+                "target_lang": language, 
+                "task": "asr",
+                "pnc": "yes"
+            })
+        elif language == "auto":
+            # For auto language detection, don't specify source/target lang
+            config.update({
+                "task": "asr",
+                "pnc": "yes"
+            })
+
+        while True: # just run thread forever
+            # Get a batch from the language detection queue
             with with_blocking_time(stats_queue):
-                transcribed_queue.put(vcon_cur)
+                vcon_batch = lang_detected_queue.get()
+            
+            if not isinstance(vcon_batch, list):
+                # Handle backward compatibility in case single vcons are still sent
+                vcon_batch = [vcon_batch]
+            
+            vcons_in_memory.extend(vcon_batch)
+
+            # Transcribe the entire batch at once
+            transcribed_vcons = transcribe_batch(vcon_batch, model, config)
+            
+            # Update stats and send results
+            for vcon_cur in transcribed_vcons:
+                stats.count(stats_queue)
+                stats.bytes(stats_queue, vcon_cur.size)
+                stats.duration(stats_queue, vcon_cur.duration)
+                
+                # Send individual vcons to the output queue
+                with with_blocking_time(stats_queue):
+                    transcribed_queue.put(vcon_cur)
             
             # Remove from our tracking list once processed
-            if vcon_cur in vcons_in_memory:
-                vcons_in_memory.remove(vcon_cur)
+            for vcon_cur in vcon_batch:
+                if vcon_cur in vcons_in_memory:
+                    vcons_in_memory.remove(vcon_cur)
             
     except ShutdownException:
         print(f"TRANSCRIBE {language}: Received shutdown signal, cleaning up...")
@@ -170,3 +199,21 @@ def start_process(lang_detected_queue: Queue,
     else:
         model_name = settings.non_en_model_name
     return process.start_process(target=transcribe, args=(lang_detected_queue, transcribed_queue, stats_queue, model_name, language))
+
+def transcribe_en(lang_detected_queue, transcribed_queue, stats_queue, model_name, language):
+    return transcribe(lang_detected_queue, transcribed_queue, stats_queue, model_name, language)
+
+def transcribe_non_en(lang_detected_queue, transcribed_queue, stats_queue, model_name, language):
+    return transcribe(lang_detected_queue, transcribed_queue, stats_queue, model_name, language)
+
+def start_process_en(lang_detected_queue: Queue,
+                 transcribed_queue: Queue,
+                 stats_queue: Queue):
+    """Start transcription process for specified language"""
+    return process.start_process(target=transcribe_en, args=(lang_detected_queue, transcribed_queue, stats_queue, settings.en_model_name, "en"))
+
+def start_process_non_en(lang_detected_queue: Queue,
+                 transcribed_queue: Queue,
+                 stats_queue: Queue):
+    """Start transcription process for specified language"""
+    return process.start_process(target=transcribe_non_en, args=(lang_detected_queue, transcribed_queue, stats_queue, settings.non_en_model_name, "auto"))
