@@ -36,4 +36,14 @@ $COMMAND
 echo "=== Cleaning up GPU processes after test ==="
 kill_gpu_processes
 
-cat status.json
+python -c "
+import json
+import sys
+sys.path.append('.')
+from stats import print_status
+
+# Load and print status
+with open('status.json', 'r') as f:
+    status = json.load(f)
+    print_status(status)
+"

@@ -1,5 +1,6 @@
 import os
 import socket
+import subprocess
 
 # Settings for main.py
 cache_dir = "cache/"
@@ -44,3 +45,12 @@ transcribe_batch_max_len = 32
 
 queue_max_size = 3000
 die_after_no_measurements_time = 10
+
+def get_version():
+    """Get the most recent git tag"""
+    result = subprocess.run(['git', 'describe', '--tags', '--abbrev=0'], 
+                            capture_output=True, text=True, check=True)
+    return result.stdout.strip()
+
+
+version = get_version()

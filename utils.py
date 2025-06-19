@@ -178,3 +178,8 @@ def die():
 def die_after_delay(delay):
     time.sleep(delay)
     die()
+
+@contextmanager
+def with_output_to_file(filename, data):
+    with open(filename, "w") as f:
+        yield f

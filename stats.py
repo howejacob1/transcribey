@@ -1,7 +1,10 @@
 import json
 import multiprocessing
 import os
+import sys
+import subprocess
 import time
+from datetime import datetime
 from mongo_utils import db
 from utils import save_to_file
 from contextlib import contextmanager
@@ -221,8 +224,35 @@ def load_and_print_all():
     vcons = load_all()
     pprint(vcons)
 
+@contextmanager
+def with_output_to_file(filename_template):
+    """Context manager to redirect stdout to a file with version and timestamp"""
+    # Create measurements directory if it doesn't exist
+    os.makedirs("measurements", exist_ok=True)
+    
+    # Get version and timestamp
+    ver = settings.version
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    
+    # Create filename
+    filename = f"measurements/{ver}-{timestamp}.txt"
+    
+    # Save original stdout
+    original_stdout = sys.stdout
+    
+    try:
+        with open(filename, 'w') as f:
+            sys.stdout = f
+            yield
+    finally:
+        # Restore original stdout
+        sys.stdout = original_stdout
+
 def save_results(status):
-    save_to_file("status.json", json.dumps(status))
+    with with_output_to_file("measurements/{version}-{timestamp}.txt"):
+        print_status(status)
+    with with_output_to_file("measurements/status.json"):
+        save_to_file("status.json", json.dumps(status))
 
 def init_status_avg(status):
     status["avg"] = {"bytes": 0, "duration": 0, "count": 0, "blocking_duration": 0, "start": time.time(), "stop": 0}
