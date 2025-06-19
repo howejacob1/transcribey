@@ -152,9 +152,10 @@ def update_avg_status(status):
         status["avg"]["count"] = send_results_status["count"]
         status["avg"]["blocking_duration"] = 0
 
-def print_status(status):
-    # Clear screen and move cursor to top
-    print("\033[2J\033[H", end="")    
+def print_status(status, clear_terminal=True):
+    # Clear screen and move cursor to top only if clear_terminal is True
+    if clear_terminal:
+        print("\033[2J\033[H", end="")    
 
     update_avg_status(status)
     line_number = 0
@@ -250,7 +251,7 @@ def with_output_to_file(filename_template):
 
 def save_results(status):
     with with_output_to_file("measurements/{version}-{timestamp}.txt"):
-        print_status(status)
+        print_status(status, clear_terminal=False)
     with with_output_to_file("measurements/status.json"):
         save_to_file("status.json", json.dumps(status))
 

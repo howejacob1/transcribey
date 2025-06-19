@@ -32,7 +32,7 @@ preprocess_batch_max_size = 25  # Smaller batch size
 preprocess_batch_max_len = 16   # Smaller max length
 
 min_audio_duration_seconds = 1.0
-status_update_seconds = 5
+status_update_seconds = 20
 
 lang_detect_batch_timeout_seconds = 0.1
 lang_detect_batch_max_size = 50
@@ -43,7 +43,7 @@ transcribe_batch_timeout_seconds = 0.1
 transcribe_batch_max_size = 50
 transcribe_batch_max_len = 32
 
-queue_max_size = 3000
+queue_max_size = 200
 die_after_no_measurements_time = 10
 
 def get_version():
