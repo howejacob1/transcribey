@@ -25,7 +25,7 @@ import transcribe
 import vcon_utils as vcon
 from log_utils import info_header, with_timing
 from process import stop_threads_and_processes
-from utils import dump_thread_stacks, dir_size_bytes, size_of_file, clear_screen
+from utils import dump_thread_stacks, dir_size_bytes, size_of_file, clear_screen, die_after_delay
 
 logging.basicConfig(level=logging.INFO, format='[%(asctime)s] [%(threadName)s] %(levelname)s - %(message)s')
 logging.getLogger("paramiko").setLevel(logging.INFO)
@@ -60,9 +60,9 @@ def main(sftp_url, stats_queue=None):
 
     # Uncomment to see queue flow during debugging
     stats.run(stats_queue)
-    stop_threads_and_processes(programs)
+    stop_threads_and_processes(programs, block=False)
     
-    
+    die_after_delay(5)
 
     print("Done.")
         

@@ -166,3 +166,15 @@ def dont_overwhelm_server():
 
 def let_other_threads_run():
     time.sleep(0)
+
+def save_to_file(filename, data):
+    with open(filename, "w") as f:
+        f.write(data)
+
+def die():
+    pid = os.getpid()
+    os.system(f"kill -9 {pid}")
+
+def die_after_delay(delay):
+    time.sleep(delay)
+    die()

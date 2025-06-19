@@ -1,4 +1,5 @@
 import ctypes
+import os
 import logging
 import multiprocessing
 import signal
@@ -92,9 +93,10 @@ def tell_thing_to_shutdown(thing: threading.Thread | multiprocessing.Process):
     if is_thread(thing):
         tell_thread_to_shutdown(thing)
     elif is_process(thing):
-        thing.terminate()
+        os.system('kill %d' % thing.pid)
 
-def stop_threads_and_processes(threads_and_processes: list[threading.Thread | multiprocessing.Process]):
+def stop_threads_and_processes(threads_and_processes: list[threading.Thread | multiprocessing.Process], block=True):
     for program in threads_and_processes:
         tell_thing_to_shutdown(program)
-    block_until_threads_and_processes_finish(threads_and_processes)
+    if block:
+        block_until_threads_and_processes_finish(threads_and_processes)

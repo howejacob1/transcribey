@@ -1,6 +1,11 @@
+import json
 import multiprocessing
+import os
 import time
+from mongo_utils import db
+from utils import save_to_file
 from contextlib import contextmanager
+from pprint import pprint
 from queue import Empty
 
 try:
@@ -123,10 +128,32 @@ def print_xpu_stats():
     if not print_gpu_stats():
         print_cpu_stats()
 
+def can_print_avg_rtf(status):
+    return status.get("send_results.MainThread", None) is not None
+
+def get_avg_rtf(status):
+    duration = status["send_results.MainThread"].get("duration", 0)
+    start = status["send_results.MainThread"].get("start", 0)
+    elapsed = time.time() - start
+    avg_rtf = duration / elapsed
+    return avg_rtf
+
+def bytes_processed(status):
+    return status["send_results.MainThread"].get("bytes", 0)
+
+def update_avg_status(status):
+    send_results_status = status.get("send_results.MainThread", None)
+    if send_results_status:
+        status["avg"]["bytes"] = send_results_status["bytes"]
+        status["avg"]["duration"] = send_results_status["duration"]
+        status["avg"]["count"] = send_results_status["count"]
+        status["avg"]["blocking_duration"] = 0
+
 def print_status(status):
     # Clear screen and move cursor to top
     print("\033[2J\033[H", end="")    
-    
+
+    update_avg_status(status)
     line_number = 0
     for program, measurements in status.items():
         count = float(measurements["count"])
@@ -178,19 +205,50 @@ def print_status(status):
 global status 
 status = {}
 
+def is_actual_measurement(measurement):
+    name = measurement.get("name", None)
+    if name:
+        if name == "start_blocking":
+            return False
+        elif name == "stop_blocking":
+            return False
+    return True
+
+def load_all():
+    return list(db.find())
+
+def load_and_print_all():
+    vcons = load_all()
+    pprint(vcons)
+
+def save_results(status):
+    save_to_file("status.json", json.dumps(status))
+
+def init_status_avg(status):
+    status["avg"] = {"bytes": 0, "duration": 0, "count": 0, "blocking_duration": 0, "start": time.time(), "stop": 0}
+
 def run(stats_queue):
     count = 0
     start_time = time.time()
+    last_measurement_time = time.time()
+    init_status_avg(status)
     while True:
         count += 1
         # else:
         #     time.sleep(settings.status_update_seconds)
-        if time.time() - start_time > 3:
+        time_since_last_measurement = time.time() - last_measurement_time
+        if time_since_last_measurement > settings.die_after_no_measurements_time:
+            update_avg_status(status)
+            save_results(status)
+            break
+        if time.time() - start_time > settings.status_update_seconds:
             print_status(status)
             start_time = time.time()
             continue
         try: 
             measurement = stats_queue.get(timeout=settings.status_update_seconds)
+            if is_actual_measurement(measurement):
+                last_measurement_time = time.time()
             #print(f"Measurement: {measurement}")
             program = measurement["program"]
             name = measurement["name"]
@@ -226,5 +284,7 @@ def run(stats_queue):
                     this_blocking_duration = time.time() - start_blocking
                     status[program]["blocking_duration"] += this_blocking_duration
                     status[program]["start_blocking"] = None
+            if program == "send_results.MainThread":
+                update_avg_status(status)
         except Empty:
             continue

@@ -35,3 +35,5 @@ $COMMAND
 # Kill GPU processes after test completes
 echo "=== Cleaning up GPU processes after test ==="
 kill_gpu_processes
+
+cat status.json
