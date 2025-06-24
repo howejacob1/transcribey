@@ -106,6 +106,8 @@ def ensure_dir_exists(path):
         os.makedirs(path)
 
 def extension(filename):
+    if filename is None:
+        return ""
     return os.path.splitext(filename)[1][1:]
 
 def what_directory_are_we_in():

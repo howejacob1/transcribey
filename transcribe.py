@@ -49,7 +49,7 @@ def load_nvidia(model_name):
         print(f"ERROR: Failed to load model {model_name}: {e}")
         raise
 
-def transcribe_batch(vcon_batch: List[Vcon], model, config: dict):
+def transcribe_batch(vcon_batch: List[Vcon], model, config: dict, model_name: str):
     """Transcribe a batch of vcons at once"""
     audio_data_batch = vcon_utils.batch_to_audio_data(vcon_batch)
     
@@ -85,7 +85,7 @@ def transcribe_batch(vcon_batch: List[Vcon], model, config: dict):
             # Fallback if not enough transcriptions returned
             text = ""
             
-        vcon_cur.transcript_text = text
+        vcon_cur.set_transcript(text, model_name)
 
         # Clean up audio data after transcription - no longer needed and prevents JSON serialization errors
         if hasattr(vcon_cur, 'audio') and vcon_cur.audio is not None:
@@ -135,7 +135,7 @@ def transcribe(lang_detected_queue: Queue,
             vcons_in_memory.extend(vcon_batch)
 
             # Transcribe the entire batch at once
-            transcribed_vcons = transcribe_batch(vcon_batch, model, config)
+            transcribed_vcons = transcribe_batch(vcon_batch, model, config, model_name)
             
             # Update stats and send results
             for vcon_cur in transcribed_vcons:

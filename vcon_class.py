@@ -1,14 +1,14 @@
 import datetime
 import mimetypes
+import settings
 import uuid
 import torch
 import numpy as np
+from typing import List
 from utils import suppress_output
-
 from vcon import Vcon as VconBase
 from vcon.dialog import Dialog
 from vcon.party import Party
-
 import audio
 import gpu
 
@@ -20,8 +20,10 @@ class Vcon(VconBase):
     def build_new(cls):
         """Create a new Vcon instance"""
         # Use the parent's build_new method which properly initializes all fields including UUID
-        with suppress_output():
-            vcon_base = VconBase.build_new()
+        vcon_base = VconBase.build_new()
+        # Initialize empty dialog and analysis arrays - don't create incomplete entries
+        vcon_base.vcon_dict["dialog"] = []
+        vcon_base.vcon_dict["analysis"] = []
         # Create our custom class instance from the properly initialized vcon_dict
         return cls(vcon_dict=vcon_base.vcon_dict)
 
@@ -51,27 +53,43 @@ class Vcon(VconBase):
     @property
     def size(self):
         """Get the size of the vcon"""
-        return self.vcon_dict.get("size")
+        try:
+            if not self.vcon_dict.get("dialog") or len(self.vcon_dict["dialog"]) == 0:
+                return None
+            return self.vcon_dict["dialog"][0]["size_bytes"]
+        except (KeyError, IndexError, TypeError):
+            return None
 
     @size.setter
     def size(self, value: int):
         """Set the size of the vcon"""
-        self.vcon_dict["size"] = value
+        if "dialog" not in self.vcon_dict or not self.vcon_dict["dialog"]:
+            self.vcon_dict["dialog"] = [{"type": "audio"}]
+        self.vcon_dict["dialog"][0]["size_bytes"] = value
 
     @property
     def duration(self):
         """Get the duration of the vcon"""
-        return self.vcon_dict.get("duration")
+        try:
+            if not self.vcon_dict.get("dialog") or len(self.vcon_dict["dialog"]) == 0:
+                return 0
+            return self.vcon_dict["dialog"][0]["duration"]
+        except (KeyError, IndexError, TypeError):
+            return 0
 
     @duration.setter
     def duration(self, value: float):
         """Set the duration of the vcon"""
-        self.vcon_dict["duration"] = value
+        if "dialog" not in self.vcon_dict or not self.vcon_dict["dialog"]:
+            self.vcon_dict["dialog"] = [{"type": "audio"}]
+        self.vcon_dict["dialog"][0]["duration"] = value
 
     @property
     def filename(self):
         """Get the filename from the first dialog"""
         try:
+            if not self.vcon_dict.get("dialog") or len(self.vcon_dict["dialog"]) == 0:
+                return None
             return self.vcon_dict["dialog"][0]["filename"]
         except (KeyError, IndexError, TypeError):
             return None
@@ -80,13 +98,15 @@ class Vcon(VconBase):
     def filename(self, value):
         """Set the filename in the first dialog"""
         if "dialog" not in self.vcon_dict or not self.vcon_dict["dialog"]:
-            self.vcon_dict["dialog"] = [{}]
+            self.vcon_dict["dialog"] = [{"type": "audio"}]
         self.vcon_dict["dialog"][0]["filename"] = value
 
     @property
     def audio(self):
         """Get the audio data from the first dialog"""
         try:
+            if not self.vcon_dict.get("dialog") or len(self.vcon_dict["dialog"]) == 0:
+                return None
             return self.vcon_dict["dialog"][0]["body"]
         except (KeyError, IndexError, TypeError):
             return None
@@ -95,71 +115,62 @@ class Vcon(VconBase):
     def audio(self, value):
         """Set the audio data in the first dialog"""
         if "dialog" not in self.vcon_dict or not self.vcon_dict["dialog"]:
-            self.vcon_dict["dialog"] = [{}]
+            self.vcon_dict["dialog"] = [{"type": "audio"}]
         self.vcon_dict["dialog"][0]["body"] = value
 
-    @property
-    def transcript_text(self):
-        """Get the transcript text from the first dialog"""
+    def find_transcript_analysis(self):
+        """get the transcript analysis"""
         try:
-            return self.vcon_dict["dialog"][0]["transcript"]["text"]
+            for analysis in self.vcon_dict["analysis"]:
+                if analysis["type"] == "transcript":
+                    return analysis
+            return None
         except (KeyError, IndexError, TypeError):
             return None
 
-    @transcript_text.setter
-    def transcript_text(self, value):
-        """Set the transcript text in the first dialog"""
-        if "dialog" not in self.vcon_dict or not self.vcon_dict["dialog"]:
-            self.vcon_dict["dialog"] = [{}]
-        if "transcript" not in self.vcon_dict["dialog"][0]:
-            self.vcon_dict["dialog"][0]["transcript"] = {}
-        self.vcon_dict["dialog"][0]["transcript"]["text"] = value
+    def find_language_identification_analysis(self):
+        """Get the transcript text from the first dialog"""
+        try:
+            for analysis in self.vcon_dict["analysis"]:
+                if analysis["type"] == "language_identification":
+                    return analysis
+            return None
+        except (KeyError, IndexError, TypeError):
+            return None
+
+    def transcript(self):
+        """Get the transcript text from the first dialog"""
+        analysis = self.find_transcript_analysis()
+        if analysis:
+            return analysis["body"]["text"]
+        return None
+
+    def set_transcript(self, value, model):
+        self.vcon_dict["analysis"].append({"type":"transcript",
+                                            "body": {"text":value},
+                                           "vendor":"bantaim"})
 
     @property
     def languages(self):
         """Get the languages from the first dialog transcript"""
-        try:
-            return self.vcon_dict["dialog"][0]["transcript"]["languages"]
-        except (KeyError, IndexError, TypeError):
-            return None
+        analysis = self.find_language_identification_analysis()
+        if analysis:
+            languages_data = analysis["body"]["languages"]
+            # Handle both dict and list formats
+            if isinstance(languages_data, dict):
+                return list(languages_data.keys())
+            elif isinstance(languages_data, list):
+                return languages_data
+            else:
+                return None
+        return None
 
     @languages.setter
-    def languages(self, value):
+    def languages(self, languages: List[str]):
         """Set the languages in the first dialog transcript"""
-        if "dialog" not in self.vcon_dict or not self.vcon_dict["dialog"]:
-            self.vcon_dict["dialog"] = [{}]
-        if "transcript" not in self.vcon_dict["dialog"][0]:
-            self.vcon_dict["dialog"][0]["transcript"] = {}
-        self.vcon_dict["dialog"][0]["transcript"]["languages"] = value
+        self.vcon_dict["analysis"].append({"type":"language_identification", "body":{"languages":languages},
+                                           "vendor":"bantaim"})
 
-    @property
-    def transcript_dict(self):
-        """Get the entire transcript dictionary from the first dialog"""
-        try:
-            return self.vcon_dict["analysis"][0]["body"]["text"]
-        except (KeyError, IndexError, TypeError):
-            return None
-
-    @transcript_dict.setter
-    def transcript_dict(self, value):
-        """Set the entire transcript dictionary in the first dialog"""
-        if "analysis" not in self.vcon_dict:
-            self.vcon_dict["analysis"] = []
-        if len(self.vcon_dict["analysis"]) == 0:
-            self.vcon_dict["analysis"][0] = {}
-        if "body" not in self.vcon_dict["analysis"][0]:
-            self.vcon_dict["analysis"][0]["body"] = {}
-        self.vcon_dict["analysis"][0]["body"]["text"] = value
-
-    @property
-    def transcript(self):
-        """Alias for transcript_text for compatibility"""
-        return self.transcript_text
-
-    @transcript.setter
-    def transcript(self, value):
-        """Alias for transcript_text setter for compatibility"""
-        self.transcript_text = value
 
     @property
     def done(self):
@@ -174,12 +185,19 @@ class Vcon(VconBase):
     @property
     def sample_rate(self):
         """Get the sample rate of the vcon"""
-        return self.vcon_dict.get("sample_rate")
+        try:
+            if not self.vcon_dict.get("dialog") or len(self.vcon_dict["dialog"]) == 0:
+                return None
+            return self.vcon_dict["dialog"][0]["sample_rate"]
+        except (KeyError, IndexError, TypeError):
+            return None
 
     @sample_rate.setter
     def sample_rate(self, value):
         """Set the sample rate of the vcon"""
-        self.vcon_dict["sample_rate"] = value
+        if "dialog" not in self.vcon_dict or not self.vcon_dict["dialog"]:
+            self.vcon_dict["dialog"] = [{"type": "audio"}]
+        self.vcon_dict["dialog"][0]["sample_rate"] = value
 
     @property
     def corrupt(self):
@@ -233,7 +251,7 @@ class Vcon(VconBase):
         if "dialog" not in self.vcon_dict:
             self.vcon_dict["dialog"] = []
         
-        # Add the dialog directly to the dict
+        # Create the dialog directly in the dict
         dialog_dict = {
             "type": "audio",
             "start": now.isoformat(),
@@ -243,9 +261,13 @@ class Vcon(VconBase):
             "filename": url,
             "body": None,
             "encoding": None,
-            "transcript": {}
         }
-        self.vcon_dict["dialog"].append(dialog_dict)
+        
+        # Replace or add the first dialog entry
+        if len(self.vcon_dict["dialog"]) == 0:
+            self.vcon_dict["dialog"].append(dialog_dict)
+        else:
+            self.vcon_dict["dialog"][0] = dialog_dict
         
         return self
 

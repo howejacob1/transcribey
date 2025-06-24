@@ -7,7 +7,6 @@ from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor, as_compl
 from multiprocessing import Event, Process
 from pprint import pprint
 from typing import List
-
 import binpacking
 import paramiko
 import torchaudio
@@ -15,7 +14,6 @@ from pymongo import MongoClient, ReplaceOne
 from vcon import Vcon as VconBase
 from vcon.dialog import Dialog
 from vcon.party import Party
-
 import audio
 import cache
 import gpu
@@ -43,25 +41,25 @@ def ensure_mono(vcon: Vcon):
         vcon.audio = audio_data_mono
     return vcon
 
-def convert_to_mono_many(vcons):
-    vcons_mono = []
-    vcons_mono_futures = []
-    with ThreadPoolExecutor(max_workers=audio.cpu_cores_for_mono_conversion()) as executor:
-        for vcon in vcons:
-            vcons_mono_futures.append(executor.submit(convert_to_mono_maybe, vcon))
-        for future in as_completed(vcons_mono_futures):
-            vcons_mono.append(future.result())
-    return vcons_mono
+# def convert_to_mono_many(vcons):
+#     vcons_mono = []
+#     vcons_mono_futures = []
+#     with ThreadPoolExecutor(max_workers=audio.cpu_cores_for_mono_conversion()) as executor:
+#         for vcon in vcons:
+#             vcons_mono_futures.append(executor.submit(convert_to_mono_maybe, vcon))
+#         for future in as_completed(vcons_mono_futures):
+#             vcons_mono.append(future.result())
+#     return vcons_mono
 
-def batch_to_audio_data(batch):
-    audio_data_list = []
-    for vcon in batch:
-        audio_data_val = get_audio(vcon)
-        audio_data_list.append(audio_data_val)
-    return audio_data_list
+# def batch_to_audio_data(batch):
+#     audio_data_list = []
+#     for vcon in batch:
+#         audio_data_val = get_audio(vcon)
+#         audio_data_list.append(audio_data_val)
+#     return audio_data_list
 
-def make_batches(vcons, batch_bytes):
-    return binpacking.to_constant_volume(vcons, batch_bytes, key=get_size)
+# def make_batches(vcons, batch_bytes):
+#     return binpacking.to_constant_volume(vcons, batch_bytes, key=get_size)
 
 def resample_vcon_one(vcon):
     audio_data_val = vcon.audio
@@ -93,16 +91,16 @@ def cache_audio(vcon: Vcon, sftp: paramiko.SFTPClient):
     dest_filename = downloading_filename(vcon)
     sftp_utils.download(source_filename, dest_filename, sftp)
 
-def cache_vcon_audio_many(vcons, sftp):
-    total_count = len(vcons)
-    count = 0
-    for vcon in vcons:
-        cache_vcon_audio(vcon, sftp)
-        count += 1
-        if count % 50 == 0:
-            print(f"Cached {count/total_count*100:.2f}% of vcons")
-    print(f"Finished caching {total_count} vcons.")
-    return vcons
+# def cache_vcon_audio_many(vcons, sftp):
+#     total_count = len(vcons)
+#     count = 0
+#     for vcon in vcons:
+#         cache_vcon_audio(vcon, sftp)
+#         count += 1
+#         if count % 50 == 0:
+#             print(f"Cached {count/total_count*100:.2f}% of vcons")
+#     print(f"Finished caching {total_count} vcons.")
+#     return vcons
 
 def processing_filename(vcon: Vcon):
     vcon_filename = vcon.filename
@@ -159,9 +157,11 @@ def insert_many_maybe(vcons: List[Vcon] | None):
         to_insert = []
         for vcon in vcons:
             filename = vcon.filename
-            if not exists_by_filename(filename):
+            # Skip vcons without filenames to prevent duplicate key errors
+            if filename is not None and not exists_by_filename(filename):
                 to_insert.append(vcon)
-        insert_many(to_insert)  
+        if to_insert:  # Only insert if there are items to insert
+            insert_many(to_insert)
 
 def insert_many_maybe_async(vcons: List[Vcon] | None):
     if vcons:
@@ -173,8 +173,16 @@ def insert_maybe(vcon):
     """Insert a vcon if it doesn't already exist (accepts Vcon object or dict)"""
     if vcon:
         # Get filename whether it's a Vcon object or dict
-        filename = vcon.filename if hasattr(vcon, 'filename') else vcon["dialog"][0]["filename"]
-        if not exists_by_filename(filename):
+        if hasattr(vcon, 'filename'):
+            filename = vcon.filename
+        else:
+            # Handle dict case more safely
+            try:
+                filename = vcon["dialog"][0]["filename"] if vcon.get("dialog") and len(vcon["dialog"]) > 0 else None
+            except (KeyError, IndexError, TypeError):
+                filename = None
+        # Skip vcons without filenames to prevent duplicate key errors
+        if filename is not None and not exists_by_filename(filename):
             insert_one(vcon)  # insert_one now handles the conversion
 
 def get_by_filename(filename):
@@ -183,57 +191,57 @@ def get_by_filename(filename):
 def exists_by_filename(filename):
     return get_by_filename(filename) is not None
 
-def create(url):
-    vcon = None
-    with suppress_output(should_suppress=False):
-        vcon_obj = VconBase.build_new()
-        party = Party(name="Unknown", role="participant")
-        vcon_obj.add_party(party)
-        now = datetime.datetime.now(datetime.timezone.utc)
-        mimetype, _ = mimetypes.guess_type(url)
-        dialog = Dialog(
-            type="audio",
-            start=now.isoformat(),
-            parties=[0],
-            originator=0,
-            mimetype=mimetype,
-            filename=url,
-            body=None,
-            encoding=None
-        )
-        vcon_obj.add_dialog(dialog)
-        vcon = vcon_obj.to_dict()
-        set_transcript_dict(vcon, {})
-        print(vcon)
-    return vcon
+# def create(url):
+#     vcon = None
+#     with suppress_output(should_suppress=False):
+#         vcon_obj = VconBase.build_new()
+#         party = Party(name="Unknown", role="participant")
+#         vcon_obj.add_party(party)
+#         now = datetime.datetime.now(datetime.timezone.utc)
+#         mimetype, _ = mimetypes.guess_type(url)
+#         dialog = Dialog(
+#             type="audio",
+#             start=now.isoformat(),
+#             parties=[0],
+#             originator=0,
+#             mimetype=mimetype,
+#             filename=url,
+#             body=None,
+#             encoding=None
+#         )
+#         vcon_obj.add_dialog(dialog)
+#         vcon = vcon_obj.to_dict()
+#         set_transcript_dict(vcon, {})
+#         print(vcon)
+#     return vcon
 
-def load_processing_into_ram(vcons):
-    logging.info(f"Loading {len(vcons)} vcons into RAM.")
-    for vcon in vcons:
-        filename = processing_filename(vcon)
-        audio_data_val, sample_rate_val = audio.load_to_cpu(filename)
-        set_audio(vcon, audio_data_val)
-        vcon["sample_rate"] = sample_rate_val
-    return vcons
+# def load_processing_into_ram(vcons):
+#     logging.info(f"Loading {len(vcons)} vcons into RAM.")
+#     for vcon in vcons:
+#         filename = processing_filename(vcon)
+#         audio_data_val, sample_rate_val = audio.load_to_cpu(filename)
+#         set_audio(vcon, audio_data_val)
+#         vcon["sample_rate"] = sample_rate_val
+#     return vcons
 
-def apply_vad_one(vcon, vad):
-    audio_data = get_audio(vcon)
-    vad_data = vad(audio_data)
-    set_audio(vcon, vad_data)
-    return vcon
+# def apply_vad_one(vcon, vad):
+#     audio_data = get_audio(vcon)
+#     vad_data = vad(audio_data)
+#     set_audio(vcon, vad_data)
+#     return vcon
 
-def apply_vad_many(vcons):
-    vcons_vad = []
-    vcons_vad_futures = []
-    logging.info(f"Applying VAD to {len(vcons)} vcons.")
-    vad = torchaudio.transforms.Vad(sample_rate=settings.sample_rate, trigger_level=0.5)
-    with ThreadPoolExecutor(max_workers=audio.cpu_cores_for_vad()) as executor:
-        for vcon in vcons:
-            audio_data = get_audio(vcon)
-            vcons_vad_futures.append(executor.submit(apply_vad_one, vcon, vad))
-        for future in as_completed(vcons_vad_futures):
-            vcons_vad.append(future.result())
-    return vcons_vad
+# def apply_vad_many(vcons):
+#     vcons_vad = []
+#     vcons_vad_futures = []
+#     logging.info(f"Applying VAD to {len(vcons)} vcons.")
+#     vad = torchaudio.transforms.Vad(sample_rate=settings.sample_rate, trigger_level=0.5)
+#     with ThreadPoolExecutor(max_workers=audio.cpu_cores_for_vad()) as executor:
+#         for vcon in vcons:
+#             audio_data = get_audio(vcon)
+#             vcons_vad_futures.append(executor.submit(apply_vad_one, vcon, vad))
+#         for future in as_completed(vcons_vad_futures):
+#             vcons_vad.append(future.result())
+#     return vcons_vad
 
 
 def move_to_gpu_many(vcons):
@@ -243,15 +251,15 @@ def move_to_gpu_many(vcons):
         vcons_on_gpu.append(vcon)
     return vcons_on_gpu
 
-def split_by_language(vcons):
-    vcons_en = []
-    vcons_non_en = []
-    for vcon in vcons:
-        if get_languages(vcon) == ["en"]:
-            vcons_en.append(vcon)
-        else:
-            vcons_non_en.append(vcon)
-    return vcons_en, vcons_non_en
+# def split_by_language(vcons):
+#     vcons_en = []
+#     vcons_non_en = []
+#     for vcon in vcons:
+#         if get_languages(vcon) == ["en"]:
+#             vcons_en.append(vcon)
+#         else:
+#             vcons_non_en.append(vcon)
+#     return vcons_en, vcons_non_en
 
 def mark_vcons_as_done(vcons):
     for vcon in vcons:

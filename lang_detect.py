@@ -239,10 +239,10 @@ def identify_languages_batch(vcon_batch: List[Vcon], model):
                 predicted_lang = "en" # assume spanish is correctly identified-- all else assert english
                 
             language_list = [predicted_lang]
-            vcon_cur.set_languages(language_list)
+            vcon_cur.languages = language_list
             vcons_with_languages.append(vcon_cur)
         else:
-            vcon_cur.set_languages(['en'])
+            vcon_cur.languages = ['en']
             vcons_with_languages.append(vcon_cur)
     
     # Clear GPU memory

@@ -1,0 +1,280 @@
+{
+    "uuid": "0196a209-5e69-87d7-9dd8-dd37220d739c",
+    "vcon": "0.0.1",
+    "dialog": [
+      {
+        "duration": "1769",
+        "filename": "new_20250505190102052029-62ea191bd80afaf8563dd5e362a10974",
+        "mimetype": "audio/mp3",
+        "originator": 0,
+        "sample_rate": 16000,
+        "size_bytes": 1000000
+      }
+    ],
+    "analysis": [
+      {
+        "body": {
+          "transcript": " Thank you for calling. This is Al. How can I help you? Hi, Al. This is Greg with Glue & Nails. Did we just speak a few minutes ago? Yes, sir. We did. Oh, I have a problem. When I call Wood Floor's phone number, it says, thank you for choosing Glue & Nails, which it should not. We actually had a special recording and everything for that line. It seems to all be gone now. Hold on, sir. Thank you. just give me a moment sir you want to change the greeting for the other numbers sir okay so what we are going to do is create a new auto attendant for that number so that's where I'm confused Okay. minutes and when you called in to wood floors you got this sort of comedic answering thing and I'm not sure how to find it or how to put it back on there I probably have a recording on my computer but yes that's what I would like to do I understand sir Thank you. I'm not quite sure about the recording but if you do have the apps or you can actually send that to me and I can upload that for you I will have to search been a while I'm gonna check on some of the uh to mean round as well. This is duration is like around two minutes. I would say it was two to three minutes, yeah, something like that. Okay. Thank you. Thank you. the recording by night for us for the public with orders information you don't know it is No idea. Hmm Sir, what's your email address? Info at glueandnails.com will work. Hold on. I might have found it. Let me check. Since I said that to you, it might have actually been a recording for Glue and Nails. Yeah. I think so, too, sir, because the one that I found here. Very, very fast-talking, charismatic guy said, thanks for calling. If you want to stay on hold, that's right. Yeah, it's around 2 minutes and 42 seconds. That sounds about right. I think it was blue and nails. And I think the wood floor, we had not done that yet, but obviously when I'm calling into wood floors, I wanted to answer wood floors. And, well, it works on our end unless anything has changed. When someone calls us on the desktop phone, it works fine. We can see it on that line, but also on our mobile, it says wood floors when we start to answer, which is fine. That works. Thank you. Okay. Okay. All right. Yes. So this is what I'm seeing on your account, sir. Okay. Okay. So for the 918-857-0663 number, that number is connected to your extension 700 or that auto attendance same thing with the 9040 so that's why if somebody calls the 9040 number or the 0666 3 number whatever greeting you have on the auto attendant, the one that I showed you earlier, that is the greeting that they will hear. The only way for us to make this separate is to create another auto attendant with a different greeting for wooden floor. Okay. I think that we had before mm-hmm I thought it was I mean then yeah I mean obviously I don't know exactly how it works but I certainly don't I can't have someone call in and say welcome to the so-and-so family of companies press one for wood floor and two for glue and nails because they wouldn't have any clue what you're talking about. So that can't be a thing. They just have to dial the number they saw on the website and it answers accordingly. Yeah, I totally understand. If you really want to separate the two numbers, so two different companies. But how about the numbers that will be or who will be answering them? Is it going to be the same? It will be the same answering system, same process, basically the same order. So I'll say it to you just in case that something goes wrong. There's a number that, well, first of all, there's our desktop phone, and I don't know how you distinguish that, but it rings first. And after a number of seconds, I don't know how long, maybe 5 to 10, 15 seconds, it will ring into the 7599 number. All right. And it does about three rings, and if that doesn't answer, then it goes to the 7299 number, which is my number, and that way. And we would like it to stay that way. Got it. So we've got three chances to get the answer. Okay, got it. Yeah, basically the same thing. We're just going to put in the new auto attendant just to separate two numbers. How about the greetings? Well, I can go type something, and possibly we can get that same person to do a recording for us. But for now, we can just type in something somewhat generic. Thank you for choosing Tulsa Wood Floors and more. We'll be right with you. It could be a copy and paste of what we have for glue and nails and just change out the name. Yeah, we can do that. For now. Yeah. Right. So, like, what did he just say? That's kind of stupid. That's weird. You know, guys talking about an alligator, whatever it is, you know. I think it just keeps people's attention longer. I understand. Yeah. Thank you. Is it called wood flooring, sir, or wood floor? It's Tulsa Wood Floors with an S and more. Tulsa Wood Floor. S on the end of floor. Also wood floors and more. Yeah, that's right. Okay. Okay. Gracias. Thank you. Okay. Oh Oh Thank you. All right. All right. Well, I will toy around with it a little more and take a look. I can stay on the line, sir, while you go ahead and do a test call, sir. Call Woodford real quick. We've got another phone next to you. Sure. Go ahead, sir. She's doing it now. Nope. Still going through the door and nails. What number do you call, sir? 918-921-9040. That's Blue and Nails. No, that's Tulsa Wood Floors and More. Blue and Nails is the 8570 number. Which one is Blue and Nails, sir? 8570663. Okay. Let me just make a switch sir hold on 9040 is Tulsa without the wood floors all right yeah We'll just call it Wood Floors. All right. A little easier. All right. Go ahead and do the test. Let's see if it brings through. While we're on there, just let it go for a while. Currently, none of the telephones are ringing. Hold on. Did you press on extension 2, sir? Or option 2. It did not ask her to press any option. If you would like to leave a message, please press 1, otherwise a specialist will be right. I see the error here. Thank you. All right. Phone 200, is it on right now, sir? It is on, yes. Is that the desktop phone? I'm not sure what you mean. The phone for which is connected to the extension 200 right now, sir. Yeah, that's the desktop demo we have. Okay. And then you do have another number here, 918-724-7599. Is that correct, sir? It is correct. It should be the first alternate in line. All right. And then the next one is another phone number, 918-724-7299. And that should be the last hands before voicemail. All right. So let me just check here. All right. Okay, go ahead and make another test search. Okay. Thank you. Two. Okay. Now let's ring it in. All right. Just wait for it to ring to the next one and then the next one so we can test until it goes to the voicemail we're gonna have to start that over Thank you. Should hit my phone now. There it goes. So it went to the voicemail, right? Yes, it did, yes. Okay. And it needs to be following the rules now. So how do I change the message that we hear in the beginning of 4Woods4? Okay, so this is where you need to go. Can you go back to users yes all right so you'll see that there is an additional one Tulsa wood floor a8 that's the new auto attendant we created for wood floor all right ah you don't see that sir sir? Look at the lower right corner. Uncheck the hide system users. Ah, now I see it. Okay. So you'll see that this is extension 701, right? Yes. On top, you'll see auto attendance. Click on auto attendance. Okay. All right. And then you'll see Tulsa Wood Floor AA. Click on that. Yes. Okay. All right. Now, this is where I put your greeting, so you can just add to that greeting or delete it. There is an intro greeting button there. I see that. The extension number, click on that. It will give you another window, and you'll see that it is on business hours. And just on the right side of it, you'll see the pencil button. That's the edit button. Click on it. I got it. Okay. All right. So you'll see text of speech, upload, or record. So this is where you can change it. Okay. Change the message. If you want to use text of speech still, if you're going to upload your own greeting, click on upload and search for the for the that particular file just make sure that it's on an mp3 file mp3 okay yeah and then you click on upload once you're done with it and just wait for a of seconds. It will show you that there's a duration for that particular greeting. Right? Okay. And then that should be it. All right. Well, that sounds easy enough. I think I could handle that. Okay. Now, if you're going to have some problems with that, sir, having a hard time, just give us a call back here and we'll help you out. Okay? Thank you so much for everything you've done. No problem, sir. Anything else I can help you with for today? I think that's it for now. Okay, then. All right. So hopefully those robocalls or spam calls don't bother you anymore. Just call back for that, right? Yep, that would be nice. All right. Well, thank you so much for helping. No problem. Have a nice day. Bye."
+        },
+        "type": "transcript",
+        "dialog": 0,
+        "vendor": "hugging_face_whisper",
+        "encoding": "none",
+        "vendor_schema": {
+          "opts": {
+            "API_URL": "https://hdw9ib00e0my4dg3.us-east-1.aws.endpoints.huggingface.cloud",
+            "Content-Type": "audio/flac",
+            "minimum_duration": 30
+          }
+        }
+      },
+      {
+        "body": {
+          "red_flags": [
+            {
+              "detail": "The customer is experiencing an ongoing issue with the phone greeting not functioning as expected, indicating a lack of resolution.",
+              "moment": "The customer states, 'When I call Wood Floor's phone number, it says, thank you for choosing Glue & Nails, which it should not.'",
+              "category": "The Problem Not Getting Resolved"
+            },
+            {
+              "detail": "The customer expresses confusion about the process of setting up the auto attendant and the need for a new greeting, indicating a lack of clarity in the process.",
+              "moment": "The customer says, 'I'm not quite sure about the recording but if you do have the apps or you can actually send that to me and I can upload that for you.'",
+              "category": "The Process to Get Their Problem Fixed"
+            }
+          ],
+          "conversation_type": "support"
+        },
+        "type": "red_flag_analysis",
+        "dialog": 0,
+        "vendor": "openai",
+        "encoding": "none",
+        "vendor_schema": {
+          "model": "gpt-4o-mini",
+          "prompt": "Here is your vCon input: ",
+          "system_prompt": "You are an expert red flag evaluator for Clarity Voice. Your only task is to read and evaluate a customer service vCon (virtual conversation) between a customer and a Clarity Voice agent and **identify and classify red flags**, if any, with supporting evidence.\n\nBefore red flag detection, you MUST determine whether the call qualifies as an IVR-type call. If it does, STOP all analysis and only return:\n{ \"conversation_type\": \"ivr\" }\n\n-----------------------------------------------\nIVR CALL CLASSIFICATION RULES\n\nA call is classified as IVR ONLY if it contains:\n- Automated prompts only (e.g., “Press 1 for sales…”), and\n- No live agent or customer voices, OR\n- A voicemail or recorded message without two-way conversation, OR\n- Music on hold or dead air only\n\nDO NOT classify as IVR if:\n- A voicemail is left that includes urgency, cancellation threat, or emotional dissatisfaction (continue to red flag evaluation).\n- Both agent and customer speak at any point (must be analyzed).\n\nIf the call meets IVR-only criteria, STOP and output:\n{ \"conversation_type\": \"ivr\" }\n\n------------------------------------------------\nIf NOT IVR, continue with this JSON structure:\n\n{\n  \"conversation_type\": \"<sales | support | other>\",\n  \"red_flags\": [\n    {\n      \"category\": \"<One of: The Company, The Problem Not Getting Resolved, The Agent They’re Speaking To, The Process to Get Their Problem Fixed, The Price>\",\n      \"detail\": \"<Why this qualifies as a red flag>\",\n      \"moment\": \"<Direct quote or summary from the transcript showing this red flag>\"\n    }\n  ] || null\n}\n\n------------------------------------------------\nRED FLAG CLASSIFICATION CATEGORIES\n\n1. The Company / Clarity System\n   - Customer says they want to cancel or may leave Clarity.\n   - Expresses regret, disappointment, or lost trust in Clarity.\n   - Phrases like “regret signing up,” “terrible system,” “waste of money.”\n\n2. The Problem Not Getting Resolved\n   - Ongoing or repeat issue.\n   - Says they’ve contacted Clarity multiple times without success.\n   - Strong frustration due to unresolved problems.\n\n3. The Agent They're Speaking To\n   - Claims agent is rude, unhelpful, or not listening.\n   - Asks to speak to someone else (not tier escalation).\n   - Becomes more upset due to agent interaction.\n\n4. The Process to Get Their Problem Fixed\n   - Complains about being transferred, repeating info, or long wait times.\n   - Calls process “broken” or inefficient.\n\n5. The Price\n   - Questions billing, cost, or value.\n   - Says they’re paying for something that doesn’t work.\n   - Mentions switching due to pricing or comparing to a competitor.\n\n------------------------------------------------\nDO NOT FLAG IF:\n\n- The customer calmly explains a technical issue.\n- They accept escalation/follow-up without pushback.\n- They describe third-party or external issues (e.g., ISP outage) without blaming Clarity.\n- Emotional tone is neutral or purely descriptive.\n\n------------------------------------------------\nAMBIGUITY HANDLING:\n\nIf uncertain, ask:\n- Is there emotional or tonal escalation?\n- Are there repeated signs of dissatisfaction?\n- Are they seeking resolution or expressing regret?\n\nIf no clear evidence of severe dissatisfaction or emotion, return:\n\"red_flags\": null\n"
+        }
+      },
+      {
+        "body": {
+          "summary": "The call involved a customer, Greg from Glue & Nails, reporting an issue with the phone greeting for their Wood Floors line, which incorrectly played a Glue & Nails message. The next step agreed upon was to create a new auto attendant for the Wood Floors number and update the greeting accordingly."
+        },
+        "type": "ai_summary",
+        "dialog": 0,
+        "vendor": "openai",
+        "encoding": "none",
+        "vendor_schema": {
+          "model": "gpt-4o-mini",
+          "prompt": "Here is your vCon input: ",
+          "system_prompt": "Summarize this vCon transcript call in 1–2 concise sentences, capturing the main topic discussed and any key decision or next step."
+        }
+      },
+      {
+        "body": {
+          "topics": {
+            "testing": 2,
+            "greeting": 6,
+            "phone number": 4,
+            "auto attendant": 5,
+            "customer service": 3
+          },
+          "journey": {
+            "title": "Navigating the Auto Attendant Setup",
+            "phases": [
+              {
+                "quote": "\"Thank you for calling. This is Al. How can I help you? Hi, Al. This is Greg with Glue & Nails. Did we just speak a few minutes ago?\"",
+                "title": "Initial Contact",
+                "summary": "The call begins with the agent introducing themselves and the customer stating their issue with the phone greeting."
+              },
+              {
+                "quote": "\"When I call Wood Floor's phone number, it says, thank you for choosing Glue & Nails, which it should not.\"",
+                "title": "Problem Identification",
+                "summary": "The customer explains the issue with the incorrect greeting being played for the Wood Floors line."
+              },
+              {
+                "quote": "\"So what we are going to do is create a new auto attendant for that number...\"",
+                "title": "Proposed Solution",
+                "summary": "The agent suggests creating a new auto attendant for the Wood Floors number to resolve the issue."
+              },
+              {
+                "quote": "\"I'm not quite sure about the recording but if you do have the apps or you can actually send that to me and I can upload that for you.\"",
+                "title": "Customer Confusion",
+                "summary": "The customer expresses confusion about how to upload the correct greeting."
+              },
+              {
+                "quote": "\"Nope. Still going through the door and nails.\"",
+                "title": "Testing the Solution",
+                "summary": "The customer attempts to test the new setup but encounters issues."
+              },
+              {
+                "quote": "\"Can you go back to users yes all right so you'll see that there is an additional one Tulsa wood floor a8 that's the new auto attendant we created for wood floor.\"",
+                "title": "Resolution Attempt",
+                "summary": "The agent guides the customer through the process of changing the greeting."
+              },
+              {
+                "quote": "\"Well, that sounds easy enough. I think I could handle that.\"",
+                "title": "Call Conclusion",
+                "summary": "The customer feels more confident about the process but still has lingering concerns."
+              }
+            ]
+          },
+          "red_flags": [
+            {
+              "detail": "The customer is experiencing an ongoing issue with the phone greeting not functioning as expected, indicating a lack of resolution.",
+              "moment": "The customer states, 'When I call Wood Floor's phone number, it says, thank you for choosing Glue & Nails, which it should not.'"
+            },
+            {
+              "detail": "The customer expresses confusion about the process of setting up the auto attendant and the need for a new greeting, indicating a lack of clarity in the process.",
+              "moment": "The customer says, 'I'm not quite sure about the recording but if you do have the apps or you can actually send that to me and I can upload that for you.'"
+            }
+          ],
+          "sentiment": {
+            "agent": "neutral",
+            "score": {
+              "avg": 3,
+              "max": 4,
+              "min": 2
+            },
+            "customer": "frustrated"
+          },
+          "sentiments": [
+            {
+              "time": "00:00:00",
+              "score": 3,
+              "dialog": "Thank you for calling. This is Al. How can I help you?",
+              "confidence_score": 0.85
+            },
+            {
+              "time": "00:00:10",
+              "score": 2,
+              "dialog": "Hi, Al. This is Greg with Glue & Nails. Did we just speak a few minutes ago?",
+              "confidence_score": 0.8
+            },
+            {
+              "time": "00:00:20",
+              "score": 2,
+              "dialog": "Oh, I have a problem. When I call Wood Floor's phone number, it says, thank you for choosing Glue & Nails, which it should not.",
+              "confidence_score": 0.75
+            },
+            {
+              "time": "00:01:00",
+              "score": 3,
+              "dialog": "So what we are going to do is create a new auto attendant for that number.",
+              "confidence_score": 0.9
+            },
+            {
+              "time": "00:01:30",
+              "score": 2,
+              "dialog": "I'm not quite sure about the recording but if you do have the apps or you can actually send that to me and I can upload that for you.",
+              "confidence_score": 0.7
+            },
+            {
+              "time": "00:02:00",
+              "score": 2,
+              "dialog": "Nope. Still going through the door and nails.",
+              "confidence_score": 0.65
+            },
+            {
+              "time": "00:02:30",
+              "score": 3,
+              "dialog": "Well, that sounds easy enough. I think I could handle that.",
+              "confidence_score": 0.8
+            }
+          ],
+          "frustrations": [
+            {
+              "detail": "The customer was frustrated with the incorrect greeting being played.",
+              "moment": "The customer states, 'When I call Wood Floor's phone number, it says, thank you for choosing Glue & Nails, which it should not.'"
+            },
+            {
+              "detail": "The customer expressed confusion about the process of setting up the auto attendant.",
+              "moment": "The customer says, 'I'm not quite sure about the recording but if you do have the apps or you can actually send that to me and I can upload that for you.'"
+            }
+          ],
+          "agent_performance": {
+            "great_work": [
+              "The agent was polite and maintained a calm demeanor throughout the conversation, which helped to ease the customer's frustration.",
+              "The agent actively listened to the customer's concerns and provided relevant information about the auto attendant setup."
+            ],
+            "areas_for_improvement": [
+              {
+                "detail": "The agent could have provided clearer instructions on how to access and change the auto attendant settings, as the customer expressed confusion multiple times.",
+                "moment": "The customer states, 'I'm not quite sure about the recording but if you do have the apps or you can actually send that to me and I can upload that for you.'"
+              },
+              {
+                "detail": "The agent should have confirmed the customer's understanding of the process after explaining it, as the customer seemed unsure.",
+                "moment": "The customer says, 'I think I could handle that.' but there was no follow-up to ensure understanding."
+              },
+              {
+                "detail": "The agent could have proactively offered to send a follow-up email with instructions or a summary of the conversation to reinforce the information shared.",
+                "moment": "The agent did not mention sending any follow-up documentation despite the complexity of the issue."
+              },
+              {
+                "detail": "The agent should have asked more probing questions to clarify the customer's needs regarding the auto attendant setup.",
+                "moment": "The customer mentioned wanting a specific greeting but the agent did not delve deeper into what the customer envisioned."
+              },
+              {
+                "detail": "The agent could have acknowledged the customer's frustration more explicitly to show empathy and understanding.",
+                "moment": "The customer expressed frustration with the greeting issue but the agent did not validate this feeling."
+              }
+            ]
+          },
+          "conversation_type": "support",
+          "core_value_embodiment": {
+            "dedicated": "The agent stayed on the call to assist the customer with their issue, showing commitment to resolving the problem.",
+            "humbly_confident": "The agent displayed confidence in their knowledge but could have asked for help or clarification when the customer was confused.",
+            "serve_before_gain": "The agent focused on helping the customer without rushing to end the call for personal gain.",
+            "do_the_right_thing": "The agent attempted to provide a solution by creating a new auto attendant, which was the right action to take.",
+            "continuous_improvement": "The agent could improve by seeking feedback from the customer on the clarity of the instructions provided.",
+            "seek_to_understand_appreciate": "The agent listened to the customer's concerns but could have shown more appreciation for the customer's perspective."
+          },
+          "quality_assurance_template_questions": {
+            "Asks probing questions?": "No",
+            "Was the Agent courteous?": "Yes",
+            "Was the Agent empathetic?": "No",
+            "Did Agent actively listen?": "Yes",
+            "Did Agent State Their Name?": "Yes",
+            "Did Agent state their dept?": "No",
+            "Record the customer's name?": "Yes",
+            "Confirm email address is correct?": "Yes",
+            "If changes made, were they tested?": "Yes",
+            "Did the Agent avoid blaming others?": "Yes",
+            "Confirm callback number if call drops?": "No",
+            "Issue resolved or escalated appropriately?": "No",
+            "Ask or Verify business phone number and business?": "Yes"
+          }
+        },
+        "type": "qa_analysis",
+        "dialog": 0,
+        "vendor": "openai",
+        "encoding": "none",
+        "vendor_schema": {
+          "model": "gpt-4o-mini",
+          "prompt": "Here is your vCon input: ",
+          "system_prompt": "You are an expert QA evaluator for Clarity Voice. Your task is to read a customer service vCon (virtual conversation) and provide a detailed JSON format evaluation of the agent's performance.\n\n**Clarity Voice Core Values:**\n* **Dedicated:** Do what is needed to get it done, even if it means going above and beyond.\n* **Continuous Improvement:** Be willing to evaluate and seek to be better.\n* **Serve Before Gain:** Assist without expecting a return on your personal investment.\n* **Do the Right Thing:** Apply the Golden Rule, even when no one is around to see it.\n* **Humbly Confident:** Be self-assured but know when to ask for help.\n* **Seek to Understand & Appreciate:** Appreciate another’s perspective before sharing your own.\n\nIn your JSON output, you MUST analyze: conversation_type (sales, support, other), sentiment (agent, customer, score (min, max, avg), agent performance (specifically listing 'great work' and 'areas for improvement' with direct references to transcript moments), core value embodiment (providing specific examples for EACH of the Clarity Voice core values listed above), and quality assurance template questions (answering each question below with 'Yes' or 'No').\n\n**Quality Assurance Template Questions:**\n* Did Agent State Their Name?\n* Did Agent state their dept?\n* Ask or Verify business phone number and business?\n* Confirm callback number if call drops?\n* Confirm email address is correct?\n* Record the customer's name?\n* Did Agent actively listen?\n* Was the Agent courteous?\n* Was the Agent empathetic?\n* Did the Agent avoid blaming others?\n* Asks probing questions?\n* If changes made, were they tested?\n* Issue resolved or escalated appropriately?\n\nSpecifically, in the 'agent_performance' section, provide AT LEAST 5 distinct 'areas for improvement', each referencing a different moment in the transcript (break into two JSON fields {'detail': \"...\", 'moment': \"....\"}).\n\n**Red flags are exceptional cases in which things went off the rails. Identify red flags ONLY if there are instances where:** the customer was extremely upset, the agent was rude, the customer said they were going to cancel, or the customer said something negative about the Clarity phone system. In your 'red_flags' section, identify AT LEAST 1 significant red flag, providing details for each with direct references to transcript moments. **If no red flags are identified based on this definition, the 'red_flags' value in your JSON output MUST be `null`.**\n\nYour analysis should be detailed, specific, and *always* reference moments in the transcript to justify your evaluations (break into two JSON fields {'detail': \"...\", 'moment': \"....\"}). Focus particularly on proactive support, empathy, clear communication, efficiency, and adherence to Clarity Voice's core values.\n\nI also want you to generate a \"Journey\" for the conversation which narrates what happened during the call, show the ups and downs and changes in the conversation/frustration levels etc. \n\nHere is an example of a journey:\n\n{\n        \"title\": \"{{Tile based on the call and how it progressed}}\",\n        \"phases\": [\n          {\n            \"title\": \"Initial Contact\",\n            \"summary\": \"The call starts with standard pleasantries, Sarah hints at frustration.\",\n            \"quote\": \"\\\"Been better. So our phone's kinda up, kinda down. Sometimes they work, sometimes they don't.\\\"\"\n          },\n          {\n            \"title\": \"Problem Identification\",\n            \"summary\": \"Sarah details specific issues: phones showing 'no service', invalid extension errors.\",\n            \"quote\": \"\\\"Right now, it says no service. If I try to call downstairs to extension 1000, it says invalid extension. Although, I called her five minutes ago and it worked.\\\"\"\n          },\n          {\n            \"title\": \"Troubleshooting Attempts\",\n            \"summary\": \"Marcus suggests rebooting the phones, revealing knowledge gaps.\",\n            \"quote\": \"\\\"I don't know how to do that... And where I mean, how again, how would we know this? I didn't see this in any of the links.\\\"\"\n          },\n          {\n            \"title\": \"Additional Issues Surface\",\n            \"summary\": \"Sarah reveals more problems: incorrect caller ID, paging functionality not working.\",\n            \"quote\": \"\\\"The paging, you hit page all. It doesn't go through all the phones... And then we don't know what the voice mail passwords are. We don't know what the admin password is.\\\"\"\n          },\n          {\n            \"title\": \"Portal Access Resolution\",\n            \"summary\": \"Marcus sends a welcome email for portal access, confusion persists.\",\n            \"quote\": \"\\\"We're excited to get you started with your phone system... So I do need the portal or I don't need the portal for voice mail?\\\"\"\n          },\n          {\n            \"title\": \"Peak Frustration\",\n            \"summary\": \"Sarah reaches her breaking point due to continued issues.\",\n            \"quote\": \"\\\"I mean, we're just kinda flying blind here, and we've got live calls coming in, and nobody knows what we're doing... It's just not fun so far.\\\"\"\n          },\n          {\n            \"title\": \"Call Conclusion\",\n            \"summary\": \"Marcus acknowledges ongoing issues and promises to investigate further.\",\n            \"quote\": \"\\\"Yep. Let me let me go ahead and look into this real quick. I'll call you back shortly.\\\"\"\n          }\n        ]\n      }\n\nI'd also like a list of topics and how many times that topic was mentioned\n\nI'd also like a list of frustrations with a detail and moment for each. If frustrations were detected, that's okay too, just mark it null\n\nLastly, let's provide a list of sentiments for each segment of the call {\"time\": xx:xx:xx, \"score\": {score}, \"dialog\": \"{words exactly as spoken}\", \"confidence_score\": x.xx}\n"
+        }
+      }
+    ],
+    "appended": null,
+    "redacted": {},
+    "created_at": "2025-05-05T20:00:45.161558+00:00",
+    "attachments": [
+      {
+        "body": [
+          "cdr_id:174647163164aa5d73968827e5af622b163efb7c6d",
+          "orig_callid:20250505190031018571-0f289ee9735915834a26bce73b716cab",
+          "term_callid:20250505190102052029-62ea191bd80afaf8563dd5e362a10974",
+          "duration:1799",
+          "release_code:end",
+          "domain:clarity",
+          "call_type:1",
+          "mapped_call_type:Inbound",
+          "time_answer:2025-05-05T19:01:10",
+          "time_release:1770",
+          "time_start:2025-05-05T19:00:31",
+          "time_talking:1970-01-01T00:29:30"
+        ],
+        "type": "tags",
+        "encoding": "json"
+      }
+    ]
+  }
