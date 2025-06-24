@@ -136,16 +136,20 @@ class Vcon(VconBase):
     def transcript_dict(self):
         """Get the entire transcript dictionary from the first dialog"""
         try:
-            return self.vcon_dict["dialog"][0]["transcript"]
+            return self.vcon_dict["analysis"][0]["body"]["text"]
         except (KeyError, IndexError, TypeError):
             return None
 
     @transcript_dict.setter
     def transcript_dict(self, value):
         """Set the entire transcript dictionary in the first dialog"""
-        if "dialog" not in self.vcon_dict or not self.vcon_dict["dialog"]:
-            self.vcon_dict["dialog"] = [{}]
-        self.vcon_dict["dialog"][0]["transcript"] = value
+        if "analysis" not in self.vcon_dict:
+            self.vcon_dict["analysis"] = []
+        if len(self.vcon_dict["analysis"]) == 0:
+            self.vcon_dict["analysis"][0] = {}
+        if "body" not in self.vcon_dict["analysis"][0]:
+            self.vcon_dict["analysis"][0]["body"] = {}
+        self.vcon_dict["analysis"][0]["body"]["text"] = value
 
     @property
     def transcript(self):

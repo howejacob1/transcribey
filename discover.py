@@ -33,11 +33,11 @@ def discover(url, stats_queue):
                 vcon = Vcon.create_from_url(filename)
                 stats.bytes(stats_queue, bytes)
                 vcon.size = bytes
-                duration = vcon.size / (settings.sample_rate*2)
+                #duration = vcon.size / (settings.sample_rate*2)
                 stats.count(stats_queue)
                 count += 1
                 #print(f"Discovered {count} vcons")
-                stats.duration(stats_queue, duration)
+                #stats.duration(stats_queue, duration)
                 vcons.append(vcon)
                 if len(vcons) > discover_batch_size:
                     add_many(vcons)

@@ -152,7 +152,7 @@ def update_avg_status(status):
         status["avg"]["count"] = send_results_status["count"]
         status["avg"]["blocking_duration"] = 0
 
-def print_status(status, clear_terminal=True):
+def print_status(status, clear_terminal=False):
     # Clear screen and move cursor to top only if clear_terminal is True
     if clear_terminal:
         print("\033[2J\033[H", end="")    

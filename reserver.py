@@ -32,8 +32,8 @@ def reserver(sftp_url, vcons_ready_queue, stats_queue):
                 stats.start_blocking(stats_queue)
                 stats.count(stats_queue)
                 stats.bytes(stats_queue, vcon_cur.size)
-                duration = vcon_cur.size / (settings.sample_rate*2)
-                stats.duration(stats_queue, duration)
+                #duration = vcon_cur.size / (settings.sample_rate*2)
+                #stats.duration(stats_queue, duration)
                 vcons_ready_queue.put(vcon_cur)
             else:
                 dont_overwhelm_server()

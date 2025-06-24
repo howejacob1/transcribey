@@ -110,7 +110,7 @@ def processing_filename(vcon: Vcon):
     return cache.filename_to_processing_filename(vcon.uuid + "." + audio_extension)
 
 def mark_vcon_as_invalid(vcon: Vcon):
-    db.update_one({"uuid": vcon["uuid"]}, {"$set": {"corrupt": True, "done": True}})
+    db.update_one({"_id": vcon["uuid"]}, {"$set": {"corrupt": True, "done": True}})
 
 def remove_vcon_from_processing(vcon: Vcon):
     os.remove(processing_filename(vcon))
@@ -139,12 +139,18 @@ def unmarked_all_reserved():
 
 def insert_one(vcon: Vcon):
     vcon_dict = vcon.to_dict()
+    # Use UUID as _id for efficient indexing
+    if "uuid" in vcon_dict:
+        vcon_dict["_id"] = vcon_dict["uuid"]
     db.insert_one(vcon_dict)
 
 def insert_many(vcons: List[Vcon]):
     dicts = []
     for vcon in vcons:
         vcon_dict = vcon.to_dict()
+        # Use UUID as _id for efficient indexing
+        if "uuid" in vcon_dict:
+            vcon_dict["_id"] = vcon_dict["uuid"]
         dicts.append(vcon_dict)
     db.insert_many(dicts)
 
@@ -254,10 +260,9 @@ def mark_vcons_as_done(vcons):
 def update_vcon_on_db(vcon: Vcon):
     vcon_uuid_val = vcon.uuid
     vcon_dict = vcon.to_dict()
-    # Remove _id field to prevent MongoDB immutability errors
-    if "_id" in vcon_dict:
-        del vcon_dict["_id"]
-    db.replace_one({"uuid": vcon_uuid_val}, vcon_dict, upsert=True)
+    # Use UUID as _id for efficient indexing
+    vcon_dict["_id"] = vcon_uuid_val
+    db.replace_one({"_id": vcon_uuid_val}, vcon_dict, upsert=True)
 
 def load_all():
     return list(db.find())
@@ -276,7 +281,9 @@ def find_and_reserve() -> Vcon | None:
         return_document=True
     )
     if dict:
-        dict["_id"] = str(dict["_id"])
+        # Keep _id as uuid for consistency
+        if "_id" in dict and "uuid" not in dict:
+            dict["uuid"] = dict["_id"]
         vcon = Vcon.from_dict(dict)
         return vcon
     return None

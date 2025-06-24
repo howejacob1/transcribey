@@ -40,8 +40,8 @@ def preprocess_vcon_one(vcon_cur: Vcon, stats_queue: Queue):
         if audio_data.ndim != 1:
             audio_data = audio_data[0]
         audio_data = audio_data.astype(np.float32)
-        bytes = audio.get_size(audio_data)
-        vcon_cur.size = bytes
+        # bytes = audio.get_size(audio_data)
+        # vcon_cur.size = bytes
         vcon_cur.duration = duration
         vcon_cur.audio = audio_data
         vcon_cur.sample_rate = settings.sample_rate
