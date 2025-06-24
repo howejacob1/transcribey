@@ -1,0 +1,8 @@
+🟢 avg                          |  274.18x   5,566.0    40.3/s     15.88MB/s |    2191.24MB         630.5m | ( 100.0%)
+🔴 discover.MainThread          | 5236.45x   5,577.0  1326.3/s    159.80MB/s |     671.97MB         367.0m | ( 100.0%)
+⚪ transcribe_en.MainThread     |  369.71x   5,566.0    54.4/s     21.41MB/s |    2191.24MB         630.5m | (  78.6%)
+⚪ send_results.MainThread      | 5261.27x   5,566.0   774.1/s    304.75MB/s |    2191.24MB         630.5m | (   5.5%)
+⚪ lang_detect.MainThread       |  528.92x   5,577.0    77.6/s     30.64MB/s |    2203.37MB         633.9m | (  55.4%)
+⚪ reserver.MainThread          |  211.27x   5,577.0    53.5/s      6.45MB/s |     671.97MB         367.0m | (  80.3%)
+🟢 preprocess.MainThread        |  639.44x   5,577.0    93.8/s     37.05MB/s |    2203.37MB         633.9m | (  45.9%)
+Mem: 1,725.0MB/12,227.0MB (14.1%) | Load: 0.0% | Temp: 44.0°C

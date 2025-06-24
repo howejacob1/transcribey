@@ -1,0 +1,64 @@
+{
+  "avg": {
+    "bytes": 2297679112.0,
+    "duration": 37830.18612499998,
+    "count": 5566.0,
+    "blocking_duration": 0,
+    "start": 1750299706.609031,
+    "stop": 0
+  },
+  "discover.MainThread": {
+    "start": 1750299714.2897563,
+    "count": 5577.0,
+    "bytes": 704608229.0,
+    "duration": 22019.007156249983,
+    "start_blocking": null,
+    "blocking_duration": 0.0,
+    "stop": 1750299718.8017113
+  },
+  "send_results.MainThread": {
+    "start": 1750299714.8051555,
+    "count": 5566.0,
+    "bytes": 2297679112.0,
+    "duration": 37830.18612499998,
+    "start_blocking": 1750299834.6431108,
+    "blocking_duration": 112.7306489944458,
+    "stop": null
+  },
+  "preprocess.MainThread": {
+    "start": 1750299714.9200826,
+    "count": 5577.0,
+    "bytes": 2310405512.0,
+    "duration": 38032.38612499996,
+    "start_blocking": null,
+    "blocking_duration": 70.86162376403809,
+    "stop": null
+  },
+  "transcribe_en.MainThread": {
+    "start": 1750299715.0499835,
+    "count": 5566.0,
+    "bytes": 2297679112.0,
+    "duration": 37830.18612499998,
+    "start_blocking": 1750299834.6397855,
+    "blocking_duration": 15.011240243911743,
+    "stop": null
+  },
+  "lang_detect.MainThread": {
+    "start": 1750299715.0922766,
+    "count": 5577.0,
+    "bytes": 2310405512.0,
+    "duration": 38032.38612499996,
+    "start_blocking": 1750299834.0224538,
+    "blocking_duration": 45.734437465667725,
+    "stop": null
+  },
+  "reserver.MainThread": {
+    "start": 1750299715.1455214,
+    "count": 5577.0,
+    "bytes": 704608229.0,
+    "duration": 22019.007156249983,
+    "start_blocking": 1750299833.800287,
+    "blocking_duration": 14.451971292495728,
+    "stop": null
+  }
+}

@@ -28,7 +28,7 @@ echo "=== Cleaning up GPU processes before test ==="
 kill_gpu_processes
 
 source .venv/bin/activate
-COMMAND="python main.py head --dataset med"
+COMMAND="python main.py head --dataset test_recordings"
 echo $COMMAND
 $COMMAND
 

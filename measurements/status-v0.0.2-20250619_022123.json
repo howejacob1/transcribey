@@ -1,0 +1,19 @@
+{
+  "avg": {
+    "bytes": 1000000.0,
+    "duration": 100.0,
+    "count": 10.0,
+    "blocking_duration": 0,
+    "start": 1750299683.078291,
+    "stop": 0
+  },
+  "test_program.MainThread": {
+    "start": 1750299583.0782914,
+    "count": 10.0,
+    "bytes": 1000000.0,
+    "duration": 100.0,
+    "start_blocking": null,
+    "blocking_duration": 5.0,
+    "stop": 1750299683.078292
+  }
+}

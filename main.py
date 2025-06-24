@@ -71,7 +71,7 @@ if __name__ == "__main__":
     parser.add_argument("mode", choices=["head", "worker", "discover", "print", "delete_all", "measure"], help="head:slurp and run worker. ")
     parser.add_argument("--url", type=str, default=settings.sftp_url, help="Override SFTP URL (applies to both head and worker)")
     parser.add_argument("--production", action="store_true", default=False, help="Enable production mode (applies to both head and worker)")
-    parser.add_argument("--dataset", choices=["fast", "med", "slow"], help="use precompiled dataset")
+    parser.add_argument("--dataset", choices=["fast", "med", "slow", "test_recordings"], help="use precompiled dataset")
     args = parser.parse_args()
     print(f"start method: {multiprocessing.get_start_method()}")
     assert multiprocessing.get_start_method() == "spawn", f"Expected spawn, got {multiprocessing.get_start_method()}"
@@ -82,6 +82,8 @@ if __name__ == "__main__":
         args.url = "sftp://bantaim@127.0.0.1:22/home/bantaim/conserver/openslr-12/"
     elif args.dataset == "slow":
         args.url = "sftp://bantaim@127.0.0.1:22/home/bantaim/conserver/fake_wavs_medlarge/"
+    elif args.dataset == "test_recordings":
+        args.url = "sftp://bantaim@127.0.0.1:22/home/bantaim/conserver/recordings_2025-06-19/"
     print("wtf")
     debug = not args.production
     stats_queue = multiprocessing.Queue(maxsize=100000000)

@@ -273,7 +273,7 @@ def run(stats_queue):
             save_results(status)
             break
         if time.time() - start_time > settings.status_update_seconds:
-            print_status(status)
+            print_status(status, clear_terminal=False)
             start_time = time.time()
             continue
         try: 
