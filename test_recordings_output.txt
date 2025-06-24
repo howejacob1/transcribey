@@ -1,8 +1,3 @@
-[24/Jun/2025 14:52:05] INFO - NumExpr defaulting to 16 threads.
-[24/Jun/2025 14:52:08] INFO - PyTorch version 2.7.1+cu128 available.
-start method: spawn
-wtf
-[24/Jun/2025 14:52:08] INFO - Start in mode print.
 [{'_id': ObjectId('685abb0788b9326782772ddf'),
   'analysis': [],
   'attachments': [],

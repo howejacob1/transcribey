@@ -28,20 +28,20 @@ dont_overwhelm_server_time_seconds = 1
 
 # MongoDB connection settings
 preprocess_batch_timeout_seconds = 0.1
-preprocess_batch_max_size = 25  # Smaller batch size
-preprocess_batch_max_len = 16   # Smaller max length
+preprocess_batch_max_size = 8  # Smaller batch size
+preprocess_batch_max_len = 4   # Smaller max length
 
 min_audio_duration_seconds = 1.0
 status_update_seconds = 20
 
 lang_detect_batch_timeout_seconds = 0.1
-lang_detect_batch_max_size = 50
-lang_detect_batch_max_len = 32
+lang_detect_batch_max_size = 8
+lang_detect_batch_max_len = 4
 lang_detect_batch_ready = 0.1
 
 transcribe_batch_timeout_seconds = 0.1
-transcribe_batch_max_size = 50
-transcribe_batch_max_len = 32
+transcribe_batch_max_size = 8
+transcribe_batch_max_len = 4
 
 queue_max_size = 200
 die_after_no_measurements_time = 10
