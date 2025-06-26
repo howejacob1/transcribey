@@ -3,7 +3,7 @@ import socket
 import subprocess
 
 # Settings for main.py
-cache_dir = "cache/"
+cache_dir = "/dev/shm/cache/"
 processing_dir = os.path.join(cache_dir, "processing/")
 downloading_dir = os.path.join(cache_dir, "downloading/")
 lang_detect_threshold = 0.2
