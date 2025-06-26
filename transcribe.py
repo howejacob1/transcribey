@@ -1,5 +1,5 @@
 import time
-from multiprocessing import Queue
+from torch.multiprocessing import Queue
 from typing import List
 import logging
 
@@ -96,8 +96,8 @@ def transcribe_batch(vcon_batch: List[Vcon], model, config: dict, model_name: st
     return transcribed_vcons
 
 def transcribe(lang_detected_queue: Queue,
-                transcribed_queue: Queue,
-                stats_queue: Queue,
+               transcribed_queue: Queue,
+               stats_queue: Queue,
                 model_name: str,
                 language: str):
     print(f"TRANSCRIBE PROCESS STARTING: language={language}, model={model_name}")
@@ -190,8 +190,8 @@ def transcribe(lang_detected_queue: Queue,
         exit(1)
 
 def start_process(lang_detected_queue: Queue,
-                 transcribed_queue: Queue,
-                 stats_queue: Queue,
+                  transcribed_queue: Queue,
+                  stats_queue: Queue,
                  language: str):
     """Start transcription process for specified language"""
     if language == "en":
@@ -207,13 +207,13 @@ def transcribe_non_en(lang_detected_queue, transcribed_queue, stats_queue, model
     return transcribe(lang_detected_queue, transcribed_queue, stats_queue, model_name, language)
 
 def start_process_en(lang_detected_queue: Queue,
-                 transcribed_queue: Queue,
-                 stats_queue: Queue):
+                     transcribed_queue: Queue,
+                     stats_queue: Queue):
     """Start transcription process for specified language"""
     return process.start_process(target=transcribe_en, args=(lang_detected_queue, transcribed_queue, stats_queue, settings.en_model_name, "en"))
 
 def start_process_non_en(lang_detected_queue: Queue,
-                 transcribed_queue: Queue,
-                 stats_queue: Queue):
+                         transcribed_queue: Queue,
+                         stats_queue: Queue):
     """Start transcription process for specified language"""
     return process.start_process(target=transcribe_non_en, args=(lang_detected_queue, transcribed_queue, stats_queue, settings.non_en_model_name, "auto"))

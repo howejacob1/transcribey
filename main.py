@@ -1,4 +1,4 @@
-import multiprocessing
+import torch.multiprocessing as multiprocessing
 multiprocessing.set_start_method("spawn", force=True)
 
 import argparse
@@ -34,14 +34,14 @@ def main(sftp_url, stats_queue=None):
     # sftp = sftp_utils.connect_keep_trying(sftp_url)
     vcon.unmarked_all_reserved()
     programs = []
-    reserved_vcons_queue = multiprocessing.Queue(maxsize=settings.queue_max_size)
+    reserved_vcons_queue = multiprocessing.Queue()
     programs.append(reserver.start_process(sftp_url, reserved_vcons_queue, stats_queue))
-    preprocessed_vcons_queue = multiprocessing.Queue(maxsize=settings.queue_max_size)
+    preprocessed_vcons_queue = multiprocessing.Queue()
     programs.append(preprocess.start_process(reserved_vcons_queue, preprocessed_vcons_queue, stats_queue))
-    lang_detected_en_vcons_queue = multiprocessing.Queue(maxsize=settings.queue_max_size)
-    lang_detected_non_en_vcons_queue = multiprocessing.Queue(maxsize=settings.queue_max_size)
+    lang_detected_en_vcons_queue = multiprocessing.Queue()
+    lang_detected_non_en_vcons_queue = multiprocessing.Queue()
     programs.append(lang_detect.start_process(preprocessed_vcons_queue, lang_detected_en_vcons_queue, lang_detected_non_en_vcons_queue, stats_queue))
-    transcribed_vcons_queue = multiprocessing.Queue(maxsize=settings.queue_max_size)
+    transcribed_vcons_queue = multiprocessing.Queue()
     programs.append(transcribe.start_process_en(lang_detected_en_vcons_queue, transcribed_vcons_queue, stats_queue))
     programs.append(transcribe.start_process_non_en(lang_detected_non_en_vcons_queue, transcribed_vcons_queue, stats_queue))
     programs.append(send_results.start_process(transcribed_vcons_queue, stats_queue))
@@ -85,7 +85,7 @@ if __name__ == "__main__":
     elif args.dataset == "test_recordings":
         args.url = "sftp://bantaim@127.0.0.1:22/home/bantaim/conserver/recordings_2025-06-19/"
     debug = not args.production
-    stats_queue = multiprocessing.Queue(maxsize=100000000)
+    stats_queue = multiprocessing.Queue()
     discover_process = None
 
     logging.info(f"Start in mode {args.mode}.")

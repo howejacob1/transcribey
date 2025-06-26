@@ -1,6 +1,6 @@
 import logging
 import time
-from multiprocessing import Queue
+from torch.multiprocessing import Queue
 
 import process
 import stats

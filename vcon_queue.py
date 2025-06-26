@@ -1,4 +1,4 @@
-import multiprocessing
+import torch.multiprocessing as multiprocessing
 import queue
 import threading
 import time

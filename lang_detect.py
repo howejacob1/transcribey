@@ -17,7 +17,7 @@ import process
 import settings
 import stats
 import vcon_utils
-from multiprocessing import Queue
+from torch.multiprocessing import Queue
 from gpu import gpu_ram_free_bytes, move_to_gpu_maybe, we_have_a_gpu, gc_collect_maybe
 from process import ShutdownException, setup_signal_handlers
 from stats import with_blocking_time

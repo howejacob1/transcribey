@@ -1,9 +1,9 @@
 import logging
-import multiprocessing
+import torch.multiprocessing as multiprocessing
 import numpy as np
 import torchaudio
 import threading
-from multiprocessing import Queue
+from torch.multiprocessing import Queue
 from queue import Empty
 from time import time
 from typing import List
@@ -51,7 +51,7 @@ def preprocess_vcon_one(vcon_cur: Vcon, stats_queue: Queue):
         vcon.remove_vcon_from_processing(vcon_cur)
         return None
 
-def collect_batch_with_timeout(reserved_vcons_queue: multiprocessing.Queue, batch_size: int = 16, timeout: float = 0.1):
+def collect_batch_with_timeout(reserved_vcons_queue: Queue, batch_size: int = 16, timeout: float = 0.1):
     """Collect vcons for a batch with timeout"""
     batch = []
     batch_start = time()
@@ -116,9 +116,9 @@ def preprocess_batch(batch: List[Vcon], stats_queue: Queue):
     return processed_batch
 
 # Technically may have some max size problems but whatever
-def preprocess(reserved_vcons_queue: multiprocessing.Queue,
-          preprocessed_vcons_queue: multiprocessing.Queue,
-          stats_queue: multiprocessing.Queue):
+def preprocess(reserved_vcons_queue: Queue,
+               preprocessed_vcons_queue: Queue,
+               stats_queue: Queue):
     stats.start(stats_queue)
     vcons_in_memory = []
     try:
@@ -158,6 +158,6 @@ def preprocess(reserved_vcons_queue: multiprocessing.Queue,
         stats.stop(stats_queue)
         exit()
 
-def start_process(reserved_vcons_queue: multiprocessing.Queue, preprocessed_vcons_queue: multiprocessing.Queue, stats_queue: multiprocessing.Queue):
+def start_process(reserved_vcons_queue: Queue, preprocessed_vcons_queue: Queue, stats_queue: Queue):
     """Start preprocess process"""
     return process.start_process(target=preprocess, args=(reserved_vcons_queue, preprocessed_vcons_queue, stats_queue))

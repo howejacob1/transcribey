@@ -1,7 +1,7 @@
 import ctypes
 import os
 import logging
-import multiprocessing
+import torch.multiprocessing as multiprocessing
 import signal
 import sys
 import threading

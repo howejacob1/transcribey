@@ -1,5 +1,5 @@
 import json
-import multiprocessing
+import torch.multiprocessing as multiprocessing
 import os
 import sys
 import subprocess

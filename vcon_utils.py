@@ -4,7 +4,7 @@ import mimetypes
 import os
 import threading
 from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor, as_completed
-from multiprocessing import Event, Process
+from torch.multiprocessing import Event, Process
 from pprint import pprint
 from typing import List
 import binpacking
