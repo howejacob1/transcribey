@@ -31,6 +31,10 @@ source .venv/bin/activate
 COMMAND="python main.py head --dataset test_recordings"
 echo $COMMAND
 $COMMAND
+COMMAND="python main.py print"
+echo $COMMAND
+$COMMAND
+
 
 # Kill GPU processes after test completes
 echo "=== Cleaning up GPU processes after test ==="

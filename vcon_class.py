@@ -64,7 +64,7 @@ class Vcon(VconBase):
     def size(self, value: int):
         """Set the size of the vcon"""
         if "dialog" not in self.vcon_dict or not self.vcon_dict["dialog"]:
-            self.vcon_dict["dialog"] = [{"type": "audio"}]
+            self.vcon_dict["dialog"] = [{"type": "recording"}]
         self.vcon_dict["dialog"][0]["size_bytes"] = value
 
     @property
@@ -81,7 +81,7 @@ class Vcon(VconBase):
     def duration(self, value: float):
         """Set the duration of the vcon"""
         if "dialog" not in self.vcon_dict or not self.vcon_dict["dialog"]:
-            self.vcon_dict["dialog"] = [{"type": "audio"}]
+            self.vcon_dict["dialog"] = [{"type": "recording"}]
         self.vcon_dict["dialog"][0]["duration"] = value
 
     @property
@@ -98,7 +98,7 @@ class Vcon(VconBase):
     def filename(self, value):
         """Set the filename in the first dialog"""
         if "dialog" not in self.vcon_dict or not self.vcon_dict["dialog"]:
-            self.vcon_dict["dialog"] = [{"type": "audio"}]
+            self.vcon_dict["dialog"] = [{"type": "recording"}]
         self.vcon_dict["dialog"][0]["filename"] = value
 
     @property
@@ -115,7 +115,7 @@ class Vcon(VconBase):
     def audio(self, value):
         """Set the audio data in the first dialog"""
         if "dialog" not in self.vcon_dict or not self.vcon_dict["dialog"]:
-            self.vcon_dict["dialog"] = [{"type": "audio"}]
+            self.vcon_dict["dialog"] = [{"type": "recording"}]
         self.vcon_dict["dialog"][0]["body"] = value
 
     def find_transcript_analysis(self):
@@ -196,7 +196,7 @@ class Vcon(VconBase):
     def sample_rate(self, value):
         """Set the sample rate of the vcon"""
         if "dialog" not in self.vcon_dict or not self.vcon_dict["dialog"]:
-            self.vcon_dict["dialog"] = [{"type": "audio"}]
+            self.vcon_dict["dialog"] = [{"type": "recording"}]
         self.vcon_dict["dialog"][0]["sample_rate"] = value
 
     @property
@@ -253,7 +253,7 @@ class Vcon(VconBase):
         
         # Create the dialog directly in the dict
         dialog_dict = {
-            "type": "audio",
+            "type": "recording",
             "start": now.isoformat(),
             "parties": [0],
             "originator": 0,
