@@ -276,6 +276,11 @@ def dump_jsonl():
     output_filename = "vcons.jsonl"
     with open(output_filename, "w") as f:
         for vcon in vcons:
+            del vcon["_id"]
+            del vcon["processed_by"]
+            del vcon["dialog"][0]["size_bytes"]
+            del vcon["dialog"][0]["sample_rate"]
+
             f.write(json.dumps(vcon) + "\n")
 
 def all_urls():
