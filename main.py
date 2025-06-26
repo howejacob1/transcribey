@@ -84,7 +84,6 @@ if __name__ == "__main__":
         args.url = "sftp://bantaim@127.0.0.1:22/home/bantaim/conserver/fake_wavs_medlarge/"
     elif args.dataset == "test_recordings":
         args.url = "sftp://bantaim@127.0.0.1:22/home/bantaim/conserver/recordings_2025-06-19/"
-    print("wtf")
     debug = not args.production
     stats_queue = multiprocessing.Queue(maxsize=100000000)
     discover_process = None

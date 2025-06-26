@@ -1,5 +1,6 @@
 import logging
 import time
+from pprint import pprint
 from time import time
 from typing import List
 
@@ -48,6 +49,9 @@ def discover(url, stats_queue):
         stats.stop(stats_queue)            
         block_until_threads_and_processes_finish(threads)
     except ShutdownException as e:
+        dump_thread_stacks()
+    except Exception as e:
+        print(f"Error: {e}")
         dump_thread_stacks()
     finally: 
         if sftp_client:

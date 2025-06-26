@@ -169,27 +169,18 @@ def insert_many_maybe_async(vcons: List[Vcon] | None):
         thread.start()
         return thread
 
-def insert_maybe(vcon):
-    """Insert a vcon if it doesn't already exist (accepts Vcon object or dict)"""
-    if vcon:
-        # Get filename whether it's a Vcon object or dict
-        if hasattr(vcon, 'filename'):
-            filename = vcon.filename
-        else:
-            # Handle dict case more safely
-            try:
-                filename = vcon["dialog"][0]["filename"] if vcon.get("dialog") and len(vcon["dialog"]) > 0 else None
-            except (KeyError, IndexError, TypeError):
-                filename = None
-        # Skip vcons without filenames to prevent duplicate key errors
-        if filename is not None and not exists_by_filename(filename):
-            insert_one(vcon)  # insert_one now handles the conversion
-
 def get_by_filename(filename):
     return db.find_one({"dialog.0.filename": filename})
 
 def exists_by_filename(filename):
     return get_by_filename(filename) is not None
+
+def insert_maybe(vcon):
+    """Insert a vcon if it doesn't already exist (accepts Vcon object or dict)"""
+    exists = exists_by_filename(vcon.filename)
+    if not exists:
+        insert_one(vcon)
+
 
 # def create(url):
 #     vcon = None

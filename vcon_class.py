@@ -15,28 +15,32 @@ import gpu
 class Vcon(VconBase):
     def __init__(self, vcon_dict=None, property_handling=None):
         super().__init__(vcon_dict, property_handling)
+        # self.vcon_dict["dialog"] = []
+        # self.vcon_dict["analysis"] = []
+        # self.vcon_dict["vcon"] = "0.0.2"
+        # return self
 
     @classmethod
     def build_new(cls):
         """Create a new Vcon instance"""
         # Use the parent's build_new method which properly initializes all fields including UUID
         vcon_base = VconBase.build_new()
-        # Initialize empty dialog and analysis arrays - don't create incomplete entries
+        # Create our custom class instance from the properly initialized vcon_dict
         vcon_base.vcon_dict["dialog"] = []
         vcon_base.vcon_dict["analysis"] = []
-        # Create our custom class instance from the properly initialized vcon_dict
+
         return cls(vcon_dict=vcon_base.vcon_dict)
 
     @classmethod
     def from_dict(cls, vcon_dict):
         """Create a Vcon instance from a dictionary (standard vcon format)"""
-        with suppress_output():
+        with suppress_output(should_suppress=True):
             return cls(vcon_dict=vcon_dict)
 
     @classmethod
     def create_from_url(cls, url):
         """Create a new Vcon instance from a URL (class method version)"""
-        with suppress_output():
+        with suppress_output(should_suppress=True):
             vcon = cls.build_new()
             vcon._setup_from_url(url)
             return vcon
@@ -88,7 +92,7 @@ class Vcon(VconBase):
     def filename(self):
         """Get the filename from the first dialog"""
         try:
-            if not self.vcon_dict.get("dialog") or len(self.vcon_dict["dialog"]) == 0:
+            if not self.vcon_dict.get("dialog", None) or len(self.vcon_dict["dialog"]) == 0:
                 return None
             return self.vcon_dict["dialog"][0]["filename"]
         except (KeyError, IndexError, TypeError):
@@ -98,7 +102,7 @@ class Vcon(VconBase):
     def filename(self, value):
         """Set the filename in the first dialog"""
         if "dialog" not in self.vcon_dict or not self.vcon_dict["dialog"]:
-            self.vcon_dict["dialog"] = [{"type": "recording"}]
+            self.vcon_dict["dialog"] = [{"type": "recording", "filename": value, "encoding": "none"}]
         self.vcon_dict["dialog"][0]["filename"] = value
 
     @property
@@ -170,7 +174,6 @@ class Vcon(VconBase):
         """Set the languages in the first dialog transcript"""
         self.vcon_dict["analysis"].append({"type":"language_identification", "body":{"languages":languages},
                                            "vendor":"bantaim"})
-
 
     @property
     def done(self):
@@ -257,10 +260,10 @@ class Vcon(VconBase):
             "start": now.isoformat(),
             "parties": [0],
             "originator": 0,
-            "mimetype": mimetype,
+            "mediatype": mimetype,
             "filename": url,
             "body": None,
-            "encoding": None,
+            "encoding": "none",
         }
         
         # Replace or add the first dialog entry
