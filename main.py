@@ -68,7 +68,7 @@ def main(sftp_url, stats_queue=None):
         
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Transcribey main entry point")
-    parser.add_argument("mode", choices=["head", "worker", "discover", "print", "delete_all", "measure"], help="head:slurp and run worker. ")
+    parser.add_argument("mode", choices=["head", "worker", "discover", "print", "delete_all", "measure", "dump_jsonl"], help="head:slurp and run worker. ")
     parser.add_argument("--url", type=str, default=settings.sftp_url, help="Override SFTP URL (applies to both head and worker)")
     parser.add_argument("--production", action="store_true", default=False, help="Enable production mode (applies to both head and worker)")
     parser.add_argument("--dataset", choices=["fast", "med", "slow", "test_recordings"], help="use precompiled dataset")
@@ -109,5 +109,6 @@ if __name__ == "__main__":
         vcon.load_and_print_all()
     elif args.mode == "delete_all":
         vcon.delete_all()
-
+    elif args.mode == "dump_jsonl":
+        vcon.dump_jsonl()
         

@@ -1,4 +1,5 @@
 import datetime
+import json
 import logging
 import mimetypes
 import os
@@ -269,6 +270,13 @@ def load_all():
 def load_and_print_all():
     vcons = load_all()
     pprint(vcons)
+
+def dump_jsonl():
+    vcons = load_all()
+    output_filename = "vcons.jsonl"
+    with open(output_filename, "w") as f:
+        for vcon in vcons:
+            f.write(json.dumps(vcon) + "\n")
 
 def all_urls():
     return [vcon.filename for vcon in db.find({"dialog.0.filename": 1})]

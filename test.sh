@@ -31,7 +31,7 @@ source .venv/bin/activate
 COMMAND="python main.py head --dataset test_recordings"
 echo $COMMAND
 $COMMAND
-COMMAND="python main.py print"
+COMMAND="python main.py dump_jsonl"
 echo $COMMAND
 $COMMAND
 

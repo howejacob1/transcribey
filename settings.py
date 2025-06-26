@@ -32,7 +32,7 @@ preprocess_batch_max_size = 8  # Smaller batch size
 preprocess_batch_max_len = 4   # Smaller max length
 
 min_audio_duration_seconds = 1.0
-status_update_seconds = 20
+status_update_seconds = 20.0
 
 lang_detect_batch_timeout_seconds = 0.1
 lang_detect_batch_max_size = 8
