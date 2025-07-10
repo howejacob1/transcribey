@@ -47,7 +47,6 @@ def main(sftp_url, stats_queue=None):
         programs.append(transcribe.start_process_non_en(lang_detected_non_en_vcons_queue, transcribed_vcons_queue, stats_queue))
     programs.append(send_results.start_process(transcribed_vcons_queue, stats_queue))
 
-
     # Simple queue watching function instead of watch_vcon_queue
     def watch_queue(queue_to_watch):
         try:
@@ -67,9 +66,74 @@ def main(sftp_url, stats_queue=None):
 
     print("Done.")
         
+
+def print_out_statistics():
+    from mongo_utils import db
+    
+    # Get all vcons count
+    total_vcons = db.count_documents({})
+    print(f"Total vcons: {total_vcons}")
+    
+    # Get done vcons count
+    done_vcons = db.count_documents({"done": True})
+    print(f"Total vcons that are done: {done_vcons}")
+    
+    # Get corrupt vcons count
+    corrupt_vcons = db.count_documents({"corrupt": True})
+    print(f"Total vcons that are corrupt: {corrupt_vcons}")
+    
+    # Calculate percentages
+    if done_vcons > 0:
+        corrupt_percentage = (corrupt_vcons / done_vcons) * 100
+        print(f"Percentage corrupt / done: {corrupt_percentage:.2f}%")
+    else:
+        print("Percentage corrupt / done: N/A (no done vcons)")
+    
+    if total_vcons > 0:
+        done_percentage = (done_vcons / total_vcons) * 100
+        print(f"Percentage done / total: {done_percentage:.2f}%")
+    else:
+        print("Percentage done / total: N/A (no vcons)")
+    
+    # Get English vcons count
+    english_vcons = db.count_documents({
+        "analysis": {
+            "$elemMatch": {
+                "type": "language_identification",
+                "body.languages": "en"
+            }
+        }
+    })
+    print(f"Total English vcons: {english_vcons}")
+    
+    # Calculate English percentage
+    if done_vcons > 0:
+        english_percentage = (english_vcons / done_vcons) * 100
+        print(f"Percentage English vcons / done: {english_percentage:.2f}%")
+    else:
+        print("Percentage English vcons / done: N/A (no done vcons)")
+    
+    # Get Spanish vcons count
+    spanish_vcons = db.count_documents({
+        "analysis": {
+            "$elemMatch": {
+                "type": "language_identification",
+                "body.languages": "es"
+            }
+        }
+    })
+    print(f"Total Spanish vcons: {spanish_vcons}")
+    
+    # Calculate Spanish percentage
+    if done_vcons > 0:
+        spanish_percentage = (spanish_vcons / done_vcons) * 100
+        print(f"Percentage Spanish vcons / done: {spanish_percentage:.2f}%")
+    else:
+        print("Percentage Spanish vcons / done: N/A (no done vcons)")
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Transcribey main entry point")
-    parser.add_argument("mode", choices=["head", "worker", "discover", "print", "delete_all", "measure", "dump_jsonl"], help="head:slurp and run worker. ")
+    parser.add_argument("mode", choices=["head", "worker", "discover", "print", "delete_all", "measure", "dump_jsonl", "stats"], help="head:slurp and run worker. ")
     parser.add_argument("--url", type=str, default=settings.sftp_url, help="Override SFTP URL (applies to both head and worker)")
     parser.add_argument("--production", action="store_true", default=False, help="Enable production mode (applies to both head and worker)")
     parser.add_argument("--dataset", choices=["fast", "med", "slow", "test_recordings"], help="use precompiled dataset")
@@ -113,6 +177,8 @@ if __name__ == "__main__":
         vcon.delete_all()
     elif args.mode == "dump_jsonl":
         vcon.dump_jsonl()
+    elif args.mode == "stats":
+        print_out_statistics()
         
 
     # We have a DB full of Vcons. 
