@@ -25,14 +25,14 @@ vcon_queue_max_bytes = 1
 sftp_url = "sftp://bantaim@banidk0:22/home/bantaim/conserver/fake_wavs_cute/"
 sample_rate = 16000
 max_discover_workers = 1
-discover_batch_size = 1000  # Increased from 1 for much faster discovery
+discover_batch_size = 1024  # Increased from 1 for much faster discovery
 dont_overwhelm_server_time_seconds = 1
 
 # SFTP Performance tuning
 sftp_buffer_size = 100*1024*1024  # 128KB buffer for downloads (increased from 64KB)
 sftp_prefetch_enabled = True  # Enable prefetch for better performance
 sftp_parallel_downloads = 32  # Number of parallel downloads per batch (reduced to avoid SFTP corruption)
-sftp_download_batch_size = 512  # Number of files to download in parallel (reduced to avoid connection issues)
+sftp_download_batch_size = 1024  # Number of files to download in parallel (reduced to avoid connection issues)
 sftp_download_timeout = 30  # Timeout for individual file downloads (seconds)
 
 # MongoDB connection settings
@@ -43,8 +43,8 @@ preprocess_batch_max_len = 4   # Smaller max length
 # MongoDB performance settings
 mongo_bulk_update_batch_size = 10
 mongo_bulk_update_timeout_seconds = 1.0
-mongo_reservation_batch_limit = 1000
-mongo_discovery_batch_size = 1000  # Same as discover_batch_size for consistency
+mongo_reservation_batch_limit = 1024
+mongo_discovery_batch_size = 1024  # Same as discover_batch_size for consistency
 reserver_total_batch_size = 4*1024*1024 # 4GB (increased from 2GB for even more aggressive batching)
 
 min_audio_duration_seconds = 1.0
