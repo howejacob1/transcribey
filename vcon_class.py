@@ -16,10 +16,18 @@ class Vcon(VconBase):
     def __init__(self, vcon_dict=None, property_handling=None):
         super().__init__(vcon_dict, property_handling)
         self.vcon_dict["vcon"] = "0.0.2"
-        # self.vcon_dict["dialog"] = []
-        # self.vcon_dict["analysis"] = []
-        # self.vcon_dict["vcon"] = "0.0.2"
-        # return self
+        
+        # Ensure dialog is always a list
+        if "dialog" not in self.vcon_dict:
+            self.vcon_dict["dialog"] = []
+        elif not isinstance(self.vcon_dict["dialog"], list):
+            self.vcon_dict["dialog"] = []
+        
+        # Ensure analysis is always a list
+        if "analysis" not in self.vcon_dict:
+            self.vcon_dict["analysis"] = []
+        elif not isinstance(self.vcon_dict["analysis"], list):
+            self.vcon_dict["analysis"] = []
 
     @classmethod
     def build_new(cls):
@@ -35,8 +43,27 @@ class Vcon(VconBase):
     @classmethod
     def from_dict(cls, vcon_dict):
         """Create a Vcon instance from a dictionary (standard vcon format)"""
+        # Validate and fix the input dictionary before creating the instance
+        if vcon_dict is None:
+            vcon_dict = {}
+        
+        # Make a copy to avoid modifying the original
+        safe_dict = dict(vcon_dict)
+        
+        # Ensure dialog field is always a list
+        if "dialog" not in safe_dict:
+            safe_dict["dialog"] = []
+        elif not isinstance(safe_dict["dialog"], list):
+            safe_dict["dialog"] = []
+        
+        # Ensure analysis field is always a list  
+        if "analysis" not in safe_dict:
+            safe_dict["analysis"] = []
+        elif not isinstance(safe_dict["analysis"], list):
+            safe_dict["analysis"] = []
+            
         with suppress_output(should_suppress=True):
-            return cls(vcon_dict=vcon_dict)
+            return cls(vcon_dict=safe_dict)
 
     @classmethod
     def create_from_url(cls, url):
@@ -89,6 +116,7 @@ class Vcon(VconBase):
             self.vcon_dict["dialog"] = [{"type": "recording"}]
         self.vcon_dict["dialog"][0]["duration"] = value
 
+
     @property
     def filename(self):
         """Get the filename from the first dialog"""
@@ -105,6 +133,37 @@ class Vcon(VconBase):
         if "dialog" not in self.vcon_dict or not self.vcon_dict["dialog"]:
             self.vcon_dict["dialog"] = [{"type": "recording", "filename": value, "encoding": "none"}]
         self.vcon_dict["dialog"][0]["filename"] = value
+
+
+
+
+
+
+
+    @property
+    def basename(self):
+        """Get the basename from the first dialog"""
+        try:
+            if not self.vcon_dict.get("dialog", None) or len(self.vcon_dict["dialog"]) == 0:
+                return None
+            return self.vcon_dict["dialog"][0]["basename"]
+        except (KeyError, IndexError, TypeError):
+            return None
+
+    @basename.setter
+    def basename(self, value):
+        """Set the basename in the first dialog"""
+        if "dialog" not in self.vcon_dict or not self.vcon_dict["dialog"]:
+            self.vcon_dict["dialog"] = [{"type": "recording", "basename": value, "encoding": "none"}]
+        self.vcon_dict["dialog"][0]["basename"] = value
+
+
+
+
+
+
+
+
 
     @property
     def audio(self):
@@ -288,9 +347,8 @@ class Vcon(VconBase):
     def _summary_str(self):
         # Transcript
         transcript_str = ""
-        if self.transcript:
-            transcript_str = self.transcript
-            # Limit to 50 characters
+        transcript_str = self.transcript()
+        if transcript_str is not None:
             if len(transcript_str) > 50:
                 transcript_str = transcript_str[:50] + "..."
 
@@ -304,7 +362,7 @@ class Vcon(VconBase):
         languages_str = ', '.join(self.languages) if self.languages else "N/A"
 
         # UUID, showing first 8 chars
-        uuid_str = str(self.uuid)[:8] if self.uuid else "N/A"
+        uuid_str = str(self.uuid) if self.uuid else "N/A"
 
         return (f"Vcon({uuid_str}, {duration_str}, {size_str}, "
                 f"lang={languages_str}, transcript='{transcript_str}')")

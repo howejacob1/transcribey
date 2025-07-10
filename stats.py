@@ -6,6 +6,7 @@ import subprocess
 import time
 from datetime import datetime
 from mongo_utils import db
+import mongo_utils
 from utils import save_to_file
 from contextlib import contextmanager
 from pprint import pprint
@@ -31,6 +32,8 @@ def make_stats_queue():
     return multiprocessing.Queue()
 
 def add(stats_queue, key, value):
+    if stats_queue is None:
+        return
     stats_queue.put({"program": our_program_name(),
                      "name": key,
                      "value": value})
@@ -219,7 +222,8 @@ def is_actual_measurement(measurement):
     return True
 
 def load_all():
-    return list(db.find())
+    with mongo_utils._db_semaphore:
+        return list(db.find())
 
 def load_and_print_all():
     vcons = load_all()

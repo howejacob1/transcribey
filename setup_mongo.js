@@ -48,6 +48,52 @@ try {
 db.createCollection("vcons");
 print("✅ Collection 'vcons' ensured to exist");
 
+// Create performance indexes
+print("🔄 Creating performance indexes...");
+
+// Index for find_and_reserve operations (most critical)
+db.vcons.createIndex(
+  { "done": 1, "processed_by": 1 },
+  { 
+    name: "idx_reservation_status",
+    background: true,
+    partialFilterExpression: { "done": { $ne: true } }
+  }
+);
+print("✅ Created reservation status index");
+
+// Index for filename lookups (discovery/existence checks)
+db.vcons.createIndex(
+  { "dialog.0.filename": 1 },
+  { 
+    name: "idx_filename_lookup",
+    background: true,
+    unique: true
+  }
+);
+print("✅ Created filename lookup index");
+
+// Index for processed_by hostname cleanup
+db.vcons.createIndex(
+  { "processed_by": 1, "done": 1 },
+  { 
+    name: "idx_processed_by_cleanup",
+    background: true,
+    sparse: true
+  }
+);
+print("✅ Created processed_by cleanup index");
+
+// Index for general status queries
+db.vcons.createIndex(
+  { "done": 1, "created_at": 1 },
+  { 
+    name: "idx_status_created",
+    background: true
+  }
+);
+print("✅ Created status/created index");
+
 // Test basic operations
 try {
   db.vcons.insertOne({test: "connection_test", timestamp: new Date()});

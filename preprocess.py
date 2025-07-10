@@ -24,11 +24,13 @@ from vcon_class import Vcon
 
 def preprocess_vcon_one(vcon_cur: Vcon, stats_queue: Queue):
     try:
+        #print(f"Preprocessing {vcon_cur.uuid}")
         filename = vcon.processing_filename(vcon_cur)
         vcon.move_to_processing(vcon_cur)
         audio_data : torch.Tensor
         sample_rate : int
         audio_data, sample_rate = audio.load_to_cpu(filename)
+        vcon.remove_vcon_from_processing(vcon_cur)
         duration = audio.duration(audio_data, sample_rate)
         audio_data = audio.ensure_mono(audio_data)
         resampler = torchaudio.transforms.Resample(sample_rate, settings.sample_rate)
@@ -130,7 +132,7 @@ def preprocess(reserved_vcons_queue: Queue,
             
             if not batch:
                 continue
-                
+            
             vcons_in_memory.extend(batch)
             
             # Process the batch

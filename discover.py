@@ -1,5 +1,6 @@
 import logging
 import time
+import os
 from pprint import pprint
 from time import time
 from typing import List
@@ -15,25 +16,32 @@ from vcon_class import Vcon
 from vcon_utils import insert_many_maybe_async, is_audio_filename
 from utils import dump_thread_stacks
 
-def discover(url, stats_queue):
+def discover(url, stats_queue, print_status=False):
     """Discover audio files and create vcons, with clean shutdown handling"""    
     stats.start(stats_queue)
     threads = []
     def add_many(vcons: List[Vcon]):
-        thread = insert_many_maybe_async(vcons)
+        thread = insert_many_maybe_async(vcons, print_status=print_status)
         threads.append(thread)
     sftp_client: sftp.SFTPClient | None = None
     count = 0
-    try:
+
+    try:        
         sftp_client = sftp.connect_keep_trying(url)
+
         parsed = sftp.parse_url(url)
         path = parsed["path"]
         vcons = []
-        for filename, bytes in sftp.get_all_filenames(path, sftp_client):
-            if is_audio_filename(filename):
+
+        for filename_local, bytes in sftp.get_all_filenames(path, sftp_client):
+            if is_audio_filename(filename_local):
+                basename = os.path.basename(filename_local)
+                #filename = "sftp://" + parsed["user"] + "@" + parsed["host"] + ":" + parsed["port"] + filename_local
+                filename = filename_local
                 vcon = Vcon.create_from_url(filename)
                 stats.bytes(stats_queue, bytes)
                 vcon.size = bytes
+                vcon.basename = basename
                 #duration = vcon.size / (settings.sample_rate*2)
                 stats.count(stats_queue)
                 count += 1
@@ -41,6 +49,7 @@ def discover(url, stats_queue):
                 #stats.duration(stats_queue, duration)
                 vcons.append(vcon)
                 if len(vcons) > discover_batch_size:
+                    print(f"Adding {len(vcons)} vcons")
                     add_many(vcons)
                     vcons = []
         # Process any remaining vcons
@@ -57,7 +66,6 @@ def discover(url, stats_queue):
         if sftp_client:
             sftp_client.close()
 
-
-def start_process(url, stats_queue):
+def start_process(url, stats_queue, print_status=False):
     """Start discovery process"""
-    return process.start_process(target=discover, args=(url, stats_queue))
+    return process.start_process(target=discover, args=(url, stats_queue, print_status))

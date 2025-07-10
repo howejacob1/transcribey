@@ -22,8 +22,9 @@ def filename_to_downloading_filename(filename):
     return os.path.join(settings.downloading_dir, os.path.basename(filename))
 
 def move_filename_to_processing(filename):
-    os.rename(filename_to_downloading_filename(filename), 
-              filename_to_processing_filename(filename))
+    downloading_filename = filename_to_downloading_filename(filename)
+    processing_filename = filename_to_processing_filename(filename)
+    os.rename(downloading_filename, processing_filename)
 
 def move_downloading_to_processing():
     for filename in os.listdir(settings.downloading_dir):

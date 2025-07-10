@@ -10,3 +10,8 @@ working_memory/*
 broken_wavs/
 cache/
 .venv/
+.eon-password
+.eon-password-old
+nohup.out
+rclone-sync.log
+*.log

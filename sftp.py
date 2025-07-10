@@ -29,7 +29,17 @@ def connect(url):
     url_parsed = parse_url(url)
     
     connect_raw(url_parsed["hostname"], url_parsed["port"], url_parsed["username"], client)
+    
+    # Performance optimizations after connection
+    transport = client.get_transport()
+    transport.set_keepalive(30)
+    transport.use_compression(True)
+    
     sftp = client.open_sftp()
+    
+    # SFTP performance optimizations
+    sftp.get_channel().settimeout(settings.sftp_download_timeout)
+    
     return sftp
 
 def connect_keep_trying(url):
@@ -44,11 +54,35 @@ def file_size(filename, sftp):
     return sftp.stat(filename).st_size
 
 def download(remote_path, local_path, sftp):
-    while True:
-        try: 
-            return sftp.get(remote_path, local_path)
-        except FileNotFoundError:
-            logging.info(f"File not found: {remote_path}")
+    return sftp.get(remote_path, local_path)
+
+def download_optimized(remote_path, local_path, sftp, buffer_size=None, prefetch=None):
+    """Optimized download with better buffering and prefetch"""
+    if buffer_size is None:
+        buffer_size = settings.sftp_buffer_size
+    if prefetch is None:
+        prefetch = settings.sftp_prefetch_enabled
+        
+    # Check if SFTP connection is still alive
+    try:
+        channel = sftp.get_channel()
+        if not channel or not channel.get_transport().is_active():
+            raise ConnectionError("SFTP connection is not active")
+    except AttributeError:
+        raise ConnectionError("SFTP connection is invalid")
+        
+    if prefetch:
+        # Enable prefetch for better performance
+        sftp.get(remote_path, local_path, callback=None, prefetch=True)
+    else:
+        # Manual buffered download for more control
+        with sftp.open(remote_path, 'rb', bufsize=buffer_size) as remote_file:
+            with open(local_path, 'wb') as local_file:
+                while True:
+                    data = remote_file.read(buffer_size)
+                    if not data:
+                        break
+                    local_file.write(data)
 
 def is_dir(path):
     return path.st_mode & 0o040000
@@ -103,6 +137,8 @@ def get_all_filenames(root, sftp):
     queue = [root]
     while queue:
         current_dir = queue.pop(0)
+        if "old-thing" in current_dir:
+            continue
         try:
             entries = sftp.listdir_attr(current_dir)
         except Exception as e:

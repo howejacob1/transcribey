@@ -34,14 +34,14 @@ def main(sftp_url, stats_queue=None):
     # sftp = sftp_utils.connect_keep_trying(sftp_url)
     vcon.unmarked_all_reserved()
     programs = []
-    reserved_vcons_queue = multiprocessing.Queue()
+    reserved_vcons_queue = multiprocessing.Queue(maxsize=1000)
     programs.append(reserver.start_process(sftp_url, reserved_vcons_queue, stats_queue))
-    preprocessed_vcons_queue = multiprocessing.Queue()
+    preprocessed_vcons_queue = multiprocessing.Queue(maxsize=1000)
     programs.append(preprocess.start_process(reserved_vcons_queue, preprocessed_vcons_queue, stats_queue))
-    lang_detected_en_vcons_queue = multiprocessing.Queue()
-    lang_detected_non_en_vcons_queue = multiprocessing.Queue()
+    lang_detected_en_vcons_queue = multiprocessing.Queue(maxsize=1000)
+    lang_detected_non_en_vcons_queue = multiprocessing.Queue(maxsize=1000)
     programs.append(lang_detect.start_process(preprocessed_vcons_queue, lang_detected_en_vcons_queue, lang_detected_non_en_vcons_queue, stats_queue))
-    transcribed_vcons_queue = multiprocessing.Queue()
+    transcribed_vcons_queue = multiprocessing.Queue(maxsize=1000)
     programs.append(transcribe.start_process_en(lang_detected_en_vcons_queue, transcribed_vcons_queue, stats_queue))
     programs.append(transcribe.start_process_non_en(lang_detected_non_en_vcons_queue, transcribed_vcons_queue, stats_queue))
     programs.append(send_results.start_process(transcribed_vcons_queue, stats_queue))
@@ -104,7 +104,8 @@ if __name__ == "__main__":
     elif args.mode == "discover":
         if debug:
             vcon.delete_all()
-        discover.start(args.url, stats_queue)
+        discover_process = discover.start_process(args.url, None, print_status=True)
+        #stats.run(stats_queue)
     elif args.mode == "print":
         vcon.load_and_print_all()
     elif args.mode == "delete_all":
@@ -112,3 +113,30 @@ if __name__ == "__main__":
     elif args.mode == "dump_jsonl":
         vcon.dump_jsonl()
         
+
+    # We have a DB full of Vcons. 
+    # Many are not analyzed. Many do not have langid or something. 
+    # However, we also need to discover. 
+    # Things we have to do: 
+    # see if a vcon exists. If so, skip.
+    # Actually, this is very easy to do if no more than two discoveries run on the same dir. 
+    # All we do is pull all existing vcons, then pull all sftp things. 
+    # for each filename, see if it's in the list. If not, add it to the list, and add it to a list of things to upload.
+    # Optimize accordingly. 
+
+    # We also need to be able to do a reserve. What reserve does is find a vcon that does not have analysis and is not reserved.
+    # We should just reserve a larger number of vcons...
+
+# We have many target dirs full of vcons. 
+# running discover is fine. 
+# When we run discover.... we need to transfer them to a backup.
+# I mean that's what we're doing rn
+# Perhaps instead.....
+# When we do discover....
+
+# we have an SFTP target dir full of vcons. 
+# We need to both backup and transfer the 
+# wondeirng if downloading them we should process them as we go--- idk tho. 
+# Discover is fine...
+# Now we have links to all vcons...
+# 
