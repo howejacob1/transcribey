@@ -24,7 +24,7 @@ from stats import with_blocking_time
 from utils import let_other_threads_run, dump_thread_stacks, suppress_output
 from vcon_class import Vcon
 from vcon_queue import VconQueue
-from vcon_utils import batch_to_audio_data, is_english
+from vcon_utils import batch_to_audio_data, is_english, mark_vcon_as_invalid, remove_vcon_from_processing
 from nemo.collections.asr.models import EncDecSpeakerLabelModel
 
 def load():
@@ -292,16 +292,21 @@ def lang_detect(preprocessed_vcons_queue: Queue,
                 if is_english(vcon_cur):
                     en_vcons.append(vcon_cur)
                 else:
-                    non_en_vcons.append(vcon_cur)
-            
+                    if not settings.mark_non_english_as_corrupt:
+                        non_en_vcons.append(vcon_cur)
+            print(f"LANG_DETECT: {len(en_vcons)} English, {len(non_en_vcons)} non-English")
             # Put the English and non-English batches in their respective queues
             if en_vcons:
                 with with_blocking_time(stats_queue):
                     lang_detected_en_vcons_queue.put(en_vcons)
             
             if non_en_vcons:
-                with with_blocking_time(stats_queue):
-                    lang_detected_non_en_vcons_queue.put(non_en_vcons)
+                if settings.mark_non_english_as_corrupt:
+                    mark_vcon_as_invalid(vcon_cur)
+                    remove_vcon_from_processing(vcon_cur)
+                else:
+                    with with_blocking_time(stats_queue):
+                        lang_detected_non_en_vcons_queue.put(non_en_vcons)
             
             # Remove from our tracking list once processed
             for vcon_cur in vcon_batch:

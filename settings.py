@@ -2,8 +2,10 @@ import os
 import socket
 import subprocess
 
+mark_non_english_as_corrupt = True
+
 # Settings for main.py
-cache_dir = "/dev/shm/cache1/"
+cache_dir = "/dev/shm/cache/"
 processing_dir = os.path.join(cache_dir, "processing/")
 downloading_dir = os.path.join(cache_dir, "downloading/")
 lang_detect_threshold = 0.2

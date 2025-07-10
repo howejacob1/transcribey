@@ -14,7 +14,7 @@ import gpu
 
 class Vcon(VconBase):
     def __init__(self, vcon_dict=None, property_handling=None):
-        super().__init__(vcon_dict, property_handling)
+        super().__init__(vcon_dict=vcon_dict)
         self.vcon_dict["vcon"] = "0.0.2"
         
         # Ensure dialog is always a list

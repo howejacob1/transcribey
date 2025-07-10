@@ -123,6 +123,7 @@ def preprocess(reserved_vcons_queue: Queue,
                stats_queue: Queue):
     stats.start(stats_queue)
     vcons_in_memory = []
+
     try:
         process.setup_signal_handlers()
         while True:

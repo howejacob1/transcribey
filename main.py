@@ -39,11 +39,12 @@ def main(sftp_url, stats_queue=None):
     preprocessed_vcons_queue = multiprocessing.Queue(maxsize=1000)
     programs.append(preprocess.start_process(reserved_vcons_queue, preprocessed_vcons_queue, stats_queue))
     lang_detected_en_vcons_queue = multiprocessing.Queue(maxsize=1000)
-    lang_detected_non_en_vcons_queue = multiprocessing.Queue(maxsize=1000)
+    lang_detected_non_en_vcons_queue = multiprocessing.Queue(maxsize=1000)    
     programs.append(lang_detect.start_process(preprocessed_vcons_queue, lang_detected_en_vcons_queue, lang_detected_non_en_vcons_queue, stats_queue))
     transcribed_vcons_queue = multiprocessing.Queue(maxsize=1000)
     programs.append(transcribe.start_process_en(lang_detected_en_vcons_queue, transcribed_vcons_queue, stats_queue))
-    programs.append(transcribe.start_process_non_en(lang_detected_non_en_vcons_queue, transcribed_vcons_queue, stats_queue))
+    if not settings.mark_non_english_as_corrupt:
+        programs.append(transcribe.start_process_non_en(lang_detected_non_en_vcons_queue, transcribed_vcons_queue, stats_queue))
     programs.append(send_results.start_process(transcribed_vcons_queue, stats_queue))
 
 
