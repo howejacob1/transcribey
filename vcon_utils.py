@@ -442,7 +442,7 @@ def find_and_reserve_many(size_bytes: int) -> List[Vcon]:
     reserved = []
     
     cursor = db.find(
-        {"done": {"$ne": True}, "processed_by": {"$exists": False}},
+        {"done": {"$ne": True}, "processed_by": {"$exists": False}, "corrupt": {"$ne": True}},
         {"uuid": 1, "_id": 1},
         limit=settings.mongo_reservation_batch_limit)
     

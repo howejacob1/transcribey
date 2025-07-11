@@ -3,10 +3,10 @@ import socket
 import subprocess
 
 mark_non_english_as_corrupt = False
-put_all_vcons_into_english_queue = True
+put_all_vcons_into_english_queue = False
 
 # Settings for main.py
-cache_dir = "/dev/shm/cache3/"
+cache_dir = "/dev/shm/cache2/"
 processing_dir = os.path.join(cache_dir, "processing/")
 downloading_dir = os.path.join(cache_dir, "downloading/")
 lang_detect_threshold = 0.2
