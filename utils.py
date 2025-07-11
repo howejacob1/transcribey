@@ -185,3 +185,14 @@ def die_after_delay(delay):
 def with_output_to_file(filename, data):
     with open(filename, "w") as f:
         yield f
+
+
+def flatten(list_of_lists):
+    result = []
+    for cur_list in list_of_lists:
+        if isinstance(cur_list, list):
+            cur_list_flattened = flatten(cur_list)
+            result.extend(cur_list_flattened)
+        else:
+            result.append(cur_list)
+    return result

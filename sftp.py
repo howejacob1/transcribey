@@ -150,3 +150,6 @@ def get_all_filenames(root, sftp):
                 queue.append(filename)
             else:
                 yield filename, entry.st_size
+
+def sftp_is_local(sftp):
+    return sftp.sock.getpeername()[0] == "127.0.0.1"

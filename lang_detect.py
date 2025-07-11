@@ -21,7 +21,7 @@ from torch.multiprocessing import Queue
 from gpu import gpu_ram_free_bytes, move_to_gpu_maybe, we_have_a_gpu, gc_collect_maybe
 from process import ShutdownException, setup_signal_handlers
 from stats import with_blocking_time
-from utils import let_other_threads_run, dump_thread_stacks, suppress_output
+from utils import let_other_threads_run, dump_thread_stacks, suppress_output, flatten
 from vcon_class import Vcon
 from vcon_queue import VconQueue
 from vcon_utils import batch_to_audio_data, is_english, mark_vcon_as_invalid, remove_vcon_from_processing
@@ -234,7 +234,6 @@ def identify_languages_batch(vcon_batch: List[Vcon], model):
             else:
                 print(f"Warning: Predicted index {pred_label_idx} out of range (max: {len(language_map)-1}), defaulting to 'en'")
                 predicted_lang = 'en'
-                
             if predicted_lang != 'es':
                 predicted_lang = "en" # assume spanish is correctly identified-- all else assert english
                 
@@ -244,6 +243,7 @@ def identify_languages_batch(vcon_batch: List[Vcon], model):
         else:
             vcon_cur.languages = ['en']
             vcons_with_languages.append(vcon_cur)
+        
     
     # Clear GPU memory
     if we_have_a_gpu():
@@ -270,11 +270,10 @@ def lang_detect(preprocessed_vcons_queue: Queue,
             # Get a batch from the preprocessing queue
             with with_blocking_time(stats_queue):
                 vcon_batch = preprocessed_vcons_queue.get()
-            
             if not isinstance(vcon_batch, list):
                 # Handle backward compatibility in case single vcons are still sent
                 vcon_batch = [vcon_batch]
-            
+            vcon_batch = flatten(vcon_batch)
             vcons_in_memory.extend(vcon_batch)
             
             # Process the entire batch for language detection
@@ -288,13 +287,11 @@ def lang_detect(preprocessed_vcons_queue: Queue,
                 stats.count(stats_queue)
                 stats.bytes(stats_queue, vcon_cur.size)
                 stats.duration(stats_queue, vcon_cur.duration)
-                
-                if is_english(vcon_cur):
+                if is_english(vcon_cur) or settings.put_all_vcons_into_english_queue:
                     en_vcons.append(vcon_cur)
                 else:
-                    if not settings.mark_non_english_as_corrupt:
-                        non_en_vcons.append(vcon_cur)
-            print(f"LANG_DETECT: {len(en_vcons)} English, {len(non_en_vcons)} non-English")
+                    non_en_vcons.append(vcon_cur)
+
             # Put the English and non-English batches in their respective queues
             if en_vcons:
                 with with_blocking_time(stats_queue):
@@ -302,8 +299,8 @@ def lang_detect(preprocessed_vcons_queue: Queue,
             
             if non_en_vcons:
                 if settings.mark_non_english_as_corrupt:
-                    mark_vcon_as_invalid(vcon_cur)
-                    remove_vcon_from_processing(vcon_cur)
+                    for vcon in non_en_vcons:
+                        mark_vcon_as_invalid(vcon)
                 else:
                     with with_blocking_time(stats_queue):
                         lang_detected_non_en_vcons_queue.put(non_en_vcons)

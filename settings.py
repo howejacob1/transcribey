@@ -2,7 +2,8 @@ import os
 import socket
 import subprocess
 
-mark_non_english_as_corrupt = True
+mark_non_english_as_corrupt = False
+put_all_vcons_into_english_queue = True
 
 # Settings for main.py
 cache_dir = "/dev/shm/cache/"

@@ -51,11 +51,12 @@ def load_nvidia(model_name):
 
 def transcribe_batch(vcon_batch: List[Vcon], model, config: dict, model_name: str):
     """Transcribe a batch of vcons at once"""
+    print(f"Transcribing batch of {len(vcon_batch)} vcons with model {model_name}")
     audio_data_batch = vcon_utils.batch_to_audio_data(vcon_batch)
     
     # Transcribe the entire batch at once
     with torch.no_grad():
-        with suppress_output(should_suppress=True):
+        with suppress_output(should_suppress=False):
             all_transcriptions = model.transcribe(audio_data_batch, **config)
     
     # Process results and assign to vcons

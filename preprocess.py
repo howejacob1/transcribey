@@ -49,6 +49,7 @@ def preprocess_vcon_one(vcon_cur: Vcon, stats_queue: Queue):
         vcon_cur.sample_rate = settings.sample_rate
         return vcon_cur
     except RuntimeError:
+        print(f"RuntimeError in preprocess_vcon_one for {vcon_cur.uuid}")
         vcon.mark_vcon_as_invalid(vcon_cur)
         vcon.remove_vcon_from_processing(vcon_cur)
         return None

@@ -49,10 +49,9 @@ def reserver(sftp_url, vcons_ready_queue, stats_queue):
                         # Process results
                         for vcon_cur, error in results:
                             if error is None:
-                                print(f"Cached {vcon_cur.uuid} (batch of {len(batch)} took {batch_time:.3f}s total)")
+                                
                                 with with_blocking_time(stats_queue):
                                     vcons_ready_queue.put(vcon_cur)
-                                    #print(f"Put {vcon_cur.uuid} in queue")
                             else:
                                 print(f"Error caching {vcon_cur.uuid}: {error}")
                                 vcon.mark_vcon_as_invalid(vcon_cur)
