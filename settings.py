@@ -6,7 +6,7 @@ mark_non_english_as_corrupt = False
 put_all_vcons_into_english_queue = True
 
 # Settings for main.py
-cache_dir = "/dev/shm/cache/"
+cache_dir = "/dev/shm/cache3/"
 processing_dir = os.path.join(cache_dir, "processing/")
 downloading_dir = os.path.join(cache_dir, "downloading/")
 lang_detect_threshold = 0.2

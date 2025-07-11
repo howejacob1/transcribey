@@ -43,8 +43,9 @@ def main(sftp_url, stats_queue=None):
     programs.append(lang_detect.start_process(preprocessed_vcons_queue, lang_detected_en_vcons_queue, lang_detected_non_en_vcons_queue, stats_queue))
     transcribed_vcons_queue = multiprocessing.Queue(maxsize=10)
     programs.append(transcribe.start_process_en(lang_detected_en_vcons_queue, transcribed_vcons_queue, stats_queue))
-    if not settings.mark_non_english_as_corrupt:
-        programs.append(transcribe.start_process_non_en(lang_detected_non_en_vcons_queue, transcribed_vcons_queue, stats_queue))
+
+    if not settings.mark_non_english_as_corrupt and not settings.put_all_vcons_into_english_queue:
+            programs.append(transcribe.start_process_non_en(lang_detected_non_en_vcons_queue, transcribed_vcons_queue, stats_queue))
     programs.append(send_results.start_process(transcribed_vcons_queue, stats_queue))
 
     # Simple queue watching function instead of watch_vcon_queue
