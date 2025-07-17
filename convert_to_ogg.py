@@ -26,6 +26,7 @@ except ImportError:
 
 from mongo_utils import db, _db_semaphore
 from vcon_class import Vcon
+from utils import num_cores
 
 # Target directories to save converted files
 TARGET_DRIVES = [
@@ -48,7 +49,11 @@ total_processed = 0
 
 # Work queue for batch processing
 work_queue = queue.Queue()
-BATCH_SIZE = 3000  # Reserve 100 vcons at a time
+BATCH_SIZE = 3000  # Reserve 3000 vcons at a time
+
+def cpu_cores_for_conversion():
+    """Get optimal number of CPU cores for conversion tasks"""
+    return max(1, num_cores())  # Leave 2 cores for system tasks
 
 def get_available_space(drive_path):
     """Get available space on a drive in bytes"""
@@ -320,12 +325,15 @@ def main():
     global total_processed
     total_processed = 0  # Reset counter
     
-    print("🎵 WAV to OGG Vorbis Converter for VCONs (14 Threads)")
+    # Get optimal number of threads based on CPU cores
+    max_workers = cpu_cores_for_conversion()
+    
+    print(f"🎵 WAV to OGG Vorbis Converter for VCONs ({max_workers} Threads)")
     print("=" * 50)
     print("This script will continuously:")
     print("1. Find done vcons with WAV files")
     print("2. Check available disk space on target drives") 
-    print("3. Convert WAV to OGG Vorbis format (14 parallel threads)")
+    print(f"3. Convert WAV to OGG Vorbis format ({max_workers} parallel threads)")
     print("4. Save to a drive with sufficient free space")
     print("5. Update the database")
     print("6. Remove the original WAV file")
@@ -356,28 +364,25 @@ def main():
         return False
     
     print()
-    print("🚀 Starting parallel conversion process with 14 threads...")
+    print(f"🚀 Starting parallel conversion process with {max_workers} threads...")
     print("   Press Ctrl+C to stop at any time")
     print()
-    
-    # Process files with thread pool
-    MAX_WORKERS = 14
     
     try:
         # Reserve initial batch of work
         print("📦 Reserving initial batch of vcons...")
         reserve_batch_vcons()
         
-        with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
             # Submit initial batch of work
             futures = []
-            for _ in range(MAX_WORKERS):
+            for _ in range(max_workers):
                 future = executor.submit(process_vcon_worker)
                 futures.append(future)
             
             while True:
                 # Check if we need to reserve more work
-                if work_queue.qsize() < MAX_WORKERS:
+                if work_queue.qsize() < max_workers:
                     reserved = reserve_batch_vcons()
                     if reserved == 0:
                         print("💡 No more vcons available to reserve")
