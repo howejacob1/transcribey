@@ -65,7 +65,13 @@ WEIGHT_UPDATE_INTERVAL = 20000  # Update weights every 20000 files
 
 # Thread-safe counter for progress tracking
 progress_lock = threading.Lock()
-total_processed = 0
+total_processed = 0  # successfully converted files
+# additional cumulative stats
+total_corrupt = 0    # files marked as corrupt / failed
+# cumulative counters
+total_bytes_processed = 0  # successfully converted input bytes
+# Track when the worker started converting for wall-clock throughput
+worker_start_time = None
 
 # Work queue for batch processing
 work_queue = queue.Queue()
@@ -73,9 +79,7 @@ BATCH_SIZE = 3000  # Reserve 3000 vcons at a time
 
 def cpu_cores_for_conversion():
     """Get optimal number of CPU cores for conversion tasks"""
-    cores_available = num_cores() or 1
-    # Leave two cores idle so the machine stays responsive
-    return max(1, cores_available - 2)
+    return num_cores()
 
 def setup_remote_mode():
     """Initialize SFTP connection and temporary directory for remote operation"""
@@ -299,15 +303,26 @@ def convert_wav_to_ogg(source_path, target_path):
         # Ensure target directory exists
         ensure_target_directory_exists(target_path)
         
-        print(f"Converting {os.path.basename(target_path)} [{get_hostname()}]")
+        with progress_lock:
+            elapsed = time.time() - worker_start_time if worker_start_time else 0
+            throughput = (total_bytes_processed / (1024 * 1024)) / elapsed if elapsed > 0 else 0.0
+            stats_str = f"{total_processed} files, {total_corrupt} corrupt, {throughput:.2f} MB/s"
+        print(f"Converting ({stats_str}) {os.path.basename(target_path)} [{get_hostname()}]")
         
         # Use ffmpeg-python to convert WAV to OGG Vorbis
         stream = ffmpeg.input(source_path)
         stream = ffmpeg.output(
             stream, 
             target_path,
-            acodec='libvorbis',
-            **{'qscale:a': '5'}  # Quality level 5 (good balance of size/quality)
+            ar=8000,
+            ac=1,  # mono audio
+            acodec='libopus',
+            **{
+                'b:a': '8k',               # target bitrate 8 kbps
+                'vbr': 'on',               # variable bitrate
+                'compression_level': '10'  # maximum complexity
+            },
+            f='opus'
         )
         
         # Run the conversion silently
@@ -329,7 +344,8 @@ def reserve_batch_vcons():
         "corrupt": {"$ne": True},
         "converting": {"$ne": True},  # Not already being converted
         "dialog.0.filename": {
-            "$regex": f"^{SOURCE_DRIVE}/.*\\.wav$",
+            # Pick up source recordings that are still WAV or already OGG
+            "$regex": f"^{SOURCE_DRIVE}/.*\\.(wav|ogg)$",
             "$options": "i"
         }
     }
@@ -442,25 +458,30 @@ def process_one_vcon_local(vcon, original_filename):
                 )
         except:
             pass
+        record_corrupt()
         return False
     
     # Generate new filename path
     original_path = Path(original_filename)
     relative_path = original_path.relative_to(SOURCE_DRIVE)
     
-    # Change extension to .ogg
-    new_relative_path = relative_path.with_suffix('.ogg')
+    # Change extension to .opus
+    new_relative_path = relative_path.with_suffix('.opus')
     
     # Choose target drive from cached available drives
     target_drive = get_target_drive_by_hash(str(relative_path))
     if not target_drive:
         print("ERROR: No available drives for conversion")
+        record_corrupt()
         return False
         
     new_filename = os.path.join(target_drive, str(new_relative_path))
     
-    # Convert the file
+    # Measure conversion time for stats
+    file_size_bytes = os.path.getsize(original_filename)
+    start_t = time.time()
     success, error_msg = convert_wav_to_ogg(original_filename, new_filename)
+    duration = time.time() - start_t
     
     if not success:
         print(f"ERROR: Conversion failed: {error_msg}")
@@ -473,11 +494,13 @@ def process_one_vcon_local(vcon, original_filename):
                 )
         except:
             pass
+        record_corrupt()
         return False
     
     # Check new file exists
     if not os.path.exists(new_filename):
         print(f"ERROR: Converted file not found: {new_filename}")
+        record_corrupt()
         return False
     
     # Update database
@@ -488,6 +511,7 @@ def process_one_vcon_local(vcon, original_filename):
             print("Removed converted file due to database failure")
         except:
             pass
+        record_corrupt()
         return False
     
     # Remove original file
@@ -496,6 +520,8 @@ def process_one_vcon_local(vcon, original_filename):
     except Exception as e:
         pass  # Ignore removal errors
     
+    # record stats for successful conversion
+    record_success(file_size_bytes, duration)
     return True
 
 def process_one_vcon_remote(vcon, original_filename):
@@ -510,6 +536,7 @@ def process_one_vcon_remote(vcon, original_filename):
             sftp_client.stat(original_filename)
         except Exception as e:
             print(f"ERROR: Remote original file does not exist: {original_filename}")
+            record_corrupt()
             # Clear converting flag and mark as corrupt
             try:
                 with _db_semaphore:
@@ -524,12 +551,13 @@ def process_one_vcon_remote(vcon, original_filename):
         # Generate paths
         original_path = Path(original_filename)
         relative_path = original_path.relative_to(SOURCE_DRIVE)
-        new_relative_path = relative_path.with_suffix('.ogg')
+        new_relative_path = relative_path.with_suffix('.opus')
         
         # Choose target drive
         target_drive = get_target_drive_by_hash(str(relative_path))
         if not target_drive:
             print("ERROR: No available drives for conversion")
+            record_corrupt()
             return False
         
         remote_new_filename = os.path.join(target_drive, str(new_relative_path))
@@ -542,11 +570,15 @@ def process_one_vcon_remote(vcon, original_filename):
         print(f"Downloading {os.path.basename(original_filename)} [{get_hostname()}]")
         sftp.download_optimized(original_filename, local_wav_path, sftp_client)
         
-        # Convert locally
+        # Measure conversion time for stats
+        file_size_bytes = os.path.getsize(local_wav_path)
+        start_t = time.time()
         success, error_msg = convert_wav_to_ogg(local_wav_path, local_ogg_path)
+        duration = time.time() - start_t
         
         if not success:
             print(f"ERROR: Conversion failed: {error_msg}")
+            record_corrupt()
             # Clear converting flag and mark as corrupt
             try:
                 with _db_semaphore:
@@ -561,6 +593,7 @@ def process_one_vcon_remote(vcon, original_filename):
         # Check local converted file exists
         if not os.path.exists(local_ogg_path):
             print(f"ERROR: Local converted file not found: {local_ogg_path}")
+            record_corrupt()
             return False
         
         # Ensure the destination directory exists on the remote host before upload
@@ -575,11 +608,13 @@ def process_one_vcon_remote(vcon, original_filename):
             sftp_client.stat(remote_new_filename)
         except Exception as e:
             print(f"ERROR: Remote converted file not found after upload: {remote_new_filename}")
+            record_corrupt()
             return False
         
         # Update database
         if not update_vcon_filename(vcon, remote_new_filename):
             print("ERROR: Database update failed, cleaning up")
+            record_corrupt()
             try:
                 sftp_client.remove(remote_new_filename)
                 print("Removed remote converted file due to database failure")
@@ -593,6 +628,8 @@ def process_one_vcon_remote(vcon, original_filename):
         except Exception as e:
             pass  # Ignore removal errors
         
+        # Successful conversion – record stats
+        record_success(file_size_bytes, duration)
         return True
         
     finally:
@@ -605,19 +642,40 @@ def process_one_vcon_remote(vcon, original_filename):
                     pass
 
 def increment_progress():
-    """Thread-safe progress counter increment"""
-    global total_processed
+    # this definition is kept for backward compatibility but should not be used
+    # in the new flow.  It simply returns the current processed count without
+    # printing anything.
     with progress_lock:
-        total_processed += 1
-        if total_processed % 100 == 0:  # Show progress every 100 files
-            print(f"Processed {total_processed} files...")
         return total_processed
 
+
+# NEW: record successful conversion and print stats line
+def record_success(size_bytes: int, duration_sec: float):
+    """Update global counters for a successful conversion and print a stats line."""
+    global total_processed, total_bytes_processed, worker_start_time
+
+    with progress_lock:
+        total_processed += 1
+        total_bytes_processed += size_bytes
+
+        # no printing here; stats are shown in the upcoming 'Converting' line
+
+
+# NEW: record corrupt / failed file and print stats line
+def record_corrupt():
+    """Increment corrupt counter and print current stats line."""
+    global total_corrupt, worker_start_time
+
+    with progress_lock:
+        total_corrupt += 1
+
+        # no printing here; stats are shown in the upcoming 'Converting' line
+
+
+# Updated worker – stats are handled inside the processing functions
 def process_vcon_worker():
     """Worker function for thread pool - processes one vcon"""
-    success = process_one_vcon()
-    if success:
-        return increment_progress()
+    process_one_vcon()
     return None
 
 def cleanup_converting_flags():
@@ -693,7 +751,11 @@ def main():
             port_part = "22/"
         SFTP_URL = f"sftp://{username}@{REMOTE_HOST_CONFIG}:{port_part}"
     
-    total_processed = 0  # Reset counter
+    total_processed = 0  # Reset counters
+    global total_corrupt, total_bytes_processed, worker_start_time
+    total_corrupt = 0
+    total_bytes_processed = 0
+    worker_start_time = time.time()
     
     # Get optimal number of threads based on CPU cores
     max_workers = cpu_cores_for_conversion()
