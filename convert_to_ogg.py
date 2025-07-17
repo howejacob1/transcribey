@@ -20,7 +20,7 @@ from pathlib import Path
 try:
     import ffmpeg
 except ImportError:
-    print("❌ ffmpeg-python library not found!")
+    print("ERROR: ffmpeg-python library not found!")
     print("Please install it with: pip install ffmpeg-python")
     exit(1)
 
@@ -61,34 +61,34 @@ def get_available_space(drive_path):
         _, _, free_bytes = shutil.disk_usage(drive_path)
         return free_bytes
     except Exception as e:
-        print(f"⚠️ Could not check space for {drive_path}: {e}")
+        print(f"WARNING: Could not check space for {drive_path}: {e}")
         return 0
 
 def initialize_available_drives():
     """Check drive space once at startup and cache available drives"""
     global AVAILABLE_DRIVES
     
-    print("🔍 Checking target drives (one-time check)...")
+    print("Checking target drives (one-time check)...")
     AVAILABLE_DRIVES = []
     
     for drive in TARGET_DRIVES:
         if not os.path.exists(drive):
-            print(f"❌ {drive} does not exist")
+            print(f"ERROR: {drive} does not exist")
             continue
             
         free_space = get_available_space(drive)
         
         if free_space >= MIN_FREE_SPACE:
-            print(f"✅ {drive}: {free_space / 1024 / 1024 / 1024:.2f} GB free")
+            print(f"OK: {drive}: {free_space / 1024 / 1024 / 1024:.2f} GB free")
             AVAILABLE_DRIVES.append(drive)
         else:
-            print(f"❌ {drive}: {free_space / 1024 / 1024 / 1024:.2f} GB free (insufficient)")
+            print(f"ERROR: {drive}: {free_space / 1024 / 1024 / 1024:.2f} GB free (insufficient)")
     
     if not AVAILABLE_DRIVES:
-        print("❌ No drives have sufficient free space!")
+        print("ERROR: No drives have sufficient free space!")
         return False
     
-    print(f"✅ Will use {len(AVAILABLE_DRIVES)} drive(s) for conversions")
+    print(f"OK: Will use {len(AVAILABLE_DRIVES)} drive(s) for conversions")
     return True
 
 def get_target_drive_by_hash(filename):
@@ -174,7 +174,7 @@ def reserve_batch_vcons():
                 break
     
     if reserved_count > 0:
-        print(f"📦 Reserved {reserved_count} vcons for processing")
+        print(f"Reserved {reserved_count} vcons for processing")
     
     return reserved_count
 
@@ -197,13 +197,13 @@ def update_vcon_filename(vcon, new_filename):
         if result.modified_count > 0:
             return True
         else:
-            print(f"❌ Failed to update database (no documents modified)")
+            print(f"ERROR: Failed to update database (no documents modified)")
             # Clear converting flag even if update failed
             db.update_one({"_id": vcon.uuid}, {"$unset": {"converting": ""}})
             return False
             
     except Exception as e:
-        print(f"❌ Error updating database: {e}")
+        print(f"ERROR: Error updating database: {e}")
         # Clear converting flag on error
         try:
             db.update_one({"_id": vcon.uuid}, {"$unset": {"converting": ""}})
@@ -221,12 +221,12 @@ def process_one_vcon():
         return False
     
     original_filename = vcon.filename
-    #print(f"🎯 Found vcon: {vcon.uuid}")
-    #print(f"📁 Original file: {original_filename}")
+    #print(f"Found vcon: {vcon.uuid}")
+    #print(f"Original file: {original_filename}")
     
     # Check if original file exists
     if not os.path.exists(original_filename):
-        print(f"❌ Original file does not exist: {original_filename}")
+        print(f"ERROR: Original file does not exist: {original_filename}")
         # Clear converting flag and mark as corrupt
         try:
             with _db_semaphore:
@@ -248,7 +248,7 @@ def process_one_vcon():
     # Choose target drive from cached available drives
     target_drive = get_target_drive_by_hash(str(relative_path))
     if not target_drive:
-        print("❌ No available drives for conversion")
+        print("ERROR: No available drives for conversion")
         return False
         
     new_filename = os.path.join(target_drive, str(new_relative_path))
@@ -257,7 +257,7 @@ def process_one_vcon():
     success, error_msg = convert_wav_to_ogg(original_filename, new_filename)
     
     if not success:
-        print(f"❌ Conversion failed: {error_msg}")
+        print(f"ERROR: Conversion failed: {error_msg}")
         # Clear converting flag and mark as corrupt
         try:
             with _db_semaphore:
@@ -271,15 +271,15 @@ def process_one_vcon():
     
     # Check new file exists
     if not os.path.exists(new_filename):
-        print(f"❌ Converted file not found: {new_filename}")
+        print(f"ERROR: Converted file not found: {new_filename}")
         return False
     
     # Update database
     if not update_vcon_filename(vcon, new_filename):
-        print("❌ Database update failed, keeping original file")
+        print("ERROR: Database update failed, keeping original file")
         try:
             os.remove(new_filename)
-            print("🗑️ Removed converted file due to database failure")
+            print("Removed converted file due to database failure")
         except:
             pass
         return False
@@ -298,7 +298,7 @@ def increment_progress():
     with progress_lock:
         total_processed += 1
         if total_processed % 100 == 0:  # Show progress every 100 files
-            print(f"✅ Processed {total_processed} files...")
+            print(f"Processed {total_processed} files...")
         return total_processed
 
 def process_vcon_worker():
@@ -317,9 +317,9 @@ def cleanup_converting_flags():
                 {"$unset": {"converting": ""}}
             )
             if result.modified_count > 0:
-                print(f"🧹 Cleaned up {result.modified_count} converting flags")
+                print(f"Cleaned up {result.modified_count} converting flags")
     except Exception as e:
-        print(f"⚠️ Error cleaning up: {e}")
+        print(f"WARNING: Error cleaning up: {e}")
 
 def main():
     global total_processed
@@ -328,7 +328,7 @@ def main():
     # Get optimal number of threads based on CPU cores
     max_workers = cpu_cores_for_conversion()
     
-    print(f"🎵 WAV to OGG Vorbis Converter for VCONs ({max_workers} Threads)")
+    print(f"WAV to OGG Vorbis Converter for VCONs ({max_workers} Threads)")
     print("=" * 50)
     print("This script will continuously:")
     print("1. Find done vcons with WAV files")
@@ -344,10 +344,10 @@ def main():
     try:
         # Test that ffmpeg-python can access ffmpeg by checking version
         subprocess.run(['ffmpeg', '-version'], capture_output=True, check=True)
-        print("✅ ffmpeg binary is available")
-        print("✅ ffmpeg-python library is available")
+        print("OK: ffmpeg binary is available")
+        print("OK: ffmpeg-python library is available")
     except (subprocess.CalledProcessError, FileNotFoundError):
-        print("❌ ffmpeg binary is not available. Please install it first:")
+        print("ERROR: ffmpeg binary is not available. Please install it first:")
         print("   sudo apt update && sudo apt install ffmpeg")
         return False
     
@@ -358,19 +358,19 @@ def main():
     
     # Check source drive exists
     if os.path.exists(SOURCE_DRIVE):
-        print(f"✅ Source drive {SOURCE_DRIVE} exists")
+        print(f"OK: Source drive {SOURCE_DRIVE} exists")
     else:
-        print(f"❌ Source drive {SOURCE_DRIVE} does not exist")
+        print(f"ERROR: Source drive {SOURCE_DRIVE} does not exist")
         return False
     
     print()
-    print(f"🚀 Starting parallel conversion process with {max_workers} threads...")
+    print(f"Starting parallel conversion process with {max_workers} threads...")
     print("   Press Ctrl+C to stop at any time")
     print()
     
     try:
         # Reserve initial batch of work
-        print("📦 Reserving initial batch of vcons...")
+        print("Reserving initial batch of vcons...")
         reserve_batch_vcons()
         
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
@@ -385,7 +385,7 @@ def main():
                 if work_queue.qsize() < max_workers:
                     reserved = reserve_batch_vcons()
                     if reserved == 0:
-                        print("💡 No more vcons available to reserve")
+                        print("INFO: No more vcons available to reserve")
                 
                 # Check completed futures and submit new work
                 new_futures = []
@@ -399,7 +399,7 @@ def main():
                             new_future = executor.submit(process_vcon_worker)
                             new_futures.append(new_future)
                         except Exception as e:
-                            print(f"⚠️ Thread error: {e}")
+                            print(f"WARNING: Thread error: {e}")
                             # Submit replacement work
                             new_future = executor.submit(process_vcon_worker)
                             new_futures.append(new_future)
@@ -426,22 +426,22 @@ def main():
                 time.sleep(0.5)
                     
     except KeyboardInterrupt:
-        print("\n\n⚠️ Interrupted by user (Ctrl+C)")
-        print(f"📊 Processed {total_processed} files before interruption")
+        print("\n\nWARNING: Interrupted by user (Ctrl+C)")
+        print(f"Processed {total_processed} files before interruption")
     
     # Clean up any remaining converting flags
-    print("\n🧹 Cleaning up...")
+    print("\nCleaning up...")
     cleanup_converting_flags()
     
     print("\n" + "=" * 60)
-    print("🎉 CONVERSION COMPLETE!")
-    print(f"📊 Total files processed: {total_processed}")
+    print("CONVERSION COMPLETE!")
+    print(f"Total files processed: {total_processed}")
     
     if total_processed == 0:
-        print("💡 No WAV files found to convert. All done!")
+        print("INFO: No WAV files found to convert. All done!")
     else:
-        print(f"🎵 Successfully converted {total_processed} WAV files to OGG format")
-        print("💾 Database updated and original WAV files removed")
+        print(f"Successfully converted {total_processed} WAV files to OGG format")
+        print("Database updated and original WAV files removed")
     
     print("=" * 60)
     return total_processed > 0
