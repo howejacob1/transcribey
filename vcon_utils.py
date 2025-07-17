@@ -24,8 +24,7 @@ import settings
 import sftp
 from sftp import sftp_is_local
 import sftp as sftp_utils
-from mongo_utils import db
-import mongo_utils
+from mongo_utils import db, _db_semaphore
 from process import block_until_threads_and_processes_finish
 from settings import hostname
 from sftp import parse_url
@@ -393,7 +392,8 @@ def update_vcons_on_db_bulk(vcons: List[Vcon]):
     
     # Execute bulk write with semaphore protection
     if operations:
-        result = db.bulk_write(operations, ordered=False)
+        with _db_semaphore:
+            result = db.bulk_write(operations, ordered=False)
         return result
 
 def load_all():

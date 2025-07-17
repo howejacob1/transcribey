@@ -22,7 +22,7 @@ def reserver(sftp_url, vcons_ready_queue, stats_queue):
             while sftp is None:
                 try:
                     with with_blocking_time(stats_queue):
-                        sftp = connect_keep_trying(sftp_url)
+                        sftp, _ = connect_keep_trying(sftp_url)
                 except Exception as e:
                     sftp = None
                     with with_blocking_time(stats_queue):

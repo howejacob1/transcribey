@@ -5,7 +5,7 @@ import logging
 
 import torch
 import whisper
-from nemo.collections.asr.models import ASRModel
+from nemo.collections.asr.models import ASRModel    
 
 import gpu
 import process
@@ -109,7 +109,7 @@ def transcribe(lang_detected_queue: Queue,
         setup_signal_handlers()
         model = load_nvidia(model_name)
         
-        config = {"batch_size": 16}
+        config = {"batch_size": settings.transcribe_batch_max_size}
         if language != "en" and language != "auto":
             config.update({
                 "source_lang": language,

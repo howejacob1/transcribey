@@ -27,7 +27,7 @@ def discover(url, stats_queue, print_status=False):
     count = 0
 
     try:        
-        sftp_client = sftp.connect_keep_trying(url)
+        sftp_client, _ = sftp.connect_keep_trying(url)
 
         parsed = sftp.parse_url(url)
         path = parsed["path"]

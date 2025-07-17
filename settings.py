@@ -6,7 +6,7 @@ mark_non_english_as_corrupt = False
 put_all_vcons_into_english_queue = False
 
 # Settings for main.py
-cache_dir = "/dev/shm/cache2/"
+cache_dir = "/dev/shm/cache4/"
 processing_dir = os.path.join(cache_dir, "processing/")
 downloading_dir = os.path.join(cache_dir, "downloading/")
 lang_detect_threshold = 0.2
@@ -52,12 +52,12 @@ min_audio_duration_seconds = 1.0
 status_update_seconds = 20.0
 
 lang_detect_batch_timeout_seconds = 0.1
-lang_detect_batch_max_size = 8
+lang_detect_batch_max_size = 32
 lang_detect_batch_max_len = 4
 lang_detect_batch_ready = 0.1
 
 transcribe_batch_timeout_seconds = 0.1
-transcribe_batch_max_size = 8
+transcribe_batch_max_size = 32
 transcribe_batch_max_len = 4
 
 queue_max_size = 200

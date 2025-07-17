@@ -40,13 +40,13 @@ def connect(url):
     # SFTP performance optimizations
     sftp.get_channel().settimeout(settings.sftp_download_timeout)
     
-    return sftp
+    return sftp, client
 
 def connect_keep_trying(url):
     while True:
         try:
-            sftp = connect(url)
-            return sftp
+            sftp, client = connect(url)
+            return sftp, client
         except Exception as e:
             time.sleep(1)
 
