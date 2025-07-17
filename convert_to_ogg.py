@@ -1,20 +1,24 @@
 #!/usr/bin/env python3
 """
 WAV to OGG Vorbis converter using ffmpeg-python library.
+Supports both local and remote operation modes.
 
 Requirements:
 - ffmpeg binary: sudo apt update && sudo apt install ffmpeg  
 - ffmpeg-python library: pip install ffmpeg-python
+- For remote mode: paramiko library for SFTP
 """
-import random
-
-import os
-import subprocess
+import argparse
 import hashlib
+import os
+import queue
+import random
 import shutil
+import socket
+import subprocess
+import tempfile
 import threading
 import time
-import queue
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 try:
@@ -23,10 +27,10 @@ except ImportError:
     print("ERROR: ffmpeg-python library not found!")
     print("Please install it with: pip install ffmpeg-python")
     exit(1)
-
 from mongo_utils import db, _db_semaphore
-from vcon_class import Vcon
 from utils import num_cores
+from vcon_class import Vcon
+import sftp
 
 # Target directories to save converted files
 TARGET_DRIVES = [
@@ -37,8 +41,18 @@ TARGET_DRIVES = [
 
 SOURCE_DRIVE = "/media/10900-hdd-0"
 
+# Remote connection settings
+REMOTE_HOST_CONFIG = "banidk0-remote"  # SSH config name
+SFTP_URL = "sftp://bantaim@banidk0:22/"
+
 # Minimum free space required (in bytes) - 1GB safety margin
 MIN_FREE_SPACE = 1 * 1024 * 1024 * 1024  # 1GB
+
+# Global variables for operation mode
+IS_REMOTE_MODE = False
+sftp_client = None
+ssh_client = None
+remote_temp_dir = None
 
 # Global variable to store available drives (checked once at startup)
 AVAILABLE_DRIVES = []
@@ -59,36 +73,144 @@ BATCH_SIZE = 3000  # Reserve 3000 vcons at a time
 
 def cpu_cores_for_conversion():
     """Get optimal number of CPU cores for conversion tasks"""
-    return max(1, num_cores())  # Leave 2 cores for system tasks
+    cores_available = num_cores() or 1
+    # Leave two cores idle so the machine stays responsive
+    return max(1, cores_available - 2)
+
+def setup_remote_mode():
+    """Initialize SFTP connection and temporary directory for remote operation"""
+    global sftp_client, ssh_client, remote_temp_dir
+    
+    print(f"Setting up remote connection to {REMOTE_HOST_CONFIG}...")
+    
+    try:
+        # Connect using existing sftp module
+        sftp_client, ssh_client = sftp.connect(SFTP_URL)
+        print("✓ SFTP connection established")
+        
+        # Create temporary directory for remote operations
+        remote_temp_dir = tempfile.mkdtemp(prefix="transcribey_remote_")
+        os.makedirs(remote_temp_dir, exist_ok=True)
+        print(f"✓ Temporary directory: {remote_temp_dir}")
+        
+        # Test database connection
+        db.find_one({"done": True}, {"_id": 1})
+        print("✓ Database connection verified")
+        
+        return True
+        
+    except Exception as e:
+        print(f"ERROR: Failed to setup remote mode: {e}")
+        cleanup_remote_mode()
+        return False
+
+def cleanup_remote_mode():
+    """Clean up SFTP connection and temporary files"""
+    global sftp_client, ssh_client, remote_temp_dir
+    
+    print("Cleaning up remote mode...")
+    
+    # Clean up temporary directory
+    if remote_temp_dir and os.path.exists(remote_temp_dir):
+        try:
+            shutil.rmtree(remote_temp_dir)
+            print(f"✓ Removed temporary directory: {remote_temp_dir}")
+        except Exception as e:
+            print(f"WARNING: Could not remove temp dir {remote_temp_dir}: {e}")
+    
+    # Close SFTP connection
+    if sftp_client:
+        try:
+            sftp_client.close()
+            print("✓ SFTP connection closed")
+        except:
+            pass
+    
+    # Close SSH connection  
+    if ssh_client:
+        try:
+            ssh_client.close()
+            print("✓ SSH connection closed")
+        except:
+            pass
+    
+    sftp_client = None
+    ssh_client = None
+    remote_temp_dir = None
+
+def get_hostname():
+    """Get the current hostname to identify this worker"""
+    return socket.gethostname()
 
 def get_available_space(drive_path):
     """Get available space on a drive in bytes"""
-    try:
-        _, _, free_bytes = shutil.disk_usage(drive_path)
-        return free_bytes
-    except Exception as e:
-        print(f"WARNING: Could not check space for {drive_path}: {e}")
-        return 0
+    # Treat any path that exists locally as a local path, even when running in remote mode
+    if os.path.exists(drive_path):
+        try:
+            _, _, free_bytes = shutil.disk_usage(drive_path)
+            return free_bytes
+        except Exception as e:
+            print(f"WARNING: Could not check space for {drive_path}: {e}")
+            return 0
+
+    if IS_REMOTE_MODE:
+        try:
+            stat = sftp_client.statvfs(drive_path)
+            free_bytes = stat.f_bavail * stat.f_frsize
+            return free_bytes
+        except Exception as e:
+            print(f"WARNING: Could not check remote space for {drive_path}: {e}")
+            return 0
+
+    # Fallback – unknown path
+    return 0
 
 def initialize_available_drives():
     """Check drive space once at startup and cache available drives"""
     global AVAILABLE_DRIVES
     
-    print("Checking target drives (one-time check)...")
-    AVAILABLE_DRIVES = []
-    
-    for drive in TARGET_DRIVES:
-        if not os.path.exists(drive):
-            print(f"ERROR: {drive} does not exist")
-            continue
-            
-        free_space = get_available_space(drive)
+    if IS_REMOTE_MODE:
+        print("Remote mode: checking remote target drives via SFTP...")
+        AVAILABLE_DRIVES = []
         
-        if free_space >= MIN_FREE_SPACE:
-            print(f"OK: {drive}: {free_space / 1024 / 1024 / 1024:.2f} GB free")
-            AVAILABLE_DRIVES.append(drive)
-        else:
-            print(f"ERROR: {drive}: {free_space / 1024 / 1024 / 1024:.2f} GB free (insufficient)")
+        for drive in TARGET_DRIVES:
+            try:
+                # Check if remote drive exists
+                sftp_client.stat(drive)
+                free_space = get_available_space(drive)
+                
+                if free_space >= MIN_FREE_SPACE:
+                    print(f"OK: {drive}: {free_space / 1024 / 1024 / 1024:.2f} GB free (remote)")
+                    AVAILABLE_DRIVES.append(drive)
+                else:
+                    print(f"ERROR: {drive}: {free_space / 1024 / 1024 / 1024:.2f} GB free (insufficient, remote)")
+            except Exception as e:
+                print(f"ERROR: Remote drive {drive} does not exist or is inaccessible: {e}")
+                continue
+        
+        # Also check local temp space
+        if remote_temp_dir:
+            local_free = get_available_space(remote_temp_dir)
+            print(f"Local temp space: {local_free / 1024 / 1024 / 1024:.2f} GB free")
+            if local_free < MIN_FREE_SPACE:
+                print("WARNING: Local temporary space is low!")
+    else:
+        # Local mode - existing behavior
+        print("Checking target drives (one-time check)...")
+        AVAILABLE_DRIVES = []
+        
+        for drive in TARGET_DRIVES:
+            if not os.path.exists(drive):
+                print(f"ERROR: {drive} does not exist")
+                continue
+                
+            free_space = get_available_space(drive)
+            
+            if free_space >= MIN_FREE_SPACE:
+                print(f"OK: {drive}: {free_space / 1024 / 1024 / 1024:.2f} GB free")
+                AVAILABLE_DRIVES.append(drive)
+            else:
+                print(f"ERROR: {drive}: {free_space / 1024 / 1024 / 1024:.2f} GB free (insufficient)")
     
     if not AVAILABLE_DRIVES:
         print("ERROR: No drives have sufficient free space!")
@@ -140,8 +262,36 @@ def get_target_drive_by_hash(filename):
 
 def ensure_target_directory_exists(target_path):
     """Create target directory if it doesn't exist"""
-    target_dir = os.path.dirname(target_path)
-    os.makedirs(target_dir, exist_ok=True)
+    if IS_REMOTE_MODE:
+        # For remote mode, create directory via SFTP
+        target_dir = os.path.dirname(target_path)
+        try:
+            # Try to create directory recursively via SFTP
+            dirs_to_create = []
+            current_dir = target_dir
+            
+            # Find which directories need to be created
+            while current_dir and current_dir != '/':
+                try:
+                    sftp_client.stat(current_dir)
+                    break  # Directory exists, stop here
+                except:
+                    dirs_to_create.append(current_dir)
+                    current_dir = os.path.dirname(current_dir)
+            
+            # Create directories from parent to child
+            for dir_path in reversed(dirs_to_create):
+                try:
+                    sftp_client.mkdir(dir_path)
+                except:
+                    pass  # Directory might already exist
+                    
+        except Exception as e:
+            print(f"WARNING: Could not create remote directory {target_dir}: {e}")
+    else:
+        # Local mode - existing behavior
+        target_dir = os.path.dirname(target_path)
+        os.makedirs(target_dir, exist_ok=True)
 
 def convert_wav_to_ogg(source_path, target_path):
     """Convert WAV file to OGG Vorbis using ffmpeg-python library"""
@@ -149,7 +299,7 @@ def convert_wav_to_ogg(source_path, target_path):
         # Ensure target directory exists
         ensure_target_directory_exists(target_path)
         
-        print(f"Converting {target_path}")
+        print(f"Converting {os.path.basename(target_path)} [{get_hostname()}]")
         
         # Use ffmpeg-python to convert WAV to OGG Vorbis
         stream = ffmpeg.input(source_path)
@@ -200,7 +350,17 @@ def reserve_batch_vcons():
             if vcon_dict:
                 vcon = Vcon.from_dict(vcon_dict)
                 # Check if file exists before adding to queue
-                if os.path.exists(vcon.filename):
+                file_exists = False
+                if IS_REMOTE_MODE:
+                    try:
+                        sftp_client.stat(vcon.filename)
+                        file_exists = True
+                    except:
+                        file_exists = False
+                else:
+                    file_exists = os.path.exists(vcon.filename)
+                
+                if file_exists:
                     work_queue.put(vcon)
                     reserved_count += 1
                 else:
@@ -261,8 +421,14 @@ def process_one_vcon():
         return False
     
     original_filename = vcon.filename
-    #print(f"Found vcon: {vcon.uuid}")
-    #print(f"Original file: {original_filename}")
+    
+    if IS_REMOTE_MODE:
+        return process_one_vcon_remote(vcon, original_filename)
+    else:
+        return process_one_vcon_local(vcon, original_filename)
+
+def process_one_vcon_local(vcon, original_filename):
+    """Process one vcon in local mode (existing behavior)"""
     
     # Check if original file exists
     if not os.path.exists(original_filename):
@@ -332,6 +498,112 @@ def process_one_vcon():
     
     return True
 
+def process_one_vcon_remote(vcon, original_filename):
+    """Process one vcon in remote mode: download, convert, upload"""
+    
+    local_wav_path = None
+    local_ogg_path = None
+    
+    try:
+        # Check if remote original file exists
+        try:
+            sftp_client.stat(original_filename)
+        except Exception as e:
+            print(f"ERROR: Remote original file does not exist: {original_filename}")
+            # Clear converting flag and mark as corrupt
+            try:
+                with _db_semaphore:
+                    db.update_one(
+                        {"_id": vcon.uuid},
+                        {"$set": {"corrupt": True}, "$unset": {"converting": ""}}
+                    )
+            except:
+                pass
+            return False
+        
+        # Generate paths
+        original_path = Path(original_filename)
+        relative_path = original_path.relative_to(SOURCE_DRIVE)
+        new_relative_path = relative_path.with_suffix('.ogg')
+        
+        # Choose target drive
+        target_drive = get_target_drive_by_hash(str(relative_path))
+        if not target_drive:
+            print("ERROR: No available drives for conversion")
+            return False
+        
+        remote_new_filename = os.path.join(target_drive, str(new_relative_path))
+        
+        # Create local temporary file paths
+        local_wav_path = os.path.join(remote_temp_dir, f"temp_{vcon.uuid}.wav")
+        local_ogg_path = os.path.join(remote_temp_dir, f"temp_{vcon.uuid}.ogg")
+        
+        # Download WAV file from remote
+        print(f"Downloading {os.path.basename(original_filename)} [{get_hostname()}]")
+        sftp.download_optimized(original_filename, local_wav_path, sftp_client)
+        
+        # Convert locally
+        success, error_msg = convert_wav_to_ogg(local_wav_path, local_ogg_path)
+        
+        if not success:
+            print(f"ERROR: Conversion failed: {error_msg}")
+            # Clear converting flag and mark as corrupt
+            try:
+                with _db_semaphore:
+                    db.update_one(
+                        {"_id": vcon.uuid},
+                        {"$set": {"corrupt": True}, "$unset": {"converting": ""}}
+                    )
+            except:
+                pass
+            return False
+        
+        # Check local converted file exists
+        if not os.path.exists(local_ogg_path):
+            print(f"ERROR: Local converted file not found: {local_ogg_path}")
+            return False
+        
+        # Ensure the destination directory exists on the remote host before upload
+        ensure_target_directory_exists(remote_new_filename)
+
+        # Upload OGG file to remote
+        print(f"Uploading {os.path.basename(remote_new_filename)} [{get_hostname()}]")
+        sftp_client.put(local_ogg_path, remote_new_filename)
+        
+        # Verify remote file exists
+        try:
+            sftp_client.stat(remote_new_filename)
+        except Exception as e:
+            print(f"ERROR: Remote converted file not found after upload: {remote_new_filename}")
+            return False
+        
+        # Update database
+        if not update_vcon_filename(vcon, remote_new_filename):
+            print("ERROR: Database update failed, cleaning up")
+            try:
+                sftp_client.remove(remote_new_filename)
+                print("Removed remote converted file due to database failure")
+            except:
+                pass
+            return False
+        
+        # Remove original remote file
+        try:
+            sftp_client.remove(original_filename)
+        except Exception as e:
+            pass  # Ignore removal errors
+        
+        return True
+        
+    finally:
+        # Clean up local temporary files
+        for temp_file in [local_wav_path, local_ogg_path]:
+            if temp_file and os.path.exists(temp_file):
+                try:
+                    os.remove(temp_file)
+                except:
+                    pass
+
 def increment_progress():
     """Thread-safe progress counter increment"""
     global total_processed
@@ -349,35 +621,110 @@ def process_vcon_worker():
     return None
 
 def cleanup_converting_flags():
-    """Clear any remaining converting flags on exit"""
-    try:
-        with _db_semaphore:
-            result = db.update_many(
-                {"converting": True},
-                {"$unset": {"converting": ""}}
-            )
-            if result.modified_count > 0:
-                print(f"Cleaned up {result.modified_count} converting flags")
-    except Exception as e:
-        print(f"WARNING: Error cleaning up: {e}")
+    """Clear any remaining converting flags on exit for this worker only"""
+    # Note: We don't clear ALL converting flags as other workers may still be processing
+    # Only clear flags for items that were in our local work queue
+    queued_items = []
+    
+    # Drain any remaining items from our work queue
+    while True:
+        try:
+            vcon = work_queue.get_nowait()
+            queued_items.append(vcon.uuid)
+        except queue.Empty:
+            break
+    
+    # Clear converting flags for items we had reserved but didn't process
+    if queued_items:
+        try:
+            with _db_semaphore:
+                result = db.update_many(
+                    {"_id": {"$in": queued_items}, "converting": True},
+                    {"$unset": {"converting": ""}}
+                )
+                if result.modified_count > 0:
+                    print(f"Cleaned up {result.modified_count} converting flags for this worker")
+        except Exception as e:
+            print(f"WARNING: Error cleaning up: {e}")
+
+def parse_arguments():
+    """Parse command line arguments"""
+    parser = argparse.ArgumentParser(
+        description="WAV to OGG Vorbis converter with local and remote support",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # Local mode (default)
+  python convert_to_ogg.py
+
+  # Remote mode
+  python convert_to_ogg.py --remote
+
+  # Remote mode with custom SSH host
+  python convert_to_ogg.py --remote --host other-server-remote
+        """)
+    
+    parser.add_argument('--remote', action='store_true',
+                      help='Run in remote mode (download/upload files via SFTP)')
+    parser.add_argument('--host', default=REMOTE_HOST_CONFIG,
+                      help=f'SSH config hostname for remote mode (default: {REMOTE_HOST_CONFIG})')
+    parser.add_argument('--sftp-url', 
+                      help=f'Custom SFTP URL (default: {SFTP_URL})')
+    
+    return parser.parse_args()
 
 def main():
-    global total_processed
+    global total_processed, IS_REMOTE_MODE, REMOTE_HOST_CONFIG, SFTP_URL
+    
+    # Parse command line arguments
+    args = parse_arguments()
+    IS_REMOTE_MODE = args.remote
+    REMOTE_HOST_CONFIG = args.host
+    if args.sftp_url:
+        SFTP_URL = args.sftp_url
+    else:
+        # Re-create the SFTP URL using the supplied host while keeping the existing username & port
+        url_body = SFTP_URL.split("://")[1]
+        username, host_and_port = url_body.split("@")
+        # host_and_port is like "oldhost:22/" – we keep the port chunk after ':'
+        if ":" in host_and_port:
+            port_part = host_and_port.split(":")[1]
+        else:
+            port_part = "22/"
+        SFTP_URL = f"sftp://{username}@{REMOTE_HOST_CONFIG}:{port_part}"
+    
     total_processed = 0  # Reset counter
     
     # Get optimal number of threads based on CPU cores
     max_workers = cpu_cores_for_conversion()
     
-    print(f"WAV to OGG Vorbis Converter for VCONs ({max_workers} Threads)")
-    print("=" * 50)
-    print("This script will continuously:")
-    print("1. Find done vcons with WAV files")
-    print("2. Check available disk space on target drives") 
-    print(f"3. Convert WAV to OGG Vorbis format ({max_workers} parallel threads)")
-    print("4. Save to a drive with sufficient free space")
-    print("5. Update the database")
-    print("6. Remove the original WAV file")
-    print("7. Repeat until no more WAV files found")
+    mode_str = "REMOTE" if IS_REMOTE_MODE else "LOCAL"
+    hostname = get_hostname()
+    
+    print(f"WAV to OGG Vorbis Converter for VCONs ({max_workers} Threads) - {mode_str} MODE")
+    print(f"Worker: {hostname}")
+    print("=" * 70)
+    
+    if IS_REMOTE_MODE:
+        print("Remote mode - this worker will:")
+        print("1. Connect to remote server via SFTP")
+        print("2. Find done vcons with WAV files (in remote database)")
+        print("3. Download WAV files to local temporary directory")
+        print("4. Convert WAV to OGG Vorbis format locally")
+        print("5. Upload OGG files back to remote server")
+        print("6. Update the remote database")
+        print("7. Remove the original remote WAV file")
+        print("8. Clean up local temporary files")
+        print("9. Repeat until no more WAV files found")
+    else:
+        print("Local mode - this script will:")
+        print("1. Find done vcons with WAV files")
+        print("2. Check available disk space on target drives") 
+        print(f"3. Convert WAV to OGG Vorbis format ({max_workers} parallel threads)")
+        print("4. Save to a drive with sufficient free space")
+        print("5. Update the database")
+        print("6. Remove the original WAV file")
+        print("7. Repeat until no more WAV files found")
     print()
     
     # Check if ffmpeg is available
@@ -391,17 +738,34 @@ def main():
         print("   sudo apt update && sudo apt install ffmpeg")
         return False
     
+    # Initialize remote mode if requested
+    if IS_REMOTE_MODE:
+        print()
+        if not setup_remote_mode():
+            return False
+    
     # Initialize available drives (one-time check)
     print()
     if not initialize_available_drives():
+        if IS_REMOTE_MODE:
+            cleanup_remote_mode()
         return False
     
     # Check source drive exists
-    if os.path.exists(SOURCE_DRIVE):
-        print(f"OK: Source drive {SOURCE_DRIVE} exists")
+    if IS_REMOTE_MODE:
+        try:
+            sftp_client.stat(SOURCE_DRIVE)
+            print(f"OK: Remote source drive {SOURCE_DRIVE} exists")
+        except Exception as e:
+            print(f"ERROR: Remote source drive {SOURCE_DRIVE} does not exist: {e}")
+            cleanup_remote_mode()
+            return False
     else:
-        print(f"ERROR: Source drive {SOURCE_DRIVE} does not exist")
-        return False
+        if os.path.exists(SOURCE_DRIVE):
+            print(f"OK: Source drive {SOURCE_DRIVE} exists")
+        else:
+            print(f"ERROR: Source drive {SOURCE_DRIVE} does not exist")
+            return False
     
     print()
     print(f"Starting parallel conversion process with {max_workers} threads...")
@@ -466,24 +830,29 @@ def main():
                 time.sleep(0.5)
                     
     except KeyboardInterrupt:
-        print("\n\nWARNING: Interrupted by user (Ctrl+C)")
+        print(f"\n\nWARNING: Interrupted by user (Ctrl+C) on {get_hostname()}")
         print(f"Processed {total_processed} files before interruption")
     
     # Clean up any remaining converting flags
     print("\nCleaning up...")
     cleanup_converting_flags()
     
-    print("\n" + "=" * 60)
-    print("CONVERSION COMPLETE!")
+    # Clean up remote mode if active
+    if IS_REMOTE_MODE:
+        cleanup_remote_mode()
+    
+    print("\n" + "=" * 70)
+    print(f"CONVERSION COMPLETE! (Worker: {get_hostname()})")
     print(f"Total files processed: {total_processed}")
     
     if total_processed == 0:
         print("INFO: No WAV files found to convert. All done!")
     else:
-        print(f"Successfully converted {total_processed} WAV files to OGG format")
+        mode_str = "remote" if IS_REMOTE_MODE else "local"
+        print(f"Successfully converted {total_processed} WAV files to OGG format ({mode_str} mode)")
         print("Database updated and original WAV files removed")
     
-    print("=" * 60)
+    print("=" * 70)
     return total_processed > 0
 
 if __name__ == "__main__":
