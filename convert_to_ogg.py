@@ -27,6 +27,16 @@ except ImportError:
     print("ERROR: ffmpeg-python library not found!")
     print("Please install it with: pip install ffmpeg-python")
     exit(1)
+# try PyAV first to avoid launching ffmpeg for every file
+try:
+    import av
+    HAVE_PYAV = True
+except ImportError:
+    HAVE_PYAV = False
+
+# Always use external ffmpeg – PyAV path is slower in practice
+HAVE_PYAV = False
+
 from mongo_utils import db, _db_semaphore
 from utils import num_cores
 from vcon_class import Vcon
@@ -79,7 +89,7 @@ BATCH_SIZE = 3000  # Reserve 3000 vcons at a time
 
 def cpu_cores_for_conversion():
     """Get optimal number of CPU cores for conversion tasks"""
-    return num_cores()
+    return num_cores()+5
 
 def setup_remote_mode():
     """Initialize SFTP connection and temporary directory for remote operation"""
@@ -298,44 +308,66 @@ def ensure_target_directory_exists(target_path):
         os.makedirs(target_dir, exist_ok=True)
 
 def convert_wav_to_ogg(source_path, target_path):
-    """Convert WAV file to OGG Vorbis using ffmpeg-python library"""
     try:
-        # Ensure target directory exists
         ensure_target_directory_exists(target_path)
-        
-        with progress_lock:
-            elapsed = time.time() - worker_start_time if worker_start_time else 0
-            throughput = (total_bytes_processed / (1024 * 1024)) / elapsed if elapsed > 0 else 0.0
-            stats_str = f"{total_processed} files, {total_corrupt} corrupt, {throughput:.2f} MB/s"
-        print(f"Converting ({stats_str}) {os.path.basename(target_path)} [{get_hostname()}]")
-        
-        # Use ffmpeg-python to convert WAV to OGG Vorbis
+
+        if HAVE_PYAV:
+            # fast in-process conversion
+            in_container = av.open(source_path, "r")
+            out_container = av.open(target_path, "w", format="ogg")
+
+            out_stream = out_container.add_stream("libopus", rate=8000, options={"vbr":"on", "compression_level":"10"})
+            out_stream.bit_rate = 8000  # 8 kbps
+            # make stream mono if supported
+            try:
+                out_stream.codec_context.layout = "mono"
+            except AttributeError:
+                # older PyAV versions use channel_layout property
+                try:
+                    out_stream.codec_context.channel_layout = "mono"
+                except AttributeError:
+                    pass  # fallback, encoder will infer from frames
+
+            resampler = av.audio.resampler.AudioResampler(format="s16", layout="mono", rate=8000)
+
+            for in_frame in in_container.decode(audio=0):
+                resampled_frames = resampler.resample(in_frame)
+                # resampler may return a list of frames or a single frame
+                if not isinstance(resampled_frames, (list, tuple)):
+                    resampled_frames = [resampled_frames]
+
+                for r_frame in resampled_frames:
+                    for pkt in out_stream.encode(r_frame):
+                        out_container.mux(pkt)
+
+            # flush encoder
+            for pkt in out_stream.encode(None):
+                out_container.mux(pkt)
+
+            out_container.close()
+            in_container.close()
+            return True, None
+
+        # fallback to ffmpeg-python external process
         stream = ffmpeg.input(source_path)
         stream = ffmpeg.output(
-            stream, 
+            stream,
             target_path,
             ar=8000,
-            ac=1,  # mono audio
-            acodec='libopus',
-            **{
-                'b:a': '8k',               # target bitrate 8 kbps
-                'vbr': 'on',               # variable bitrate
-                'compression_level': '10'  # maximum complexity
-            },
-            f='opus'
+            ac=1,
+            acodec="libopus",
+            **{"b:a": "8k", "vbr": "on", "compression_level": "10"},
+            f="opus",
         )
-        
-        # Run the conversion silently
         ffmpeg.run(stream, overwrite_output=True, quiet=True)
-        
         return True, None
-            
+
     except ffmpeg.Error as e:
-        error_msg = f"FFmpeg conversion error: {e}"
-        return False, error_msg
+        # ffmpeg-python raised an error or PyAV not available
+        return False, str(e)
     except Exception as e:
-        error_msg = f"Error during conversion: {e}"
-        return False, error_msg
+        # catch-all, including any PyAV errors
+        return False, str(e)
 
 def reserve_batch_vcons():
     """Reserve a batch of vcons atomically and add them to work queue"""
@@ -477,6 +509,13 @@ def process_one_vcon_local(vcon, original_filename):
         
     new_filename = os.path.join(target_drive, str(new_relative_path))
     
+    # show converting message with stats
+    with progress_lock:
+        elapsed = time.time() - worker_start_time if worker_start_time else 0
+        throughput = (total_bytes_processed / (1024 * 1024)) / elapsed if elapsed > 0 else 0.0
+        stats_str = f"{total_processed} {total_corrupt} {throughput:.2f} MB/s"
+    print(f"{stats_str} {new_filename[5:]}")
+
     # Measure conversion time for stats
     file_size_bytes = os.path.getsize(original_filename)
     start_t = time.time()
@@ -570,6 +609,13 @@ def process_one_vcon_remote(vcon, original_filename):
         print(f"Downloading {os.path.basename(original_filename)} [{get_hostname()}]")
         sftp.download_optimized(original_filename, local_wav_path, sftp_client)
         
+        # show converting message with stats
+        with progress_lock:
+            elapsed = time.time() - worker_start_time if worker_start_time else 0
+            throughput = (total_bytes_processed / (1024 * 1024)) / elapsed if elapsed > 0 else 0.0
+            stats_str = f"{total_processed} files, {total_corrupt} corrupt, {throughput:.2f} MB/s"
+        print(f"Converting ({stats_str}) {remote_new_filename} [{get_hostname()}]")
+
         # Measure conversion time for stats
         file_size_bytes = os.path.getsize(local_wav_path)
         start_t = time.time()
