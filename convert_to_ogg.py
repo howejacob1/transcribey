@@ -43,6 +43,12 @@ MIN_FREE_SPACE = 1 * 1024 * 1024 * 1024  # 1GB
 # Global variable to store available drives (checked once at startup)
 AVAILABLE_DRIVES = []
 
+# Cached drive weights and update tracking
+DRIVE_WEIGHTS = []
+DRIVE_WEIGHTS_LOCK = threading.Lock()
+LAST_WEIGHT_UPDATE = 0
+WEIGHT_UPDATE_INTERVAL = 20000  # Update weights every 20000 files
+
 # Thread-safe counter for progress tracking
 progress_lock = threading.Lock()
 total_processed = 0
@@ -89,14 +95,48 @@ def initialize_available_drives():
         return False
     
     print(f"OK: Will use {len(AVAILABLE_DRIVES)} drive(s) for conversions")
+    
+    # Initialize drive weights cache
+    update_drive_weights()
+    
     return True
 
+def update_drive_weights():
+    """Update cached drive weights based on current free space"""
+    global DRIVE_WEIGHTS, LAST_WEIGHT_UPDATE
+    
+    with DRIVE_WEIGHTS_LOCK:
+        DRIVE_WEIGHTS = []
+        for drive in AVAILABLE_DRIVES:
+            free_space = get_available_space(drive)
+            if free_space < MIN_FREE_SPACE:
+                # Drive is full, give it zero weight
+                DRIVE_WEIGHTS.append(0)
+            else:
+                DRIVE_WEIGHTS.append(free_space)
+        
+        LAST_WEIGHT_UPDATE = total_processed
+        print(f"Updated drive weights: {[f'{w/1024/1024/1024:.1f}GB' for w in DRIVE_WEIGHTS]}")
+
 def get_target_drive_by_hash(filename):
-    """Distribute files across available target drives using filename hash"""
+    """Distribute files across available target drives using weighted random selection based on cached free space"""
     if not AVAILABLE_DRIVES:
         return None
-
-    return AVAILABLE_DRIVES[random.randint(0, len(AVAILABLE_DRIVES) - 1)]
+    
+    # Check if we need to update weights
+    if not DRIVE_WEIGHTS or (total_processed - LAST_WEIGHT_UPDATE) >= WEIGHT_UPDATE_INTERVAL:
+        update_drive_weights()
+    
+    # Use cached weights for selection
+    with DRIVE_WEIGHTS_LOCK:
+        current_weights = DRIVE_WEIGHTS.copy()
+    
+    # If all drives are full, return None
+    if sum(current_weights) == 0:
+        return None
+    
+    # Weighted random selection - drives with more free space have higher probability
+    return random.choices(AVAILABLE_DRIVES, weights=current_weights)[0]
 
 def ensure_target_directory_exists(target_path):
     """Create target directory if it doesn't exist"""
