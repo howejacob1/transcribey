@@ -34,14 +34,14 @@ def main(sftp_url, stats_queue=None):
     # sftp = sftp_utils.connect_keep_trying(sftp_url)
     vcon.unmarked_all_reserved()
     programs = []
-    reserved_vcons_queue = multiprocessing.Queue(maxsize=1026)
+    reserved_vcons_queue = multiprocessing.Queue(maxsize=512)
     programs.append(reserver.start_process(sftp_url, reserved_vcons_queue, stats_queue))
     preprocessed_vcons_queue = multiprocessing.Queue(maxsize=1026)
     programs.append(preprocess.start_process(reserved_vcons_queue, preprocessed_vcons_queue, stats_queue))
-    lang_detected_en_vcons_queue = multiprocessing.Queue(maxsize=10)
-    lang_detected_non_en_vcons_queue = multiprocessing.Queue(maxsize=10)    
+    lang_detected_en_vcons_queue = multiprocessing.Queue(maxsize=1026)
+    lang_detected_non_en_vcons_queue = multiprocessing.Queue(maxsize=1026)    
     programs.append(lang_detect.start_process(preprocessed_vcons_queue, lang_detected_en_vcons_queue, lang_detected_non_en_vcons_queue, stats_queue))
-    transcribed_vcons_queue = multiprocessing.Queue(maxsize=10)
+    transcribed_vcons_queue = multiprocessing.Queue(maxsize=1026)
     programs.append(transcribe.start_process_en(lang_detected_en_vcons_queue, transcribed_vcons_queue, stats_queue))
 
     if not settings.mark_non_english_as_corrupt and not settings.put_all_vcons_into_english_queue:

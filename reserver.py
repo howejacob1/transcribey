@@ -12,6 +12,15 @@ from stats import with_blocking_time
 from utils import dont_overwhelm_server, dump_thread_stacks
 
 def reserver(sftp_url, vcons_ready_queue, stats_queue):
+    # Set process title for identification in nvidia-smi and ps
+    try:
+        from setproctitle import setproctitle
+        import os
+        setproctitle("transcribey-reserver")
+        print(f"[PID {os.getpid()}] Set process title to: transcribey-reserver")
+    except ImportError:
+        print("setproctitle not available for reserver process")
+    
     stats.start(stats_queue)
     cache.init()
     cache.clear()

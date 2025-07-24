@@ -54,7 +54,7 @@ def preprocess_vcon_one(vcon_cur: Vcon, stats_queue: Queue):
         vcon.remove_vcon_from_processing(vcon_cur)
         return None
 
-def collect_batch_with_timeout(reserved_vcons_queue: Queue, batch_size: int = 32, timeout: float = 0.1):
+def collect_batch_with_timeout(reserved_vcons_queue: Queue, batch_size: int = 26, timeout: float = 0.1):
     """Collect vcons for a batch with timeout"""
     batch = []
     batch_start = time()
@@ -122,6 +122,15 @@ def preprocess_batch(batch: List[Vcon], stats_queue: Queue):
 def preprocess(reserved_vcons_queue: Queue,
                preprocessed_vcons_queue: Queue,
                stats_queue: Queue):
+    # Set process title for identification in nvidia-smi and ps
+    try:
+        from setproctitle import setproctitle
+        import os
+        setproctitle("transcribey-preprocess")
+        print(f"[PID {os.getpid()}] Set process title to: transcribey-preprocess")
+    except ImportError:
+        print("setproctitle not available for preprocess process")
+    
     stats.start(stats_queue)
     vcons_in_memory = []
 
@@ -130,7 +139,7 @@ def preprocess(reserved_vcons_queue: Queue,
         while True:
             # Collect a batch with timeout
             with with_blocking_time(stats_queue):
-                batch = collect_batch_with_timeout(reserved_vcons_queue, batch_size=32, timeout=0.1)
+                batch = collect_batch_with_timeout(reserved_vcons_queue, batch_size=settings.preprocess_batch_max_size, timeout=0.1)
             
             if not batch:
                 continue

@@ -30,6 +30,7 @@ def install_packages():
          "numpy<2.0.0",
          "binpacking", 
          "paramiko", 
+         "setproctitle",
          "nemo_toolkit[all]"]
     ]
 

@@ -7,6 +7,12 @@ import sys
 import threading
 import time
 
+try:
+    from setproctitle import setproctitle
+    HAS_SETPROCTITLE = True
+except ImportError:
+    HAS_SETPROCTITLE = False
+
 def block_until_threads_finish(threads):
     for thread in threads:
         thread.join()
@@ -23,9 +29,22 @@ def setup_signal_handlers():
     signal.signal(signal.SIGTERM, signal_handler)
     signal.signal(signal.SIGINT, signal_handler)
 
+def set_process_title_for_function(func):
+    """Set the process title based on function name"""
+    if HAS_SETPROCTITLE:
+        process_name = f"transcribey-{func.__name__}"
+        setproctitle(process_name)
+        print(f"[PID {os.getpid()}] Set process title to: {process_name}")
+    else:
+        print(f"[PID {os.getpid()}] setproctitle not available, process will show as 'python' in system tools")
+
 def process_wrapper_with_signal_handlers(target_and_args):
     """Top-level wrapper function that can be pickled for multiprocessing spawn"""
     target, args = target_and_args
+    
+    # Set the process title to the function name so it shows up in nvidia-smi and ps
+    set_process_title_for_function(target)
+    
     setup_signal_handlers()
     return target(*args)
 

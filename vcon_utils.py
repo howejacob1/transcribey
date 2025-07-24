@@ -247,7 +247,7 @@ def insert_many_maybe_async(vcons: List[Vcon] | None, print_status=False):
         return thread
 
 def get_by_basename(basename):
-    return db.find_one({"basename": basename})
+    return db.find_one({"dialog.0.basename": basename})
 
 def exists_by_basename(basename):
     return get_by_basename(basename) is not None

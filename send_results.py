@@ -14,6 +14,15 @@ from stats import with_blocking_time
 from vcon_class import Vcon
 
 def send_results(transcribed_vcons_queue: Queue, stats_queue: Queue):
+    # Set process title for identification in nvidia-smi and ps
+    try:
+        from setproctitle import setproctitle
+        import os
+        setproctitle("transcribey-send_results")
+        print(f"[PID {os.getpid()}] Set process title to: transcribey-send_results")
+    except ImportError:
+        print("setproctitle not available for send_results process")
+    
     setup_signal_handlers()
     stats.start(stats_queue)
     

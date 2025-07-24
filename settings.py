@@ -32,32 +32,32 @@ dont_overwhelm_server_time_seconds = 1
 # SFTP Performance tuning
 sftp_buffer_size = 100*1024*1024  # 128KB buffer for downloads (increased from 64KB)
 sftp_prefetch_enabled = True  # Enable prefetch for better performance
-sftp_parallel_downloads = 32  # Number of parallel downloads per batch (reduced to avoid SFTP corruption)
-sftp_download_batch_size = 1024  # Number of files to download in parallel (reduced to avoid connection issues)
+sftp_parallel_downloads = 1  # Number of parallel downloads per batch (reduced to avoid SFTP corruption)
+sftp_download_batch_size = 1  # Number of files to download in parallel (reduced to avoid connection issues)
 sftp_download_timeout = 30  # Timeout for individual file downloads (seconds)
 
 # MongoDB connection settings
 preprocess_batch_timeout_seconds = 0.1
-preprocess_batch_max_size = 8  # Smaller batch size
+preprocess_batch_max_size = 26  # Smaller batch size
 preprocess_batch_max_len = 4   # Smaller max length
 
 # MongoDB performance settings
 mongo_bulk_update_batch_size = 10
 mongo_bulk_update_timeout_seconds = 1.0
-mongo_reservation_batch_limit = 1024
-mongo_discovery_batch_size = 1024  # Same as discover_batch_size for consistency
-reserver_total_batch_size = 4*1024*1024 # 4GB (increased from 2GB for even more aggressive batching)
+mongo_reservation_batch_limit = 512
+mongo_discovery_batch_size = 512  # Same as discover_batch_size for consistency
+reserver_total_batch_size = 1*1024*1024 # 4GB (increased from 2GB for even more aggressive batching)
 
 min_audio_duration_seconds = 1.0
 status_update_seconds = 20.0
 
 lang_detect_batch_timeout_seconds = 0.1
-lang_detect_batch_max_size = 32
+lang_detect_batch_max_size = 26
 lang_detect_batch_max_len = 4
 lang_detect_batch_ready = 0.1
 
 transcribe_batch_timeout_seconds = 0.1
-transcribe_batch_max_size = 32
+transcribe_batch_max_size = 26
 transcribe_batch_max_len = 4
 
 queue_max_size = 200

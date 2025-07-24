@@ -89,7 +89,7 @@ BATCH_SIZE = 3000  # Reserve 3000 vcons at a time
 
 def cpu_cores_for_conversion():
     """Get optimal number of CPU cores for conversion tasks"""
-    return num_cores()
+    return 4
 
 def setup_remote_mode():
     """Initialize SFTP connection and temporary directory for remote operation"""

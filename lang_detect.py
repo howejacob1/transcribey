@@ -258,6 +258,15 @@ def lang_detect(preprocessed_vcons_queue: Queue,
                 lang_detected_en_vcons_queue: Queue,
                 lang_detected_non_en_vcons_queue: Queue,
                 stats_queue: Queue):
+    # Set process title for identification in nvidia-smi and ps
+    try:
+        from setproctitle import setproctitle
+        import os
+        setproctitle("transcribey-lang_detect")
+        print(f"[PID {os.getpid()}] Set process title to: transcribey-lang_detect")
+    except ImportError:
+        print("setproctitle not available for lang_detect process")
+    
     stats.start(stats_queue)
     model = None
     vcons_in_memory = []

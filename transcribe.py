@@ -101,6 +101,16 @@ def transcribe(lang_detected_queue: Queue,
                stats_queue: Queue,
                 model_name: str,
                 language: str):
+    # Set process title for identification in nvidia-smi and ps
+    try:
+        from setproctitle import setproctitle
+        import os
+        process_name = f"transcribey-transcribe_{language}"
+        setproctitle(process_name)
+        print(f"[PID {os.getpid()}] Set process title to: {process_name}")
+    except ImportError:
+        print(f"setproctitle not available for transcribe_{language} process")
+    
     print(f"TRANSCRIBE PROCESS STARTING: language={language}, model={model_name}")
     stats.start(stats_queue)
     model = None

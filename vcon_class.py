@@ -12,6 +12,54 @@ from vcon.party import Party
 import audio
 import gpu
 
+
+import uuid
+import random
+
+VconBase.uuid8_domain_name("bantaim")
+
+def generate_vcon_uuid(domain_name: str = ""):
+    """
+    Generate a purely random UUID8 for vCon objects.
+    
+    This generates a random UUID8 without using domain names or timestamps.
+    The format follows UUID8 specification but with random data.
+    
+    Args:
+        domain_name: Ignored - kept for compatibility
+    
+    Returns:
+        str: A random UUID8 string
+    """
+    return random_uuid8()
+
+
+def random_uuid8() -> str:
+    """
+    Generate a purely random UUID8.
+    
+    Returns:
+        str: A random UUID8 string in standard format
+    """
+    # Generate 128 random bits
+    random_int = random.getrandbits(128)
+    
+    # Set version to 8 (bits 12-15 of the time_hi_and_version field)
+    random_int &= ~(0xF << 76)  # Clear version bits
+    random_int |= (0x8 << 76)   # Set version to 8
+    
+    # Set variant bits (bits 6-7 of clock_seq_hi_and_reserved field) 
+    random_int &= ~(0x3 << 62)  # Clear variant bits
+    random_int |= (0x2 << 62)   # Set variant to RFC 4122
+    
+    # Create UUID from the integer
+    uuid_obj = uuid.UUID(int=random_int)
+    
+    return str(uuid_obj)
+
+
+
+
 class Vcon(VconBase):
     def __init__(self, vcon_dict=None, property_handling=None):
         super().__init__(vcon_dict=vcon_dict)
@@ -37,8 +85,8 @@ class Vcon(VconBase):
         # Create our custom class instance from the properly initialized vcon_dict
         vcon_base.vcon_dict["dialog"] = []
         vcon_base.vcon_dict["analysis"] = []
-
-        return cls(vcon_dict=vcon_base.vcon_dict)
+        new = cls(vcon_dict=vcon_base.vcon_dict)
+        return new
 
     @classmethod
     def from_dict(cls, vcon_dict):
@@ -63,7 +111,8 @@ class Vcon(VconBase):
             safe_dict["analysis"] = []
             
         with suppress_output(should_suppress=True):
-            return cls(vcon_dict=safe_dict)
+            new = cls(vcon_dict=safe_dict)
+            return new
 
     @classmethod
     def create_from_url(cls, url):

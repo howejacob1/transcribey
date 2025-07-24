@@ -15,3 +15,9 @@ cache/
 nohup.out
 rclone-sync.log
 *.log
+
+# Large files (>100MB)
+whydoesthiscrash.txt
+all-filenames.txt
+files_to_download_2.txt
+files_to_download.txt
