@@ -20,7 +20,7 @@ non_en_model_name = "nvidia/canary-180m-flash"
 gpu_ram_unusable = 3*(1024**3) # 5GB
 max_download_threads = 1
 gc_limit_bytes = 3*(1024**3)
-vcon_queue_max_bytes = 1
+
 
 # SFTP connection settings for make_vcons_from_sftp.py
 sftp_url = "sftp://bantaim@banidk0:22/home/bantaim/conserver/fake_wavs_cute/"

@@ -23,7 +23,7 @@ from process import ShutdownException, setup_signal_handlers
 from stats import with_blocking_time
 from utils import let_other_threads_run, dump_thread_stacks, suppress_output, flatten
 from vcon_class import Vcon
-from vcon_queue import VconQueue
+
 from vcon_utils import batch_to_audio_data, is_english, mark_vcon_as_invalid, remove_vcon_from_processing
 from nemo.collections.asr.models import EncDecSpeakerLabelModel
 

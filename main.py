@@ -48,7 +48,7 @@ def main(sftp_url, stats_queue=None):
             programs.append(transcribe.start_process_non_en(lang_detected_non_en_vcons_queue, transcribed_vcons_queue, stats_queue))
     programs.append(send_results.start_process(transcribed_vcons_queue, stats_queue))
 
-    # Simple queue watching function instead of watch_vcon_queue
+    # Simple queue watching function
     def watch_queue(queue_to_watch):
         try:
             while True:
