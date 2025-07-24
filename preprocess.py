@@ -54,7 +54,7 @@ def preprocess_vcon_one(vcon_cur: Vcon, stats_queue: Queue):
         vcon.remove_vcon_from_processing(vcon_cur)
         return None
 
-def collect_batch_with_timeout(reserved_vcons_queue: Queue, batch_size: int = 26, timeout: float = 0.1):
+def collect_batch_with_timeout(reserved_vcons_queue: Queue, batch_size: int = settings.preprocess_batch_default_size, timeout: float = 0.1):
     """Collect vcons for a batch with timeout"""
     batch = []
     batch_start = time()
