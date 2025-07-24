@@ -1,9 +1,5 @@
 from pymongo import MongoClient
 import secrets_utils
-import threading
-
-# Semaphore to limit concurrent database operations to prevent connection pool exhaustion
-_db_semaphore = threading.Semaphore(10)  # Allow more concurrent DB operations
 
 config = secrets_utils.secrets.get('mongo_db', {})
 uri = config.get('url')

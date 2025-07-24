@@ -222,8 +222,7 @@ def is_actual_measurement(measurement):
     return True
 
 def load_all():
-    with mongo_utils._db_semaphore:
-        return list(db.find())
+    return list(db.find())
 
 def load_and_print_all():
     vcons = load_all()
