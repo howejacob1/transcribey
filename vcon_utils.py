@@ -5,6 +5,7 @@ import logging
 import mimetypes
 import os
 import threading
+import time
 from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor, as_completed
 from torch.multiprocessing import Event, Process
 from pprint import pprint
@@ -13,6 +14,7 @@ import binpacking
 import paramiko
 import torchaudio
 from pymongo import MongoClient, ReplaceOne
+from pymongo.errors import ConnectionFailure, ServerSelectionTimeoutError, NetworkTimeout
 from vcon import Vcon as VconBase
 from vcon.dialog import Dialog
 from vcon.party import Party
@@ -31,6 +33,23 @@ from sftp import parse_url
 from stats import with_blocking_time
 from utils import extension, suppress_output, is_audio_filename
 from vcon_class import Vcon
+
+def _retry_db_operation(operation_func, max_retries=3, initial_delay=0.5):
+    """Retry database operations with exponential backoff"""
+    for attempt in range(max_retries):
+        try:
+            with _db_semaphore:
+                return operation_func()
+        except (ConnectionFailure, ServerSelectionTimeoutError, NetworkTimeout) as e:
+            if attempt == max_retries - 1:
+                raise e
+            delay = initial_delay * (2 ** attempt)  # Exponential backoff
+            print(f"Database connection error (attempt {attempt + 1}/{max_retries}): {e}")
+            print(f"Retrying in {delay:.1f} seconds...")
+            time.sleep(delay)
+        except Exception as e:
+            # For other errors, don't retry
+            raise e
 
 
 def is_mono(vcon):
@@ -196,11 +215,14 @@ def unmarked_all_reserved():
     db.update_many({"processed_by": settings.hostname, "done": {"$ne": True}}, {"$unset": {"processed_by": ""}})
 
 def insert_one(vcon: Vcon):
-    vcon_dict = vcon.to_dict()
-    # Use UUID as _id for efficient indexing
-    if "uuid" in vcon_dict:
-        vcon_dict["_id"] = vcon_dict["uuid"]
-    db.insert_one(vcon_dict)
+    def _insert():
+        vcon_dict = vcon.to_dict()
+        # Use UUID as _id for efficient indexing
+        if "uuid" in vcon_dict:
+            vcon_dict["_id"] = vcon_dict["uuid"]
+        return db.insert_one(vcon_dict)
+    
+    return _retry_db_operation(_insert)
 
 def insert_many(vcons: List[Vcon]):
     dicts = []
@@ -247,10 +269,19 @@ def insert_many_maybe_async(vcons: List[Vcon] | None, print_status=False):
         return thread
 
 def get_by_basename(basename):
-    return db.find_one({"dialog.0.basename": basename})
+    def _get():
+        return db.find_one({"dialog.0.basename": basename})
+    
+    return _retry_db_operation(_get)
 
 def exists_by_basename(basename):
-    return get_by_basename(basename) is not None
+    try:
+        result = get_by_basename(basename)
+        return result is not None
+    except Exception as e:
+        print(f"Error checking if basename {basename} exists: {e}")
+        # On error, assume it doesn't exist to allow processing to continue
+        return False
 
 def exists_by_basenames_bulk(basenames: List[str]) -> dict:
     if not basenames:

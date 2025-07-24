@@ -56,7 +56,7 @@ def send_results(transcribed_vcons_queue: Queue, stats_queue: Queue):
                     
                     # Update stats for all vcons in batch
                     for vcon in batch:
-                        print(f"Sending {vcon.filename} {vcon.languages} {vcon.transcript()[:100]}")
+                        print(f"Sending {vcon.transcript()[:140]}")
                         stats.count(stats_queue)
                         stats.bytes(stats_queue, vcon.size)
                         stats.duration(stats_queue, vcon.duration)
