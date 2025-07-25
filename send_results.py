@@ -29,7 +29,7 @@ def send_and_process_vcon_batch(batch: List[Vcon], stats_queue: Queue):
         if vcon.done and not vcon.corrupt and vcon.filename:
             try:
                 os.remove(vcon.filename)
-                print(f"Deleted file: {vcon.filename}")
+                #print(f"Deleted file: {vcon.filename}")
             except FileNotFoundError:
                 print(f"File already deleted or not found: {vcon.filename}")
             except Exception as e:
