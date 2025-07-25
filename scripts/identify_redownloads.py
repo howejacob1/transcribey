@@ -37,7 +37,7 @@ with open(all_filenames_path, "r") as f_all, open(output_path, "a") as f_out:
         basename_only = os.path.splitext(basename_full)[0]
 
         # Find vcon by basename in first dialog entry
-        vcon_doc = collection.find_one({"dialog.0.basename": basename_only}, {"done": 1, "corrupt": 1, "dialog": 1})
+        vcon_doc = collection.find_one({"basename": basename_only}, {"done": 1, "corrupt": 1, "dialog": 1})
 
         need_redownload = False
 

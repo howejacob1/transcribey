@@ -20,7 +20,7 @@ def test_mongodb():
         print(f"✓ MongoDB connected: {count:,} vcons in database")
         
         # Test basename query
-        sample = db.find_one({"dialog.0.basename": {"$exists": True}})
+        sample = db.find_one({"basename": {"$exists": True}})
         if sample:
             dialog = sample.get('dialog', [])
             if dialog and len(dialog) > 0:

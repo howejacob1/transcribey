@@ -98,6 +98,10 @@ class Vcon(VconBase):
         # Make a copy to avoid modifying the original
         safe_dict = dict(vcon_dict)
         
+        # Remove MongoDB ObjectId to avoid serialization issues
+        if "_id" in safe_dict:
+            del safe_dict["_id"]
+        
         # Ensure dialog field is always a list
         if "dialog" not in safe_dict:
             safe_dict["dialog"] = []
@@ -191,20 +195,23 @@ class Vcon(VconBase):
 
     @property
     def basename(self):
-        """Get the basename from the first dialog"""
+        """Get the basename from top-level field (fallback to first dialog for compatibility)"""
+        # Try top-level basename first
+        if "basename" in self.vcon_dict:
+            return self.vcon_dict["basename"]
+        
+        # Fallback to legacy dialog[0].basename for compatibility
         try:
             if not self.vcon_dict.get("dialog", None) or len(self.vcon_dict["dialog"]) == 0:
                 return None
-            return self.vcon_dict["dialog"][0]["basename"]
+            return self.vcon_dict["dialog"][0].get("basename")
         except (KeyError, IndexError, TypeError):
             return None
 
     @basename.setter
     def basename(self, value):
-        """Set the basename in the first dialog"""
-        if "dialog" not in self.vcon_dict or not self.vcon_dict["dialog"]:
-            self.vcon_dict["dialog"] = [{"type": "recording", "basename": value, "encoding": "none"}]
-        self.vcon_dict["dialog"][0]["basename"] = value
+        """Set the basename at top-level field"""
+        self.vcon_dict["basename"] = value
 
 
 

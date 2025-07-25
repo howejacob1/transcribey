@@ -222,7 +222,12 @@ def is_actual_measurement(measurement):
     return True
 
 def load_all():
-    return list(db.find())
+    results = list(db.find())
+    # Remove ObjectId from all results to avoid serialization issues
+    for result in results:
+        if "_id" in result:
+            del result["_id"]
+    return results
 
 def load_and_print_all():
     vcons = load_all()

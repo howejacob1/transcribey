@@ -186,7 +186,7 @@ def processing_filename(vcon: Vcon):
     return cache.filename_to_processing_filename(vcon.uuid + "." + audio_extension)
 
 def mark_vcon_as_invalid(vcon: Vcon):
-    db.update_one({"_id": vcon.uuid}, {"$set": {"corrupt": True, "done": True}})
+    db.update_one({"uuid": vcon.uuid}, {"$set": {"corrupt": True, "done": True}})
 # 
 def remove_vcon_from_processing(vcon: Vcon):
     os.remove(processing_filename(vcon))
@@ -216,9 +216,9 @@ def unmarked_all_reserved():
 def insert_one(vcon: Vcon):
     def _insert():
         vcon_dict = vcon.to_dict()
-        # Use UUID as _id for efficient indexing
-        if "uuid" in vcon_dict:
-            vcon_dict["_id"] = vcon_dict["uuid"]
+        # Remove _id to let MongoDB generate standard ObjectId
+        if "_id" in vcon_dict:
+            del vcon_dict["_id"]
         return db.insert_one(vcon_dict)
     
     return _retry_db_operation(_insert)
@@ -227,9 +227,9 @@ def insert_many(vcons: List[Vcon]):
     dicts = []
     for vcon in vcons:
         vcon_dict = vcon.to_dict()
-        # Use UUID as _id for efficient indexing
-        if "uuid" in vcon_dict:
-            vcon_dict["_id"] = vcon_dict["uuid"]
+        # Remove _id to let MongoDB generate standard ObjectId
+        if "_id" in vcon_dict:
+            del vcon_dict["_id"]
         dicts.append(vcon_dict)
     
     # Use semaphore to limit concurrent database operations
@@ -269,9 +269,24 @@ def insert_many_maybe_async(vcons: List[Vcon] | None, print_status=False):
 
 def get_by_basename(basename):
     def _get():
-        return db.find_one({"dialog.0.basename": basename})
+        result = db.find_one({"basename": basename})
+        if result and "_id" in result:
+            del result["_id"]  # Remove ObjectId to avoid serialization issues
+        return result
     
     return _retry_db_operation(_get)
+
+def get_all_by_basename(basename):
+    """Get ALL vcons with the given basename - used to detect duplicates"""
+    def _get_all():
+        results = list(db.find({"basename": basename}))
+        # Remove ObjectId from all results to avoid serialization issues
+        for result in results:
+            if "_id" in result:
+                del result["_id"]
+        return results
+    
+    return _retry_db_operation(_get_all)
 
 def exists_by_basename(basename):
     try:
@@ -287,25 +302,17 @@ def exists_by_basenames_bulk(basenames: List[str]) -> dict:
         return {}
     
     try:
-        # Single query to check all basenames
-        cursor = db.find(
-            {"dialog.0.basename": {"$in": basenames}},
-            {"dialog.0.basename": 1, "_id": 0}
-        )
-        
-        # Create lookup dict
         existing_basenames = set()
+        
+        # Check top-level basename field
+        cursor = db.find(
+            {"basename": {"$in": basenames}},
+            {"basename": 1, "_id": 0}
+        )
         for doc in cursor:
-            try:
-                dialog = doc.get("dialog", [])
-                if dialog and isinstance(dialog, list) and len(dialog) > 0:
-                    if isinstance(dialog[0], dict) and "basename" in dialog[0]:
-                        basename = dialog[0]["basename"]
-                        if basename:
-                            existing_basenames.add(basename)
-            except (KeyError, IndexError, TypeError) as e:
-                # Skip documents with malformed dialog structure
-                continue
+            basename = doc.get("basename")
+            if basename:
+                existing_basenames.add(basename)
         
         # Return dict mapping basename -> exists
         return {basename: basename in existing_basenames for basename in basenames}
@@ -399,9 +406,10 @@ def mark_vcons_as_done(vcons):
 def update_vcon_on_db(vcon: Vcon):
     vcon_uuid_val = vcon.uuid
     vcon_dict = vcon.to_dict()
-    # Use UUID as _id for efficient indexing
-    vcon_dict["_id"] = vcon_uuid_val
-    db.replace_one({"_id": vcon_uuid_val}, vcon_dict, upsert=True)
+    # Update by uuid field, not _id
+    if "_id" in vcon_dict:
+        del vcon_dict["_id"]
+    db.replace_one({"uuid": vcon_uuid_val}, vcon_dict, upsert=True)
 
 def update_vcons_on_db_bulk(vcons: List[Vcon]):
     if not vcons:
@@ -411,10 +419,11 @@ def update_vcons_on_db_bulk(vcons: List[Vcon]):
     operations = []
     for vcon in vcons:
         vcon_dict = vcon.to_dict()
-        vcon_dict["_id"] = vcon.uuid
+        if "_id" in vcon_dict:
+            del vcon_dict["_id"]
         operations.append(
             ReplaceOne(
-                {"_id": vcon.uuid},
+                {"uuid": vcon.uuid},
                 vcon_dict,
                 upsert=True
             )
@@ -426,7 +435,12 @@ def update_vcons_on_db_bulk(vcons: List[Vcon]):
         return result
 
 def load_all():
-    return list(db.find())
+    results = list(db.find())
+    # Remove ObjectId from all results to avoid serialization issues
+    for result in results:
+        if "_id" in result:
+            del result["_id"]
+    return results
 
 def load_and_print_all():
     vcons = load_all()
@@ -459,9 +473,9 @@ def find_and_reserve() -> Vcon | None:
         sort=[("created_at", 1)]  # Process oldest first for better cache locality
     )
     if dict:
-        # Keep _id as uuid for consistency
-        if "_id" in dict and "uuid" not in dict:
-            dict["uuid"] = dict["_id"]
+        # Remove ObjectId to avoid serialization issues
+        if "_id" in dict:
+            del dict["_id"]
         vcon = Vcon.from_dict(dict)
         return vcon
     return None
@@ -481,7 +495,7 @@ def find_and_reserve_many(size_bytes: int) -> List[Vcon]:
     # Build list of UUIDs to reserve
     uuids_to_reserve = []
     for doc in candidates:
-        uuids_to_reserve.append(doc["_id"])
+        uuids_to_reserve.append(doc["uuid"])
     
     if not uuids_to_reserve:
         return []
@@ -489,7 +503,7 @@ def find_and_reserve_many(size_bytes: int) -> List[Vcon]:
     # Bulk reservation update
     #print(f"Reserving {len(uuids_to_reserve)} vcons")
     result = db.update_many(
-        {"_id": {"$in": uuids_to_reserve}, "processed_by": {"$exists": False}},
+        {"uuid": {"$in": uuids_to_reserve}, "processed_by": {"$exists": False}},
         {"$set": {"processed_by": settings.hostname}}
     )
     #print(f"Reserved {result.modified_count} vcons")
@@ -497,11 +511,11 @@ def find_and_reserve_many(size_bytes: int) -> List[Vcon]:
         return []
     
     # Fetch the reserved documents
-    reserved_docs = db.find({"_id": {"$in": uuids_to_reserve}, "processed_by": settings.hostname})
+    reserved_docs = db.find({"uuid": {"$in": uuids_to_reserve}, "processed_by": settings.hostname})
     for doc in reserved_docs:
-        # Keep _id as uuid for consistency
-        if "_id" in doc and "uuid" not in doc:
-            doc["uuid"] = doc["_id"]
+        # Remove ObjectId to avoid serialization issues
+        if "_id" in doc:
+            del doc["_id"]
         vcon = Vcon.from_dict(doc)
         reserved.append(vcon)
     print(f"Returning {len(reserved)} vcons")

@@ -162,7 +162,7 @@ def get_vcon_status_batch(basenames: List[str]) -> Dict[str, Dict]:
         # query each basename individually for reliability
         for basename in basenames:
             doc = db.find_one(
-                {"dialog.0.basename": basename},
+                {"basename": basename},
                 {"done": 1, "corrupt": 1, "_id": 1}
             )
             
