@@ -19,7 +19,7 @@ import sys
 import subprocess
 import tempfile
 import hashlib
-import concurrent.futures
+# import concurrent.futures  # Removed - no longer using threading
 import time
 from pathlib import Path
 from typing import Set, List, Dict, Tuple, Optional
@@ -36,12 +36,12 @@ from vcon_utils import insert_one, get_by_basename
 
 # Configuration
 S3_ENDPOINT = "https://nyc3.digitaloceanspaces.com"
-BUCKET_PREFIXES = [f"vol{i}-eon" for i in range(1, 9)]  # vol1-eon through vol8-eon
+BUCKET_PREFIXES = [f"vol{i}-eon" for i in range(8, 0, -1)]  # vol8-eon down to vol1-eon
 LOCAL_BASE_DIR = "/media/10900-hdd-0"
 BATCH_SIZE = 50  # Number of S3 objects to process in each batch - reduced for faster iteration
 MAX_PARALLEL_DOWNLOADS = 32  # Reduced from 512 to avoid timeouts
 DOWNLOAD_RETRIES = 3  # Reduced from 5 to fail faster
-S3_LIST_BATCH_SIZE = 500  # Process per hour folder - much smaller batches
+S3_LIST_BATCH_SIZE = 512  # Process per hour folder - much smaller batches
 
 # s5cmd configuration for aggressive downloads
 S5CMD_CONFIG = {
@@ -62,8 +62,26 @@ global_stats = {
     'bytes_deleted': 0,
     'download_errors': 0,
     'vcon_errors': 0,
-    'start_time': None
+    'start_time': None,
+    'last_heartbeat': None
 }
+
+def print_heartbeat(operation: str):
+    """Print periodic heartbeat to show script is alive"""
+    current_time = time.time()
+    with stats_lock:
+        if global_stats['last_heartbeat'] is None or current_time - global_stats['last_heartbeat'] > 30:
+            elapsed = current_time - global_stats['start_time'] if global_stats['start_time'] else 0
+            
+            # Calculate rate directly to avoid nested lock acquisition
+            if elapsed <= 0:
+                rate = 0.0
+            else:
+                total_bytes = global_stats['bytes_downloaded'] + global_stats['bytes_deleted']
+                rate = (total_bytes / (1024 * 1024)) / elapsed
+                
+            print(f" HEARTBEAT: {operation} - {elapsed:.0f}s elapsed, {rate:.1f}MB/s avg, {global_stats['files_processed']} files processed")
+            global_stats['last_heartbeat'] = current_time
 
 def setup_s5cmd():
     """Install s5cmd if not available"""
@@ -200,18 +218,25 @@ def list_directories(bucket: str, path: str) -> List[str]:
         return []
 
 def list_files_in_hour_folder(bucket: str, hour_path: str) -> List[Tuple[str, str, int]]:
-    """List audio files in a specific hour folder"""
+    """List all files in a specific hour folder (all are audio files)"""
     cmd = [
         's5cmd',
         '--endpoint-url', S3_ENDPOINT,
         '--no-sign-request',
+        '--no-verify-ssl',  # Speed up SSL
+        '--numworkers', '16',  # Optimized parallelism for listing
         'ls',
-        f's3://{bucket}/{hour_path}'
+        '--show-fullpath',  # Faster output format
+        f's3://{bucket}/{hour_path}*'  # List all files in hour folder
     ]
     
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+        # Reduce timeout for hour folder listing to 20s to fail faster
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=20)
         if result.returncode != 0:
+            print(f"⚠️ S3_LIST_FAILED: {bucket}/{hour_path} returned code {result.returncode}")
+            if result.stderr:
+                print(f"    Stderr: {result.stderr.strip()}")
             return []
         
         objects = []
@@ -219,42 +244,45 @@ def list_files_in_hour_folder(bucket: str, hour_path: str) -> List[Tuple[str, st
         
         for line in lines:
             line = line.strip()
-            if not line or 'DIR' in line:
+            if not line:
                 continue
             
-            # Parse s5cmd output with size: "2025/07/03 15:55:45   1234567  filename.wav"
-            parts = line.split()
-            if len(parts) >= 3:
-                try:
-                    size = int(parts[2])
-                    filename = parts[3] if len(parts) > 3 else parts[2]
+            # With --show-fullpath, we just get the S3 path: s3://bucket/path/file.wav
+            s3_path = line
+            if s3_path.startswith('s3://'):
+                # Extract key from s3://bucket/key format
+                key = s3_path[len(f's3://{bucket}/'):]
+                # Skip if it's a directory (shouldn't happen with * but just in case)
+                if not key.endswith('/'):
+                    objects.append((bucket, key, 0))  # Size will be determined during download if needed
                     
-                    # Only include audio files
-                    if filename and filename.lower().endswith(('.wav', '.mp3', '.ogg', '.m4a', '.flac')):
-                        # Construct the full S3 key
-                        full_key = f"{hour_path}{filename}"
-                        objects.append((bucket, full_key, size))
-                        
-                except (ValueError, IndexError):
-                    continue
-        
         return objects
         
+    except subprocess.TimeoutExpired:
+        print(f"❌ S3_TIMEOUT: Listing {bucket}/{hour_path} timed out after 20s")
+        return []
     except Exception as e:
-        print(f"Error listing files in {bucket}/{hour_path}: {e}")
+        print(f"❌ S3_ERROR: Error listing files in {bucket}/{hour_path}: {e}")
         return []
 
 def process_hour_folder(bucket: str, freeswitch: str, date: str, hour: str) -> int:
     """Process all files in a single hour folder"""
     hour_path = f"{bucket}/{freeswitch}/{date}/{hour}/"
     
+    print(f"    📂 Listing files in {freeswitch}/{date}/{hour}...")
+    print_heartbeat(f"Listing {freeswitch}/{date}/{hour}")
+    start_time = time.time()
+    
     # List files in this hour folder
     hour_objects = list_files_in_hour_folder(bucket, hour_path)
     
+    list_time = time.time() - start_time
+    
     if not hour_objects:
+        print(f"    📁 {freeswitch}/{date}/{hour}: 0 files (listed in {list_time:.1f}s)")
         return 0
         
-    print(f"    📁 {freeswitch}/{date}/{hour}: {len(hour_objects)} files")
+    print(f"    📁 {freeswitch}/{date}/{hour}: {len(hour_objects)} files (listed in {list_time:.1f}s)")
     
     # Process this hour's files in small batches
     files_processed = 0
@@ -262,28 +290,34 @@ def process_hour_folder(bucket: str, freeswitch: str, date: str, hour: str) -> i
         batch_end = min(batch_start + BATCH_SIZE, len(hour_objects))
         batch = hour_objects[batch_start:batch_end]
         
-        # Process batch with threading (limited to avoid overwhelming)
-        max_threads = min(16, len(batch))  # Conservative thread limit per hour
+        batch_start_time = time.time()
+        #print(f"      🔄 Processing batch {batch_start//BATCH_SIZE + 1}/{(len(hour_objects)-1)//BATCH_SIZE + 1} ({len(batch)} files)...")
+        #print_heartbeat(f"Processing batch {batch_start//BATCH_SIZE + 1} in {freeswitch}/{date}/{hour}")
         
-        with concurrent.futures.ThreadPoolExecutor(max_workers=max_threads) as executor:
-            futures = [
-                executor.submit(process_s3_object, bucket, key, size)
-                for bucket, key, size in batch
-            ]
-            
-            for future in concurrent.futures.as_completed(futures):
-                try:
-                    result = future.result()
-                    print_file_result(
-                        result['basename'],
-                        result['action'],
-                        result['bytes_affected'],
-                        result['success'],
-                        result['error']
-                    )
-                    files_processed += 1
-                except Exception as e:
-                    print(f"❌ THREAD_ERROR: {e}")
+        # Process batch sequentially (no threading to avoid database hangs)
+        completed_count = 0
+        for i, (bucket, key, size) in enumerate(batch):
+            try:
+                #print(f"      📄 Processing file {i+1}/{len(batch)}: {os.path.basename(key)}")
+                result = process_s3_object(bucket, key, size)
+                print_file_result(
+                    result['basename'],
+                    result['action'],
+                    result['bytes_affected'],
+                    result['success'],
+                    result['error']
+                )
+                files_processed += 1
+                completed_count += 1
+            except KeyboardInterrupt:
+                print(f"\n🛑 INTERRUPTED: Stopping batch processing...")
+                raise
+            except Exception as e:
+                print(f"❌ PROCESS_ERROR: {e}")
+                files_processed += 1
+        
+        batch_time = time.time() - batch_start_time
+        #print(f"      ✅ Batch completed in {batch_time:.1f}s ({completed_count}/{len(batch)} succeeded)")
     
     return files_processed
 
@@ -325,7 +359,16 @@ def discover_and_process_s3_hierarchically(bucket: str) -> int:
 def check_vcon_status(basename: str) -> Dict:
     """Check vcon status for a basename"""
     try:
+        # Add debug info for potential hangs
+        #print(f"🔍 DB_QUERY_START: Checking vcon status for {basename}...")
+        db_start = time.time()
         existing_vcon = get_by_basename(basename)
+        db_time = time.time() - db_start
+        
+        #print(f"✅ DB_QUERY_DONE: Query completed for {basename} in {db_time:.1f}s")
+        # Log slow database queries
+        if db_time > 5.0:
+            print(f"⚠️ SLOW_DB: Query for {basename} took {db_time:.1f}s")
         
         if existing_vcon:
             return {
@@ -340,7 +383,7 @@ def check_vcon_status(basename: str) -> Dict:
                 'corrupt': False
             }
     except Exception as e:
-        print(f"Error checking vcon for {basename}: {e}")
+        print(f"❌ DB_ERROR: Error checking vcon for {basename}: {e}")
         return {
             'exists': False,
             'done': False,
@@ -356,6 +399,8 @@ def download_file_with_retries(bucket: str, key: str, local_path: str, expected_
     
     for attempt in range(DOWNLOAD_RETRIES):
         try:
+            print_heartbeat(f"Downloading {os.path.basename(key)} (attempt {attempt + 1})")
+            
             cmd = [
                 's5cmd',
                 '--endpoint-url', S3_ENDPOINT,
@@ -389,7 +434,7 @@ def download_file_with_retries(bucket: str, key: str, local_path: str, expected_
                 print(f"Download failed for {s3_url} (attempt {attempt + 1}): {result.stderr}")
                 
         except subprocess.TimeoutExpired:
-            print(f"Timeout downloading {s3_url} (attempt {attempt + 1})")
+            print(f"❌ DOWNLOAD_TIMEOUT: {s3_url} timed out after 60s (attempt {attempt + 1})")
         except Exception as e:
             print(f"Error downloading {s3_url} (attempt {attempt + 1}): {e}")
         
@@ -397,6 +442,7 @@ def download_file_with_retries(bucket: str, key: str, local_path: str, expected_
         if attempt < DOWNLOAD_RETRIES - 1:
             time.sleep(2 ** attempt)  # Exponential backoff
     
+    print(f"❌ DOWNLOAD_FAILED: {s3_url} failed after {DOWNLOAD_RETRIES} attempts")
     return False
 
 def create_vcon_for_file(basename: str, s3_key: str) -> bool:
@@ -404,7 +450,6 @@ def create_vcon_for_file(basename: str, s3_key: str) -> bool:
     try:
         # Use the S3 key as the filename reference
         filename = os.path.basename(s3_key)
-        
         vcon = Vcon.create_from_url(filename)
         vcon.basename = basename
         vcon.filename = filename
@@ -414,11 +459,21 @@ def create_vcon_for_file(basename: str, s3_key: str) -> bool:
         if os.path.exists(local_path):
             vcon.size = os.path.getsize(local_path)
         
-        insert_one(vcon)
-        return True
+        # Insert vcon to database (relies on MongoDB timeouts and retry logic)
+        #print(f"💾 DB_INSERT_START: Inserting vcon for {basename}...")
+        db_start = time.time()
         
+        insert_one(vcon)
+        
+        db_time = time.time() - db_start
+        #print(f"✅ DB_INSERT_DONE: Insert completed for {basename} in {db_time:.1f}s")
+        if db_time > 5.0:
+            #print(f"⚠️ SLOW_INSERT: Database insert for {basename} took {db_time:.1f}s")
+            pass
+        return True
+            
     except Exception as e:
-        print(f"Error creating vcon for {basename}: {e}")
+        print(f"❌ VCON_ERROR: Error creating vcon for {basename}: {e}")
         return False
 
 def process_s3_object(bucket: str, key: str, size: int) -> Dict:
@@ -566,13 +621,23 @@ def print_progress_summary():
     print("=" * 25)
 
 def main():
+    """Main function to process S3 buckets incrementally"""
+    if not setup_s5cmd():
+        return
+    
+    # Add signal handling for graceful shutdown
+    import signal
+    
+    def signal_handler(signum, frame):
+        print("\n\n🛑 INTERRUPTED: Graceful shutdown...")
+        print_progress_summary()
+        sys.exit(0)
+    
+    signal.signal(signal.SIGINT, signal_handler)  # Ctrl+C
+    signal.signal(signal.SIGTERM, signal_handler)  # Termination
+    
     print("S3 Incremental Download and VCon Management Tool")
     print("=" * 60)
-    
-    # Setup s5cmd
-    if not setup_s5cmd():
-        print("s5cmd setup failed. Exiting.")
-        return 1
     
     # Check local directory
     if not os.path.exists(LOCAL_BASE_DIR):
@@ -589,8 +654,9 @@ def main():
     print()
     print("Format: [STATUS] [ACTION] [BASENAME] [SIZE] [DATA_RATE] [ERROR]")
     print("=" * 60)
+    print()
     
-    # Initialize start time
+    # Initialize global timer
     with stats_lock:
         global_stats['start_time'] = time.time()
     

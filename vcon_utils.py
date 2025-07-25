@@ -34,19 +34,38 @@ from stats import with_blocking_time
 from utils import extension, suppress_output, is_audio_filename
 from vcon_class import Vcon
 
-def _retry_db_operation(operation_func, max_retries=3, initial_delay=0.5):
-    """Retry database operations with exponential backoff"""
+def _retry_db_operation(operation_func, max_retries=10, initial_delay=0.5):
+    """Retry database operations with linear backoff"""
+    operation_start = time.time()
+    
     for attempt in range(max_retries):
         try:
-            return operation_func()
+            if attempt > 0:
+                print(f"🔄 DB_RETRY: Starting attempt {attempt + 1}/{max_retries}")
+            
+            op_start = time.time()
+            result = operation_func()
+            op_time = time.time() - op_start
+            
+            if op_time > 3.0:
+                print(f"⚠️ SLOW_DB_OP: Database operation took {op_time:.1f}s")
+            
+            return result
+            
         except (ConnectionFailure, ServerSelectionTimeoutError, NetworkTimeout) as e:
+            print(f"❌ DB_CONNECTION_ERROR (attempt {attempt + 1}/{max_retries}): {type(e).__name__}: {e}")
+            
             if attempt == max_retries - 1:
+                total_time = time.time() - operation_start
+                print(f"❌ DB_FAILED: All {max_retries} attempts failed after {total_time:.1f}s")
                 raise e
-            delay = initial_delay * (2 ** attempt)  # Exponential backoff
-            print(f"Database connection error (attempt {attempt + 1}/{max_retries}): {e}")
-            print(f"Retrying in {delay:.1f} seconds...")
+                
+            delay = initial_delay * (attempt + 1)  # Linear backoff: 0.5s, 1s, 1.5s, 2s, etc.
+            print(f"⏳ DB_RETRY_WAIT: Retrying in {delay:.1f} seconds...")
             time.sleep(delay)
+            
         except Exception as e:
+            print(f"❌ DB_ERROR: Non-retryable error: {type(e).__name__}: {e}")
             # For other errors, don't retry
             raise e
 
@@ -215,12 +234,16 @@ def unmarked_all_reserved():
 
 def insert_one(vcon: Vcon):
     def _insert():
+        #print(f"📤 DB_RAW_INSERT: Starting MongoDB insert_one for vcon {vcon.uuid}...")
         vcon_dict = vcon.to_dict()
         # Remove _id to let MongoDB generate standard ObjectId
         if "_id" in vcon_dict:
             del vcon_dict["_id"]
-        return db.insert_one(vcon_dict)
+        result = db.insert_one(vcon_dict)
+        #print(f"✅ DB_RAW_INSERT_DONE: MongoDB insert_one completed for vcon {vcon.uuid}")
+        return result
     
+    #print(f"🔄 DB_INSERT_RETRY: Starting insert with retry logic for vcon {vcon.uuid}...")
     return _retry_db_operation(_insert)
 
 def insert_many(vcons: List[Vcon]):
@@ -269,11 +292,14 @@ def insert_many_maybe_async(vcons: List[Vcon] | None, print_status=False):
 
 def get_by_basename(basename):
     def _get():
+        #print(f"🔍 DB_RAW_QUERY: Starting MongoDB find_one for basename {basename}...")
         result = db.find_one({"basename": basename})
+        #print(f"✅ DB_RAW_QUERY_DONE: MongoDB find_one completed for basename {basename}")
         if result and "_id" in result:
             del result["_id"]  # Remove ObjectId to avoid serialization issues
         return result
     
+    #print(f"🔄 DB_QUERY_RETRY: Starting query with retry logic for basename {basename}...")
     return _retry_db_operation(_get)
 
 def get_all_by_basename(basename):
