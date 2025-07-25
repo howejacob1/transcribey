@@ -19,7 +19,7 @@ non_en_model_name = "nvidia/canary-180m-flash"
 
 gpu_ram_unusable = 3*(1024**3) # 5GB
 max_download_threads = 1
-max_transcription_workers = 1
+max_transcription_workers = 2
 max_non_en_transcription_workers = 1
 gc_limit_bytes = 3*(1024**3)
 
