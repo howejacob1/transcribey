@@ -30,31 +30,6 @@ from utils import dump_thread_stacks, dir_size_bytes, size_of_file, clear_screen
 logging.basicConfig(level=logging.INFO, format='[%(asctime)s] [%(threadName)s] %(levelname)s - %(message)s')
 logging.getLogger("paramiko").setLevel(logging.INFO)
 
-def print_random_done_vcon():
-    from mongo_utils import db
-    from pprint import pprint
-    
-    # Use MongoDB's $sample aggregation to get a random done vcon
-    pipeline = [
-        {"$match": {"done": True}},
-        {"$sample": {"size": 1}}
-    ]
-    
-    result = list(db.aggregate(pipeline))
-    
-    if result:
-        vcon_doc = result[0]
-        # Remove ObjectId for clean printing
-        if "_id" in vcon_doc:
-            del vcon_doc["_id"]
-        
-        print("Random done vcon:")
-        print("=" * 50)
-        pprint(vcon_doc)
-        print("=" * 50)
-    else:
-        print("No done vcons found in the database.")
-
 def main(sftp_url, stats_queue=None):
     # sftp = sftp_utils.connect_keep_trying(sftp_url)
     vcon.unmarked_all_reserved()
@@ -168,7 +143,7 @@ def print_out_statistics():
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Transcribey main entry point")
-    parser.add_argument("mode", choices=["head", "worker", "discover", "print", "delete_all", "measure", "dump_jsonl", "stats", "random"], help="head:slurp and run worker. ")
+    parser.add_argument("mode", choices=["head", "worker", "discover", "print", "delete_all", "measure", "dump_jsonl", "stats"], help="head:slurp and run worker. ")
     parser.add_argument("--url", type=str, default=settings.sftp_url, help="Override SFTP URL (applies to both head and worker)")
     parser.add_argument("--production", action="store_true", default=True, help="Enable production mode (applies to both head and worker)")
     parser.add_argument("--dataset", choices=["fast", "med", "slow", "test_recordings"], help="use precompiled dataset")
@@ -214,8 +189,6 @@ if __name__ == "__main__":
         vcon.dump_jsonl()
     elif args.mode == "stats":
         print_out_statistics()
-    elif args.mode == "random":
-        print_random_done_vcon()
         
 
 # We have a DB full of Vcons. 
