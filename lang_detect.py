@@ -129,17 +129,17 @@ def identify_languages_batch(vcon_batch: List[Vcon], model):
                 if isinstance(audio_data, np.ndarray):
                     audio_tensor = torch.from_numpy(audio_data).float()
                     if we_have_a_gpu():
-                        audio_tensor = audio_tensor.cuda()
+                        audio_tensor = audio_tensor.cuda(non_blocking=True)
                 else:
                     audio_tensor = audio_data.float()
                     if we_have_a_gpu() and not audio_tensor.is_cuda:
-                        audio_tensor = audio_tensor.cuda()
+                        audio_tensor = audio_tensor.cuda(non_blocking=True)
                 
                 # Add batch dimension
                 audio_tensor = audio_tensor.unsqueeze(0)
                 input_signal_length = torch.tensor([audio_tensor.shape[1]], dtype=torch.long)
                 if we_have_a_gpu():
-                    input_signal_length = input_signal_length.cuda()
+                    input_signal_length = input_signal_length.cuda(non_blocking=True)
                 
                 # Try different inference methods
                 if hasattr(model, 'infer'):
