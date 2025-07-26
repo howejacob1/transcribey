@@ -20,29 +20,3 @@ client = MongoClient(
 
 something_db = client[db_name]
 db = something_db["vcons"]
-
-def ensure_indexes():
-    """Ensure all necessary indexes exist for optimal query performance"""
-    try:
-        # Create index on basename for fast basename queries
-        db.create_index("basename", background=True)
-        print("Ensured index on basename")
-            # Legacy index for dialog.0.basename removed - using top-level basename only
-        
-        # Create index on done field for processing queries
-        db.create_index("done", background=True)
-        print("Ensured index on done")
-        
-        # Create index on processed_by field for reservation queries
-        db.create_index("processed_by", background=True)
-        print("Ensured index on processed_by")
-        
-        # Compound index for finding unprocessed items
-        db.create_index([("done", 1), ("processed_by", 1)], background=True)
-        print("Ensured compound index on done+processed_by")
-        
-    except Exception as e:
-        print(f"Error creating indexes: {e}")
-
-# Ensure indexes are created when module is imported
-ensure_indexes()
