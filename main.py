@@ -218,18 +218,18 @@ if __name__ == "__main__":
         print_random_done_vcon()
         
 
-    # We have a DB full of Vcons. 
-    # Many are not analyzed. Many do not have langid or something. 
-    # However, we also need to discover. 
-    # Things we have to do: 
-    # see if a vcon exists. If so, skip.
-    # Actually, this is very easy to do if no more than two discoveries run on the same dir. 
-    # All we do is pull all existing vcons, then pull all sftp things. 
-    # for each filename, see if it's in the list. If not, add it to the list, and add it to a list of things to upload.
-    # Optimize accordingly. 
+# We have a DB full of Vcons. 
+# Many are not analyzed. Many do not have langid or something. 
+# However, we also need to discover. 
+# Things we have to do: 
+# see if a vcon exists. If so, skip.
+# Actually, this is very easy to do if no more than two discoveries run on the same dir. 
+# All we do is pull all existing vcons, then pull all sftp things. 
+# for each filename, see if it's in the list. If not, add it to the list, and add it to a list of things to upload.
+# Optimize accordingly. 
 
-    # We also need to be able to do a reserve. What reserve does is find a vcon that does not have analysis and is not reserved.
-    # We should just reserve a larger number of vcons...
+# We also need to be able to do a reserve. What reserve does is find a vcon that does not have analysis and is not reserved.
+# We should just reserve a larger number of vcons...
 
 # We have many target dirs full of vcons. 
 # running discover is fine. 
@@ -243,4 +243,3 @@ if __name__ == "__main__":
 # wondeirng if downloading them we should process them as we go--- idk tho. 
 # Discover is fine...
 # Now we have links to all vcons...
-# 

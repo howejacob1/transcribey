@@ -19,7 +19,8 @@ non_en_model_name = "nvidia/canary-180m-flash"
 
 gpu_ram_unusable = 3*(1024**3) # 5GB
 max_download_threads = 1
-max_transcription_workers = 2
+max_preprocess_workers = 1
+max_transcription_workers = 4
 max_non_en_transcription_workers = 1
 max_lang_detect_workers = 2
 gc_limit_bytes = 3*(1024**3)
@@ -41,9 +42,9 @@ sftp_download_timeout = 30  # Timeout for individual file downloads (seconds)
 
 # MongoDB connection settings
 preprocess_batch_timeout_seconds = 0.1
-preprocess_batch_max_size = 24  # Batch size for better throughput
+preprocess_batch_max_size = 8  # Batch size for better throughput
 preprocess_batch_max_len = 4   # Smaller max length
-preprocess_batch_default_size = 24  # Default batch size for collect_batch_with_timeout
+preprocess_batch_default_size = 8  # Default batch size for collect_batch_with_timeout
 
 # MongoDB performance settings
 mongo_bulk_update_batch_size = 10
@@ -56,12 +57,12 @@ min_audio_duration_seconds = 1.0
 status_update_seconds = 20.0
 
 lang_detect_batch_timeout_seconds = 0.1
-lang_detect_batch_max_size = 24
+lang_detect_batch_max_size = 8
 lang_detect_batch_max_len = 4
 lang_detect_batch_ready = 0.1
 
 transcribe_batch_timeout_seconds = 0.1
-transcribe_batch_max_size = 24
+transcribe_batch_max_size = 8
 transcribe_batch_max_len = 4
 
 queue_max_size = 200
