@@ -32,21 +32,25 @@ sys.path.append('.')
 
 from mongo_utils import db
 from vcon_class import Vcon
-from vcon_utils import insert_one, get_by_basename
+from vcon_utils import insert_one, get_by_basename, update_vcon_on_db
 
 # Configuration
 S3_ENDPOINT = "https://nyc3.digitaloceanspaces.com"
 BUCKET_PREFIXES = [f"vol{i}-eon" for i in range(8, 0, -1)]  # vol8-eon down to vol1-eon
 LOCAL_BASE_DIR = "/media/10900-hdd-0"
-BATCH_SIZE = 50  # Number of S3 objects to process in each batch - reduced for faster iteration
-MAX_PARALLEL_DOWNLOADS = 32  # Reduced from 512 to avoid timeouts
+BATCH_SIZE = 6000  # Number of S3 objects to process in each batch
+MAX_PARALLEL_DOWNLOADS = 1024  # Reduced from 512 to avoid timeouts
 DOWNLOAD_RETRIES = 3  # Reduced from 5 to fail faster
-S3_LIST_BATCH_SIZE = 512  # Process per hour folder - much smaller batches
+S3_LIST_BATCH_SIZE = 1000  # Process per hour folder - much smaller batches
+
+# Test mode - set to True to process only a few files for debugging
+TEST_MODE = os.environ.get('TEST_MODE', 'false').lower() == 'true'
+TEST_FILES_LIMIT = 50  # Only process this many files in test mode
 
 # s5cmd configuration for aggressive downloads
 S5CMD_CONFIG = {
     'endpoint-url': S3_ENDPOINT,
-    'no-verify-ssl': False,
+    'no-verify-ssl': True,
     'retry-count': str(DOWNLOAD_RETRIES),
     'numworkers': str(MAX_PARALLEL_DOWNLOADS)
 }
@@ -67,21 +71,8 @@ global_stats = {
 }
 
 def print_heartbeat(operation: str):
-    """Print periodic heartbeat to show script is alive"""
-    current_time = time.time()
-    with stats_lock:
-        if global_stats['last_heartbeat'] is None or current_time - global_stats['last_heartbeat'] > 30:
-            elapsed = current_time - global_stats['start_time'] if global_stats['start_time'] else 0
-            
-            # Calculate rate directly to avoid nested lock acquisition
-            if elapsed <= 0:
-                rate = 0.0
-            else:
-                total_bytes = global_stats['bytes_downloaded'] + global_stats['bytes_deleted']
-                rate = (total_bytes / (1024 * 1024)) / elapsed
-                
-            print(f" HEARTBEAT: {operation} - {elapsed:.0f}s elapsed, {rate:.1f}MB/s avg, {global_stats['files_processed']} files processed")
-            global_stats['last_heartbeat'] = current_time
+    """Print simple progress"""
+    pass  # Removed verbose heartbeat
 
 def setup_s5cmd():
     """Install s5cmd if not available"""
@@ -133,56 +124,11 @@ def format_bytes(size_bytes: int) -> str:
     return f"{size_bytes:.1f}{size_names[i]}"
 
 def print_file_result(basename: str, action: str, bytes_affected: int, success: bool, error: str = None):
-    """Print one line per file with action and running data rate"""
-    data_rate = get_running_data_rate()
-    
-    # Format action with emoji and status
-    if not success:
-        status_emoji = "❌"
-        action_text = f"{action}_ERROR"
-    elif action == "deleted_local":
-        status_emoji = "🗑️"
-        action_text = "DELETED_LOCAL"
-    elif action == "downloaded":
-        status_emoji = "⬇️"
-        action_text = "DOWNLOADED"
-    elif action == "redownloaded":
-        status_emoji = "🔄"
-        action_text = "REDOWNLOADED"
-    elif action == "vcon_created":
-        status_emoji = "📝"
-        action_text = "VCON_CREATED"
-    elif action.endswith("_and_vcon_created"):
-        status_emoji = "⬇️📝"
-        action_text = action.replace("_and_vcon_created", "").upper() + "+VCON"
-    elif action == "already_exists":
-        status_emoji = "✅"
-        action_text = "EXISTS"
-    elif action == "skipped_done":
-        status_emoji = "✅"
-        action_text = "DONE_SKIP"
-    else:
-        status_emoji = "?"
-        action_text = action.upper()
-    
-    # Format bytes affected
-    bytes_text = format_bytes(bytes_affected) if bytes_affected > 0 else ""
-    
-    # Build output line
-    parts = [
-        status_emoji,
-        action_text,
-        basename[:60],  # Truncate long basenames
-        f"{data_rate:.1f}MB/s"
-    ]
-    
-    if bytes_text:
-        parts.insert(-1, bytes_text)
-    
-    if error:
-        parts.append(f"({error[:50]})")  # Truncate long errors
-    
-    print(" ".join(parts))
+    """Print one simple line per file"""
+    status = "OK" if success else "ERR"
+    size_text = format_bytes(bytes_affected) if bytes_affected > 0 else ""
+    error_text = f" ({error[:30]})" if error else ""
+    print(f"{status} {action} {basename[:50]} {size_text}{error_text}")
 
 def list_directories(bucket: str, path: str) -> List[str]:
     """List directories in a given S3 path"""
@@ -226,7 +172,7 @@ def list_files_in_hour_folder(bucket: str, hour_path: str) -> List[Tuple[str, st
         '--no-verify-ssl',  # Speed up SSL
         '--numworkers', '16',  # Optimized parallelism for listing
         'ls',
-        '--show-fullpath',  # Faster output format
+        # Remove --show-fullpath to get size information
         f's3://{bucket}/{hour_path}*'  # List all files in hour folder
     ]
     
@@ -234,9 +180,6 @@ def list_files_in_hour_folder(bucket: str, hour_path: str) -> List[Tuple[str, st
         # Reduce timeout for hour folder listing to 20s to fail faster
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=20)
         if result.returncode != 0:
-            print(f"⚠️ S3_LIST_FAILED: {bucket}/{hour_path} returned code {result.returncode}")
-            if result.stderr:
-                print(f"    Stderr: {result.stderr.strip()}")
             return []
         
         objects = []
@@ -247,14 +190,28 @@ def list_files_in_hour_folder(bucket: str, hour_path: str) -> List[Tuple[str, st
             if not line:
                 continue
             
-            # With --show-fullpath, we just get the S3 path: s3://bucket/path/file.wav
-            s3_path = line
-            if s3_path.startswith('s3://'):
-                # Extract key from s3://bucket/key format
-                key = s3_path[len(f's3://{bucket}/'):]
-                # Skip if it's a directory (shouldn't happen with * but just in case)
-                if not key.endswith('/'):
-                    objects.append((bucket, key, 0))  # Size will be determined during download if needed
+            # Parse standard s5cmd ls output: "2023/01/01 00:00:00    1234567 filename.wav"
+            # Format: date time size filename
+            parts = line.split()
+            if len(parts) >= 4:
+                try:
+                    # Extract size (3rd element from the end: date, time, size, filename)
+                    size = int(parts[-2])
+                    filename = parts[-1]
+                    
+                    # Construct full S3 key from hour_path and filename
+                    key = f"{hour_path}{filename}"
+                    
+                    # Skip if it's a directory
+                    if not key.endswith('/'):
+                        objects.append((bucket, key, size))
+                except (ValueError, IndexError):
+                    # If parsing fails, fall back to size 0
+                    if len(parts) >= 1:
+                        filename = parts[-1]
+                        key = f"{hour_path}{filename}"
+                        if not key.endswith('/'):
+                            objects.append((bucket, key, 0))
                     
         return objects
         
@@ -269,37 +226,173 @@ def process_hour_folder(bucket: str, freeswitch: str, date: str, hour: str) -> i
     """Process all files in a single hour folder"""
     hour_path = f"{bucket}/{freeswitch}/{date}/{hour}/"
     
-    print(f"    📂 Listing files in {freeswitch}/{date}/{hour}...")
-    print_heartbeat(f"Listing {freeswitch}/{date}/{hour}")
-    start_time = time.time()
-    
     # List files in this hour folder
     hour_objects = list_files_in_hour_folder(bucket, hour_path)
     
-    list_time = time.time() - start_time
-    
     if not hour_objects:
-        print(f"    📁 {freeswitch}/{date}/{hour}: 0 files (listed in {list_time:.1f}s)")
         return 0
-        
-    print(f"    📁 {freeswitch}/{date}/{hour}: {len(hour_objects)} files (listed in {list_time:.1f}s)")
     
-    # Process this hour's files in small batches
+    # In test mode, limit the number of files processed
+    if TEST_MODE and len(hour_objects) > TEST_FILES_LIMIT:
+        hour_objects = hour_objects[:TEST_FILES_LIMIT]
+    
+    # Process this hour's files in batches
     files_processed = 0
     for batch_start in range(0, len(hour_objects), BATCH_SIZE):
         batch_end = min(batch_start + BATCH_SIZE, len(hour_objects))
         batch = hour_objects[batch_start:batch_end]
         
         batch_start_time = time.time()
-        #print(f"      🔄 Processing batch {batch_start//BATCH_SIZE + 1}/{(len(hour_objects)-1)//BATCH_SIZE + 1} ({len(batch)} files)...")
-        #print_heartbeat(f"Processing batch {batch_start//BATCH_SIZE + 1} in {freeswitch}/{date}/{hour}")
         
-        # Process batch sequentially (no threading to avoid database hangs)
-        completed_count = 0
-        for i, (bucket, key, size) in enumerate(batch):
+        # First pass: check vcon status and collect downloads needed
+        download_requests = []
+        file_actions = {}  # basename -> (action, local_path, etc.)
+        
+        for bucket, key, size in batch:
+            basename = extract_basename_from_s3_key(key)
+            local_path = get_s3_key_to_local_path(key)
+            
             try:
-                #print(f"      📄 Processing file {i+1}/{len(batch)}: {os.path.basename(key)}")
-                result = process_s3_object(bucket, key, size)
+                # Check vcon status
+                vcon_status = check_vcon_status(basename)
+                
+                # Check if local file exists
+                local_exists = os.path.exists(local_path)
+                local_size = os.path.getsize(local_path) if local_exists else 0
+                
+                if vcon_status['exists'] and vcon_status['done'] and not vcon_status['corrupt']:
+                    # Check if filename field is set, try to remove file
+                    ensure_vcon_filename(basename, key)
+                    if local_exists:
+                        try:
+                            os.remove(local_path)
+                            file_actions[basename] = ('deleted_local', local_size, True, None)
+                            with stats_lock:
+                                global_stats['files_deleted'] += 1
+                                global_stats['bytes_deleted'] += local_size
+                        except Exception as e:
+                            file_actions[basename] = ('deleted_local', 0, False, f"Failed to delete: {e}")
+                    else:
+                        file_actions[basename] = ('skipped_done', 0, True, None)
+                        
+                elif vcon_status['exists'] and vcon_status['corrupt']:
+                    # Redownload file, set filename, unmark corrupt and done
+                    download_requests.append((bucket, key, local_path, size))
+                    file_actions[basename] = ('download_uncorrupt', local_path, vcon_status, key)
+                    
+                elif vcon_status['exists'] and not vcon_status['done']:
+                    # Just redownload
+                    download_requests.append((bucket, key, local_path, size))
+                    file_actions[basename] = ('download_existing', local_path, vcon_status, key)
+                        
+                elif not vcon_status['exists']:
+                    # Add new vcon and redownload file
+                    download_requests.append((bucket, key, local_path, size))
+                    file_actions[basename] = ('download_new', local_path, vcon_status, key)
+                else:
+                    file_actions[basename] = ('skipped_done', 0, True, None)
+                    
+            except Exception as e:
+                file_actions[basename] = ('error', 0, False, f"Unexpected error: {e}")
+        
+        # Batch download all files that need downloading
+        download_results = {}
+        if download_requests:
+            download_results = download_files_batch(download_requests)
+            
+            # Update stats for successful downloads
+            for bucket, key, local_path, size in download_requests:
+                basename = extract_basename_from_s3_key(key)
+                if download_results.get(basename, False):
+                    file_size = os.path.getsize(local_path) if os.path.exists(local_path) else 0
+                    with stats_lock:
+                        global_stats['files_downloaded'] += 1
+                        global_stats['bytes_downloaded'] += file_size
+                else:
+                    with stats_lock:
+                        global_stats['download_errors'] += 1
+        
+        # Second pass: process results and create vcons
+        for bucket, key, size in batch:
+            basename = extract_basename_from_s3_key(key)
+            
+            if basename not in file_actions:
+                continue
+                
+            action_type, local_path_or_size, success_or_vcon_status, extra = file_actions[basename]
+            
+            try:
+                result = {
+                    'basename': basename,
+                    'action': 'none',
+                    'success': True,
+                    'bytes_affected': 0,
+                    'error': None
+                }
+                
+                if action_type == 'deleted_local':
+                    result['action'] = 'deleted_local'
+                    result['bytes_affected'] = local_path_or_size
+                    result['success'] = success_or_vcon_status
+                    result['error'] = extra
+                    
+                elif action_type == 'download_uncorrupt':
+                    local_path = local_path_or_size
+                    s3_key = extra
+                    if download_results.get(basename, False):
+                        # Set filename field and unmark corruption
+                        ensure_vcon_filename(basename, s3_key)
+                        if unmark_vcon_corrupt_and_done(basename):
+                            result['action'] = 'downloaded_uncorrupted'
+                            result['bytes_affected'] = os.path.getsize(local_path) if os.path.exists(local_path) else 0
+                        else:
+                            result['success'] = False
+                            result['error'] = "Downloaded but failed to unmark corruption"
+                    else:
+                        result['success'] = False
+                        result['error'] = "Download failed for corrupted vcon"
+                        
+                elif action_type == 'download_existing':
+                    local_path = local_path_or_size
+                    s3_key = extra
+                    if download_results.get(basename, False):
+                        # Set filename field for existing vcon
+                        ensure_vcon_filename(basename, s3_key)
+                        result['action'] = 'downloaded'
+                        result['bytes_affected'] = os.path.getsize(local_path) if os.path.exists(local_path) else 0
+                    else:
+                        result['success'] = False
+                        result['error'] = "Download failed after retries"
+                        
+                elif action_type == 'download_new':
+                    local_path = local_path_or_size
+                    s3_key = extra
+                    if download_results.get(basename, False):
+                        # Create vcon for new file
+                        if create_vcon_for_file(basename, s3_key):
+                            result['action'] = 'downloaded_and_vcon_created'
+                            result['bytes_affected'] = os.path.getsize(local_path) if os.path.exists(local_path) else 0
+                            with stats_lock:
+                                global_stats['vcons_created'] += 1
+                        else:
+                            result['action'] = 'downloaded'
+                            result['bytes_affected'] = os.path.getsize(local_path) if os.path.exists(local_path) else 0
+                            result['success'] = False
+                            result['error'] = "Downloaded but failed to create vcon"
+                            with stats_lock:
+                                global_stats['vcon_errors'] += 1
+                    else:
+                        result['success'] = False
+                        result['error'] = "Download failed, vcon not created"
+                        
+                elif action_type == 'skipped_done':
+                    result['action'] = 'skipped_done'
+                    
+                elif action_type == 'error':
+                    result['success'] = False
+                    result['error'] = extra
+                
+                # Print result
                 print_file_result(
                     result['basename'],
                     result['action'],
@@ -307,17 +400,24 @@ def process_hour_folder(bucket: str, freeswitch: str, date: str, hour: str) -> i
                     result['success'],
                     result['error']
                 )
+                
                 files_processed += 1
-                completed_count += 1
+                
+                # In test mode, check if we've hit the global limit
+                if TEST_MODE and global_stats['files_processed'] >= TEST_FILES_LIMIT:
+                    return files_processed
+                    
+                with stats_lock:
+                    global_stats['files_processed'] += 1
+                    
             except KeyboardInterrupt:
                 print(f"\n🛑 INTERRUPTED: Stopping batch processing...")
                 raise
             except Exception as e:
-                print(f"❌ PROCESS_ERROR: {e}")
                 files_processed += 1
         
         batch_time = time.time() - batch_start_time
-        #print(f"      ✅ Batch completed in {batch_time:.1f}s ({completed_count}/{len(batch)} succeeded)")
+        #print(f"      ✅ Batch completed in {batch_time:.1f}s")
     
     return files_processed
 
@@ -326,154 +426,208 @@ def discover_and_process_s3_hierarchically(bucket: str) -> int:
     total_files_processed = 0
     
     # Structure: vol1-eon/vol1-eon/Freeswitch1/2025-07-03/06/
-    print(f"  Discovering Freeswitch folders in {bucket}...")
     freeswitch_folders = list_directories(bucket, f"{bucket}/")
-    print(f"  Found {len(freeswitch_folders)} Freeswitch folders: {freeswitch_folders[:5]}...")
     
     for freeswitch in freeswitch_folders:
         freeswitch_path = f"{bucket}/{freeswitch}/"
-        
-        print(f"  📂 Processing {freeswitch}...")
         date_folders = list_directories(bucket, freeswitch_path)
         
         for date in date_folders:
             date_path = f"{freeswitch_path}{date}/"
-            
-            # Discover hour folders
             hour_folders = list_directories(bucket, date_path)
-            print(f"    📅 {date}: {len(hour_folders)} hours")
             
             for hour in hour_folders:
                 try:
                     files_in_hour = process_hour_folder(bucket, freeswitch, date, hour)
                     total_files_processed += files_in_hour
                 except Exception as e:
-                    print(f"❌ Error processing {freeswitch}/{date}/{hour}: {e}")
-                
-                # Print progress summary every few hours
-                if total_files_processed > 0 and total_files_processed % 100 == 0:
-                    print_progress_summary()
+                    pass  # Ignore processing errors
     
     return total_files_processed
 
 def check_vcon_status(basename: str) -> Dict:
     """Check vcon status for a basename"""
     try:
-        # Add debug info for potential hangs
-        #print(f"🔍 DB_QUERY_START: Checking vcon status for {basename}...")
-        db_start = time.time()
-        existing_vcon = get_by_basename(basename)
-        db_time = time.time() - db_start
+        # Add debug info for potential hangs - but only for every 100th file to avoid spam
+        #(global_stats['files_processed'] % 100 == 0)
+        debug_this = False
+        # if debug_this:
+            #print(f"🔍 DB_QUERY_START: Checking vcon status for {basename}...")
         
-        #print(f"✅ DB_QUERY_DONE: Query completed for {basename} in {db_time:.1f}s")
-        # Log slow database queries
-        if db_time > 5.0:
-            print(f"⚠️ SLOW_DB: Query for {basename} took {db_time:.1f}s")
+        existing_vcon = get_by_basename(basename)
         
         if existing_vcon:
-            return {
+            status = {
                 'exists': True,
                 'done': existing_vcon.get('done', False),
                 'corrupt': existing_vcon.get('corrupt', False)
             }
+            if debug_this:
+                print(f"📋 VCON_STATUS: {basename} - exists=True, done={status['done']}, corrupt={status['corrupt']}")
+            return status
         else:
+            if debug_this:
+                print(f"📋 VCON_STATUS: {basename} - exists=False")
             return {
                 'exists': False,
                 'done': False,
                 'corrupt': False
             }
     except Exception as e:
-        print(f"❌ DB_ERROR: Error checking vcon for {basename}: {e}")
         return {
             'exists': False,
             'done': False,
             'corrupt': False
         }
 
-def download_file_with_retries(bucket: str, key: str, local_path: str, expected_size: int = 0) -> bool:
-    """Download file with retries using s5cmd"""
-    s3_url = f"s3://{bucket}/{key}"
+def mark_vcon_corrupt(basename: str) -> bool:
+    """Mark a vcon as corrupt in the database"""
+    try:
+        db.update_one(
+            {"basename": basename}, 
+            {"$set": {"corrupt": True}}
+        )
+        # Assume success with async writes
+        return True
+    except Exception as e:
+        return False
+
+def unmark_vcon_corrupt_and_done(basename: str) -> bool:
+    """Unmark a vcon as corrupt and done in the database"""
+    try:
+        db.update_one(
+            {"basename": basename}, 
+            {"$set": {"corrupt": False, "done": False}}
+        )
+        # Assume success with async writes
+        return True
+    except Exception as e:
+        return False
+
+def ensure_vcon_filename(basename: str, s3_key: str) -> bool:
+    """Ensure existing vcon has filename field set to full local path"""
+    try:
+        local_path = get_s3_key_to_local_path(s3_key)  # Full local path
+        existing_vcon = get_by_basename(basename)
+        
+        if existing_vcon and not existing_vcon.get('filename'):
+            # Update vcon to add missing filename field (fire and forget)
+            db.update_one(
+                {"basename": basename},
+                {"$set": {"filename": local_path}}
+            )
+            # Assume success with async writes
+        return True
+    except Exception as e:
+        return False
+
+def download_files_batch(download_requests: List[Tuple[str, str, str, int]]) -> Dict[str, bool]:
+    """Download multiple files in a single s5cmd batch operation"""
+    if not download_requests:
+        return {}
     
-    # Create directory
-    os.makedirs(os.path.dirname(local_path), exist_ok=True)
+    results = {}
     
-    for attempt in range(DOWNLOAD_RETRIES):
+    # Create a temporary file with all download commands
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False) as cmd_file:
+        temp_file_path = cmd_file.name
+        
         try:
-            print_heartbeat(f"Downloading {os.path.basename(key)} (attempt {attempt + 1})")
+            # Write all cp commands to the file
+            for bucket, key, local_path, expected_size in download_requests:
+                s3_url = f"s3://{bucket}/{key}"
+                # Create directory for each file
+                os.makedirs(os.path.dirname(local_path), exist_ok=True)
+                # Remove existing file if it exists
+                if os.path.exists(local_path):
+                    os.remove(local_path)
+                
+                cmd_file.write(f"cp {s3_url} {local_path}\n")
             
+            cmd_file.flush()
+            
+            # Run s5cmd with the batch file
             cmd = [
                 's5cmd',
                 '--endpoint-url', S3_ENDPOINT,
                 '--no-sign-request',
-                '--numworkers', str(min(16, MAX_PARALLEL_DOWNLOADS)),  # Limit per-file workers
-                'cp',
-                s3_url,
-                local_path
+                '--no-verify-ssl',
+                '--numworkers', str(min(len(download_requests), MAX_PARALLEL_DOWNLOADS)),
+                'run',
+                temp_file_path
             ]
             
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+            pass  # Removed verbose batch download message
             
-            if result.returncode == 0:
-                # Verify download
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=300  # 5 minute timeout for batch
+            )
+            
+            # Check results for each file
+            for bucket, key, local_path, expected_size in download_requests:
+                basename = extract_basename_from_s3_key(key)
+                
                 if os.path.exists(local_path):
                     actual_size = os.path.getsize(local_path)
                     
-                    # If expected size is known, verify it
+                    # Verify size if expected
                     if expected_size > 0 and actual_size != expected_size:
-                        print(f"Size mismatch for {local_path}: expected {expected_size}, got {actual_size}")
-                        if attempt < DOWNLOAD_RETRIES - 1:
-                            os.remove(local_path)
-                            continue
-                        else:
-                            return False
-                    
-                    return True
+                        os.remove(local_path)
+                        results[basename] = False
+                    elif actual_size == 0:
+                        os.remove(local_path)
+                        results[basename] = False
+                    else:
+                        results[basename] = True
                 else:
-                    print(f"Download verification failed for {s3_url} (attempt {attempt + 1})")
-            else:
-                print(f"Download failed for {s3_url} (attempt {attempt + 1}): {result.stderr}")
-                
-        except subprocess.TimeoutExpired:
-            print(f"❌ DOWNLOAD_TIMEOUT: {s3_url} timed out after 60s (attempt {attempt + 1})")
-        except Exception as e:
-            print(f"Error downloading {s3_url} (attempt {attempt + 1}): {e}")
-        
-        # Wait before retry
-        if attempt < DOWNLOAD_RETRIES - 1:
-            time.sleep(2 ** attempt)  # Exponential backoff
+                    results[basename] = False
+            
+            # Ignore s5cmd errors for now
+                        
+        finally:
+            # Clean up temp file
+            try:
+                os.unlink(temp_file_path)
+            except:
+                pass
     
-    print(f"❌ DOWNLOAD_FAILED: {s3_url} failed after {DOWNLOAD_RETRIES} attempts")
-    return False
+    return results
+
+def download_file_with_retries(bucket: str, key: str, local_path: str, expected_size: int = 0) -> bool:
+    """Download a single file using batch download (for compatibility)"""
+    download_requests = [(bucket, key, local_path, expected_size)]
+    results = download_files_batch(download_requests)
+    basename = extract_basename_from_s3_key(key)
+    return results.get(basename, False)
 
 def create_vcon_for_file(basename: str, s3_key: str) -> bool:
     """Create a new vcon for a file"""
     try:
-        # Use the S3 key as the filename reference
-        filename = os.path.basename(s3_key)
-        vcon = Vcon.create_from_url(filename)
+        # Use the full local path as the filename reference
+        local_path = get_s3_key_to_local_path(s3_key)
+        vcon = Vcon.create_from_url(os.path.basename(s3_key))
         vcon.basename = basename
-        vcon.filename = filename
+        vcon.filename = local_path
         
         # Get file size for the vcon
         local_path = get_s3_key_to_local_path(s3_key)
         if os.path.exists(local_path):
             vcon.size = os.path.getsize(local_path)
+        else:
+            return False
         
-        # Insert vcon to database (relies on MongoDB timeouts and retry logic)
-        #print(f"💾 DB_INSERT_START: Inserting vcon for {basename}...")
-        db_start = time.time()
-        
-        insert_one(vcon)
-        
-        db_time = time.time() - db_start
-        #print(f"✅ DB_INSERT_DONE: Insert completed for {basename} in {db_time:.1f}s")
-        if db_time > 5.0:
-            #print(f"⚠️ SLOW_INSERT: Database insert for {basename} took {db_time:.1f}s")
-            pass
-        return True
+        # Insert vcon to database (fire and forget with async writes)
+        try:
+            insert_one(vcon)
+            # Assume success with async writes
+            return True
+        except Exception as db_e:
+            return False
             
     except Exception as e:
-        print(f"❌ VCON_ERROR: Error creating vcon for {basename}: {e}")
         return False
 
 def process_s3_object(bucket: str, key: str, size: int) -> Dict:
@@ -497,8 +651,11 @@ def process_s3_object(bucket: str, key: str, size: int) -> Dict:
         local_exists = os.path.exists(local_path)
         local_size = os.path.getsize(local_path) if local_exists else 0
         
-        if vcon_status['exists'] and vcon_status['done'] and local_exists:
-            # Vcon exists and done + local file exists → delete local file
+        if vcon_status['exists'] and vcon_status['done'] and not vcon_status['corrupt'] and local_exists:
+            # Ensure filename field is set for existing vcon
+            ensure_vcon_filename(basename, key)
+            
+            # Vcon exists and done and not corrupt + local file exists → delete local file
             try:
                 os.remove(local_path)
                 result['action'] = 'deleted_local'
@@ -512,7 +669,34 @@ def process_s3_object(bucket: str, key: str, size: int) -> Dict:
                 result['success'] = False
                 result['error'] = f"Failed to delete local file: {e}"
                 
+        elif vcon_status['exists'] and vcon_status['corrupt']:
+            # Ensure filename field is set for existing vcon
+            ensure_vcon_filename(basename, key)
+            
+            # Vcon exists and is corrupt → download file, unmark as corrupt and done
+            if download_file_with_retries(bucket, key, local_path, size):
+                # Successfully downloaded, now unmark corruption
+                if unmark_vcon_corrupt_and_done(basename):
+                    result['action'] = 'downloaded_uncorrupted'
+                    result['bytes_affected'] = os.path.getsize(local_path) if os.path.exists(local_path) else 0
+                    
+                    with stats_lock:
+                        global_stats['files_downloaded'] += 1
+                        global_stats['bytes_downloaded'] += result['bytes_affected']
+                else:
+                    result['success'] = False
+                    result['error'] = "Downloaded but failed to unmark corruption"
+            else:
+                result['success'] = False
+                result['error'] = "Download failed for corrupted vcon"
+                
+                with stats_lock:
+                    global_stats['download_errors'] += 1
+                    
         elif vcon_status['exists'] and not vcon_status['done']:
+            # Ensure filename field is set for existing vcon
+            ensure_vcon_filename(basename, key)
+            
             # Vcon exists but not done → ensure file downloaded (compare by size)
             if not local_exists:
                 # Download the file
@@ -532,20 +716,28 @@ def process_s3_object(bucket: str, key: str, size: int) -> Dict:
             else:
                 # File exists, check size if we know it
                 if size > 0 and local_size != size:
-                    # Size mismatch, re-download
-                    if download_file_with_retries(bucket, key, local_path, size):
-                        result['action'] = 'redownloaded'
-                        result['bytes_affected'] = os.path.getsize(local_path) if os.path.exists(local_path) else 0
-                        
-                        with stats_lock:
-                            global_stats['files_downloaded'] += 1
-                            global_stats['bytes_downloaded'] += result['bytes_affected']
+                    # Size mismatch → mark as corrupt, download, then unmark corrupt and done
+                    if mark_vcon_corrupt(basename):
+                        if download_file_with_retries(bucket, key, local_path, size):
+                            if unmark_vcon_corrupt_and_done(basename):
+                                result['action'] = 'redownloaded_fixed_corruption'
+                                result['bytes_affected'] = os.path.getsize(local_path) if os.path.exists(local_path) else 0
+                                
+                                with stats_lock:
+                                    global_stats['files_downloaded'] += 1
+                                    global_stats['bytes_downloaded'] += result['bytes_affected']
+                            else:
+                                result['success'] = False
+                                result['error'] = "Downloaded but failed to unmark corruption after size fix"
+                        else:
+                            result['success'] = False
+                            result['error'] = "Re-download failed after marking corrupt"
+                            
+                            with stats_lock:
+                                global_stats['download_errors'] += 1
                     else:
                         result['success'] = False
-                        result['error'] = "Re-download failed after retries"
-                        
-                        with stats_lock:
-                            global_stats['download_errors'] += 1
+                        result['error'] = "Failed to mark as corrupt for size mismatch"
                 else:
                     result['action'] = 'already_exists'
                     
@@ -554,6 +746,9 @@ def process_s3_object(bucket: str, key: str, size: int) -> Dict:
             # Download file if not exists or size mismatch
             need_download = not local_exists
             if local_exists and size > 0 and local_size != size:
+                need_download = True
+            elif local_exists and local_size == 0:
+                # Always re-download zero-byte files (likely corrupted)
                 need_download = True
             
             if need_download:
@@ -572,7 +767,7 @@ def process_s3_object(bucket: str, key: str, size: int) -> Dict:
                         global_stats['download_errors'] += 1
                     return result
             
-            # Create vcon only if file download was successful
+            # Create vcon only if file download was successful or file already exists
             if os.path.exists(local_path):
                 if create_vcon_for_file(basename, key):
                     if result['action'] == 'none':
@@ -605,20 +800,10 @@ def process_s3_object(bucket: str, key: str, size: int) -> Dict:
     return result
 
 def print_progress_summary():
-    """Print current progress summary"""
+    """Print minimal progress summary"""
     with stats_lock:
         stats = global_stats.copy()
-    
-    data_rate = get_running_data_rate()
-    
-    print(f"\n=== PROGRESS SUMMARY ===")
-    print(f"Files processed: {stats['files_processed']}")
-    print(f"Downloads: {stats['files_downloaded']} ({format_bytes(stats['bytes_downloaded'])})")
-    print(f"Deletions: {stats['files_deleted']} ({format_bytes(stats['bytes_deleted'])})")
-    print(f"VCons created: {stats['vcons_created']}")
-    print(f"Errors: {stats['download_errors']} download, {stats['vcon_errors']} vcon")
-    print(f"Average data rate: {data_rate:.1f} MB/s")
-    print("=" * 25)
+    print(f"Progress: {stats['files_processed']} processed, {stats['vcons_created']} vcons created, {stats['files_downloaded']} downloaded")
 
 def main():
     """Main function to process S3 buckets incrementally"""
@@ -630,73 +815,42 @@ def main():
     
     def signal_handler(signum, frame):
         print("\n\n🛑 INTERRUPTED: Graceful shutdown...")
+        # stop_persistent_s5cmd() # No longer needed
         print_progress_summary()
         sys.exit(0)
     
     signal.signal(signal.SIGINT, signal_handler)  # Ctrl+C
     signal.signal(signal.SIGTERM, signal_handler)  # Termination
     
-    print("S3 Incremental Download and VCon Management Tool")
-    print("=" * 60)
-    
     # Check local directory
     if not os.path.exists(LOCAL_BASE_DIR):
-        print(f"Local directory {LOCAL_BASE_DIR} does not exist. Creating...")
         try:
             os.makedirs(LOCAL_BASE_DIR, exist_ok=True)
         except Exception as e:
-            print(f"Failed to create {LOCAL_BASE_DIR}: {e}")
             return 1
     
-    print(f"Local base directory: {LOCAL_BASE_DIR}")
-    print(f"Max parallel downloads: {MAX_PARALLEL_DOWNLOADS}")
-    print(f"Download retries: {DOWNLOAD_RETRIES}")
-    print()
-    print("Format: [STATUS] [ACTION] [BASENAME] [SIZE] [DATA_RATE] [ERROR]")
-    print("=" * 60)
-    print()
+    print("Starting S3 processing...")
     
     # Initialize global timer
     with stats_lock:
         global_stats['start_time'] = time.time()
     
     # Process each bucket incrementally, hour by hour
-    for bucket in BUCKET_PREFIXES:
-        print(f"\n>>> Processing bucket: {bucket}")
-        
+    for bucket in BUCKET_PREFIXES:        
         try:
             # Process hierarchically - one hour folder at a time
             total_files = discover_and_process_s3_hierarchically(bucket)
-            print(f"  ✅ Completed {bucket}: {total_files} files processed")
         except Exception as e:
-            print(f"  ❌ Error processing bucket {bucket}: {e}")
-        
-        # Print summary after each bucket
-        print_progress_summary()
+            pass
+    
+    # Stop persistent s5cmd process # No longer needed
+    # stop_persistent_s5cmd()
     
     # Final summary
-    elapsed = time.time() - global_stats['start_time']
-    print("\n" + "=" * 60)
-    print("FINAL SUMMARY")
-    print("=" * 60)
-    
     with stats_lock:
         stats = global_stats.copy()
     
-    print(f"Total files processed: {stats['files_processed']}")
-    print(f"Files downloaded: {stats['files_downloaded']} ({format_bytes(stats['bytes_downloaded'])})")
-    print(f"Local files deleted: {stats['files_deleted']} ({format_bytes(stats['bytes_deleted'])})")
-    print(f"VCons created: {stats['vcons_created']}")
-    print(f"Download errors: {stats['download_errors']}")
-    print(f"VCon errors: {stats['vcon_errors']}")
-    print(f"Total time: {elapsed:.1f} seconds")
-    
-    if elapsed > 0:
-        print(f"Average rates:")
-        print(f"  File processing: {stats['files_processed']/elapsed:.1f} files/sec")
-        if stats['bytes_downloaded'] > 0:
-            print(f"  Download rate: {(stats['bytes_downloaded']/(1024*1024))/elapsed:.1f} MB/sec")
-        print(f"  VCon creation: {stats['vcons_created']/elapsed:.1f} vcons/sec")
+    print(f"Complete: {stats['files_processed']} processed, {stats['vcons_created']} vcons, {stats['files_downloaded']} downloads")
     
     return 0
 
@@ -705,11 +859,8 @@ if __name__ == "__main__":
         exit_code = main()
         sys.exit(exit_code)
     except KeyboardInterrupt:
-        print("\nInterrupted by user")
-        print_progress_summary()
+        print("Interrupted")
         sys.exit(1)
     except Exception as e:
-        print(f"Unexpected error: {e}")
-        import traceback
-        traceback.print_exc()
+        print(f"Error: {e}")
         sys.exit(1) 

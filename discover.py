@@ -80,6 +80,10 @@ def discover(url, stats_queue, print_status=False):
                             stats.bytes(stats_queue, bytes)
                             vcon.size = bytes
                             vcon.basename = basename
+                            # Use full path for filename field
+                            parsed = sftp.parse_url(url)
+                            full_path = parsed["path"] + "/" + filename_local
+                            vcon.filename = full_path
                             stats.count(stats_queue)
                             count += 1
                             

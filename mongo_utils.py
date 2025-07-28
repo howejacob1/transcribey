@@ -15,7 +15,7 @@ client = MongoClient(
     socketTimeoutMS=300000,  # Increase socket timeout to 5 minutes
     connectTimeoutMS=60000,  # Increase connection timeout to 60s
     retryWrites=True,
-    w=1
+    w=1  # Write to primary only, don't wait for replicas
 )
 
 something_db = client[db_name]
