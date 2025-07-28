@@ -1,4 +1,5 @@
 import time
+import os
 
 import settings
 from utils import let_other_threads_run
@@ -7,41 +8,31 @@ import process
 import stats
 import vcon_utils as vcon
 from process import ShutdownException
-from sftp import connect_keep_trying
 from stats import with_blocking_time
 from utils import dont_overwhelm_server, dump_thread_stacks
 
-def reserver(sftp_url, vcons_ready_queue, stats_queue):
+def reserver_nfs(vcons_ready_queue, stats_queue):
+    """Reserve and verify vcons for NFS - no downloading needed"""
     # Set process title for identification in nvidia-smi and ps
     try:
         from setproctitle import setproctitle
         import os
-        setproctitle("transcribey-reserver")
-        print(f"[PID {os.getpid()}] Set process title to: transcribey-reserver")
+        setproctitle("transcribey-reserver-nfs")
+        print(f"[PID {os.getpid()}] Set process title to: transcribey-reserver-nfs")
     except ImportError:
         print("setproctitle not available for reserver process")
     
     stats.start(stats_queue)
-    cache.init()
-    cache.clear()
+    # Cache init/clear removed - not needed for NFS
 
     try:
-        sftp = None
         while True:
-            while sftp is None:
-                try:
-                    with with_blocking_time(stats_queue):
-                        sftp, _ = connect_keep_trying(sftp_url)
-                except Exception as e:
-                    sftp = None
-                    with with_blocking_time(stats_queue):
-                        dont_overwhelm_server()
             #print("Reserving vcons")
             vcons_found = vcon.find_and_reserve_many(settings.reserver_total_batch_size)
             #print(f"Found {len(vcons_found)} vcons")
             if vcons_found:
-                # Process files in parallel batches to reduce total caching time
-                batch_size = settings.sftp_download_batch_size
+                # Process files in batches - just verify they exist and are readable
+                batch_size = settings.sftp_download_batch_size  # Reuse same batch size setting
                 for i in range(0, len(vcons_found), batch_size):
                     batch = [vcon_cur for vcon_cur in vcons_found[i:i+batch_size] if vcon_cur]
                     
@@ -49,24 +40,32 @@ def reserver(sftp_url, vcons_ready_queue, stats_queue):
                         # Time the entire batch
                         batch_start = time.time()
                         
-                        # Cache all files in the batch in parallel
-                        results = vcon.cache_audio_batch(batch, sftp)
-                        
+                        # Verify all files in the batch exist and are accessible
+                        for vcon_cur in batch:
+                            try:
+                                # Check if file exists and is readable
+                                if os.path.exists(vcon_cur.filename) and os.access(vcon_cur.filename, os.R_OK):
+                                    # File is accessible - add to processing queue
+                                    with with_blocking_time(stats_queue):
+                                        vcons_ready_queue.put(vcon_cur)
+                                    
+                                    stats.count(stats_queue)
+                                    stats.bytes(stats_queue, vcon_cur.size)
+                                else:
+                                    # File doesn't exist or isn't readable
+                                    print(f"File not accessible: {vcon_cur.filename}")
+                                    vcon.mark_vcon_as_invalid(vcon_cur)
+                                    
+                            except Exception as e:
+                                print(f"Error verifying {vcon_cur.filename}: {e}")
+                                vcon.mark_vcon_as_invalid(vcon_cur)
+                                
                         batch_end = time.time()
                         batch_time = batch_end - batch_start
                         
-                        # Process results
-                        for vcon_cur, error in results:
-                            if error is None:
-                                
-                                with with_blocking_time(stats_queue):
-                                    vcons_ready_queue.put(vcon_cur)
-                            else:
-                                print(f"Error caching {vcon_cur.uuid}: {error}")
-                                vcon.mark_vcon_as_invalid(vcon_cur)
-                            
-                            stats.count(stats_queue)
-                            stats.bytes(stats_queue, vcon_cur.size)
+                        # Optional: print batch processing stats
+                        files_per_sec = len(batch) / max(batch_time, 0.001)
+                        #print(f"Verified {len(batch)} files in {batch_time:.2f}s ({files_per_sec:.1f} files/s)")
             else:
                 with with_blocking_time(stats_queue):
                     dont_overwhelm_server()
@@ -75,10 +74,12 @@ def reserver(sftp_url, vcons_ready_queue, stats_queue):
         dump_thread_stacks()
     finally:
         stats.stop(stats_queue)
-        if sftp is not None:
-            sftp.close()
-            
 
+# Keep old function for compatibility, but redirect to NFS version
+def reserver(sftp_url, vcons_ready_queue, stats_queue):
+    """Reserve vcons - now works with NFS, ignores sftp_url parameter"""
+    print("Using NFS-based reserver (ignoring SFTP URL)")
+    return reserver_nfs(vcons_ready_queue, stats_queue)
 
 def start_process(sftp_url, vcons_ready_queue, stats_queue):
     return process.start_process(target=reserver, args=(sftp_url, vcons_ready_queue, stats_queue))

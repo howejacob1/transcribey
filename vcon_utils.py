@@ -23,13 +23,11 @@ import cache
 import gpu
 import secrets_utils
 import settings
-import sftp
-from sftp import sftp_is_local
-import sftp as sftp_utils
+# SFTP imports removed - now using NFS
 from mongo_utils import db
 from process import block_until_threads_and_processes_finish
 from settings import hostname
-from sftp import parse_url
+# parse_url import removed - now using NFS
 from stats import with_blocking_time
 from utils import extension, suppress_output, is_audio_filename
 from vcon_class import Vcon
@@ -200,9 +198,8 @@ def cache_audio_batch(vcons: List[Vcon], sftp: paramiko.SFTPClient):
 #     return vcons
 
 def processing_filename(vcon: Vcon):
-    vcon_filename = vcon.filename
-    audio_extension = extension(vcon_filename)
-    return cache.filename_to_processing_filename(vcon.uuid + "." + audio_extension)
+    # For NFS, just return the original filename - no caching needed
+    return vcon.filename
 
 def mark_vcon_as_invalid(vcon: Vcon):
     db.update_one({"uuid": vcon.uuid}, {"$set": {"corrupt": True, "done": True}})
@@ -597,8 +594,8 @@ def is_mono(vcon):
     return audio.is_mono(vcon.audio)
 
 def move_to_processing(vcon: Vcon):
-    filename = processing_filename(vcon)
-    cache.move_filename_to_processing(filename)
+    # For NFS, no file movement needed - files are already accessible
+    pass
 
 def size_of_list(vcons : List[Vcon]) -> int:
     """Compute total size in bytes of all vcons in the list.
