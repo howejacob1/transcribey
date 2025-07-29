@@ -30,12 +30,11 @@ from utils import dump_thread_stacks, dir_size_bytes, size_of_file, clear_screen
 logging.basicConfig(level=logging.INFO, format='[%(asctime)s] [%(threadName)s] %(levelname)s - %(message)s')
 logging.getLogger("paramiko").setLevel(logging.INFO)
 
-def main(sftp_url, stats_queue=None):
-    # sftp = sftp_utils.connect_keep_trying(sftp_url)
+def main(discovery_path, stats_queue=None):
     vcon.unmarked_all_reserved()
     programs = []
     reserved_vcons_queue = multiprocessing.Queue(maxsize=512)
-    programs.append(reserver.start_process(sftp_url, reserved_vcons_queue, stats_queue))
+    programs.append(reserver.start_process(discovery_path, reserved_vcons_queue, stats_queue))
     preprocessed_vcons_queue = multiprocessing.Queue(maxsize=1026)
     programs.append(preprocess.start_process(reserved_vcons_queue, preprocessed_vcons_queue, stats_queue))
     lang_detected_en_vcons_queue = multiprocessing.Queue(maxsize=1026)
@@ -144,7 +143,7 @@ def print_out_statistics():
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Transcribey main entry point")
     parser.add_argument("mode", choices=["head", "worker", "discover", "print", "delete_all", "measure", "dump_jsonl", "stats"], help="head:slurp and run worker. ")
-    parser.add_argument("--url", type=str, default=settings.sftp_url, help="Override SFTP URL (applies to both head and worker)")
+    parser.add_argument("--url", type=str, default=settings.sftp_url, help="Override discovery path (local/NFS path for discover mode)")
     parser.add_argument("--production", action="store_true", default=True, help="Enable production mode (applies to both head and worker)")
     parser.add_argument("--dataset", choices=["fast", "med", "slow", "test_recordings"], help="use precompiled dataset")
     args = parser.parse_args()
@@ -152,13 +151,13 @@ if __name__ == "__main__":
     assert multiprocessing.get_start_method() == "spawn", f"Expected spawn, got {multiprocessing.get_start_method()}"
 
     if args.dataset == "fast":
-        args.url = "sftp://bantaim@127.0.0.1:22/home/bantaim/conserver/fake_wavs_cute/"
+        args.url = "/home/bantaim/conserver/fake_wavs_cute/"
     elif args.dataset == "med":
-        args.url = "sftp://bantaim@127.0.0.1:22/home/bantaim/conserver/openslr-12/"
+        args.url = "/home/bantaim/conserver/openslr-12/"
     elif args.dataset == "slow":
-        args.url = "sftp://bantaim@127.0.0.1:22/home/bantaim/conserver/fake_wavs_medlarge/"
+        args.url = "/home/bantaim/conserver/fake_wavs_medlarge/"
     elif args.dataset == "test_recordings":
-        args.url = "sftp://bantaim@127.0.0.1:22/home/bantaim/conserver/recordings_2025-06-19/"
+        args.url = "/home/bantaim/conserver/recordings_2025-06-19/"
     debug = not args.production
     stats_queue = multiprocessing.Queue(maxsize=100000000)
     discover_process = None
@@ -191,28 +190,12 @@ if __name__ == "__main__":
         print_out_statistics()
         
 
-# We have a DB full of Vcons. 
-# Many are not analyzed. Many do not have langid or something. 
-# However, we also need to discover. 
-# Things we have to do: 
-# see if a vcon exists. If so, skip.
-# Actually, this is very easy to do if no more than two discoveries run on the same dir. 
-# All we do is pull all existing vcons, then pull all sftp things. 
-# for each filename, see if it's in the list. If not, add it to the list, and add it to a list of things to upload.
-# Optimize accordingly. 
+# NFS-based transcribey workflow:
+# 1. discover: scans NFS directories for audio files, creates vcons in DB
+# 2. reserver: finds unprocessed vcons, verifies files exist
+# 3. preprocess: loads audio files, resamples, prepares for transcription  
+# 4. transcribe: runs speech-to-text models
+# 5. send_results: saves results to DB, deletes processed files
 
-# We also need to be able to do a reserve. What reserve does is find a vcon that does not have analysis and is not reserved.
-# We should just reserve a larger number of vcons...
-
-# We have many target dirs full of vcons. 
-# running discover is fine. 
-# When we run discover.... we need to transfer them to a backup.
-# I mean that's what we're doing rn
-# Perhaps instead.....
-# When we do discover....
-
-# we have an SFTP target dir full of vcons. 
-# We need to both backup and transfer the 
-# wondeirng if downloading them we should process them as we go--- idk tho. 
-# Discover is fine...
-# Now we have links to all vcons...
+# We have NFS storage with audio files that get discovered and processed
+# The workflow is: discover -> reserve -> preprocess -> transcribe -> send_results

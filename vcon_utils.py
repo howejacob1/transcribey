@@ -119,72 +119,9 @@ def resample_many(vcons):
     print(f"Resampled vcons: {len(resampled_vcons)}")
     return resampled_vcons
 
-def downloading_filename(vcon):
-    vcon_filename = vcon.filename
-    audio_extension = extension(vcon_filename)
-    return cache.filename_to_downloading_filename(vcon.uuid + "." + audio_extension)
+# downloading_filename function removed - no longer needed with NFS
 
-def cache_audio(vcon: Vcon, sftp: paramiko.SFTPClient, max_retries=3):
-    source_filename = vcon.filename
-    dest_filename = downloading_filename(vcon)
-    #print(f"Downloading {source_filename} to {dest_filename}")
-    if sftp_is_local(sftp):
-        size = vcon.size
-        try:
-            with open(source_filename, "rb") as source_file:
-                with open(dest_filename, "wb") as dest_file:
-                    source_fileno = source_file.fileno()
-                    dest_fileno = dest_file.fileno()
-                    try:
-                        os.sendfile(dest_fileno, source_fileno, 0, size)
-                    except OSError:
-                        source_file.seek(0)
-                        dest_file.seek(0)
-                        shutil.copyfileobj(source_file, dest_file)
-        except FileNotFoundError:
-            print(f"File not found: {source_filename}")
-            raise
-    else:
-        for attempt in range(max_retries):
-            try:
-                sftp_utils.download_optimized(source_filename, dest_filename, sftp)
-                return  # Success
-            except (ConnectionError, OSError, TimeoutError) as e:
-                if attempt == max_retries - 1:  # Last attempt
-                    raise e
-                # Wait a bit before retrying for connection-related errors
-                import time
-                time.sleep(0.5 * (attempt + 1))  # Longer backoff for connection issues
-            except Exception as e:
-                # Check if it's an SFTP-specific error that might be retryable
-                if "SFTPError" in str(type(e)) or "Garbage packet" in str(e):
-                    if attempt == max_retries - 1:  # Last attempt
-                        raise e
-                    # Wait longer for SFTP corruption issues
-                    import time
-                    time.sleep(1.0 * (attempt + 1))  # Even longer backoff for SFTP issues
-                else:
-                    # For other errors, don't retry
-                    raise e
-
-def cache_audio_batch(vcons: List[Vcon], sftp: paramiko.SFTPClient):
-    """Cache multiple audio files sequentially to avoid SFTP connection corruption"""
-    results = []
-    
-    # Process files sequentially to avoid SFTP corruption
-    for vcon_cur in vcons:
-        try:
-            cache_audio(vcon_cur, sftp)
-            results.append((vcon_cur, None))
-        except Exception as e:
-            # Get detailed error information
-            import traceback
-            error_details = f"{type(e).__name__}: {str(e)}"
-            if not str(e):  # If error message is empty, include traceback
-                error_details = f"{type(e).__name__}: {traceback.format_exc()}"
-            results.append((vcon_cur, error_details))
-    
-    return results
+# cache_audio and cache_audio_batch functions removed - no longer needed with NFS
 
 # def cache_vcon_audio_many(vcons, sftp):
 #     total_count = len(vcons)

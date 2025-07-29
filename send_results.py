@@ -28,8 +28,14 @@ def send_and_process_vcon_batch(batch: List[Vcon], stats_queue: Queue):
         # Delete file if vcon is done and not corrupt
         if vcon.done and not vcon.corrupt and vcon.filename:
             try:
-                os.remove(vcon.filename)
-                #print(f"Deleted file: {vcon.filename}")
+                # Handle old SFTP URLs vs new NFS local paths
+                if vcon.filename.startswith('sftp://'):
+                    # Cannot delete old SFTP URLs - print warning
+                    print(f"Cannot delete SFTP URL: {vcon.filename}")
+                else:
+                    # Delete local/NFS files normally
+                    os.remove(vcon.filename)
+                    #print(f"Deleted file: {vcon.filename}")
             except FileNotFoundError:
                 print(f"File already deleted or not found: {vcon.filename}")
             except Exception as e:

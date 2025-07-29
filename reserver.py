@@ -10,20 +10,15 @@ import vcon_utils as vcon
 from process import ShutdownException
 from stats import with_blocking_time
 from utils import dont_overwhelm_server, dump_thread_stacks
+from setproctitle import setproctitle
+import os
 
 def reserver_nfs(vcons_ready_queue, stats_queue):
     """Reserve and verify vcons for NFS - no downloading needed"""
     # Set process title for identification in nvidia-smi and ps
-    try:
-        from setproctitle import setproctitle
-        import os
-        setproctitle("transcribey-reserver-nfs")
-        print(f"[PID {os.getpid()}] Set process title to: transcribey-reserver-nfs")
-    except ImportError:
-        print("setproctitle not available for reserver process")
+    setproctitle("transcribey-reserver-nfs")
     
     stats.start(stats_queue)
-    # Cache init/clear removed - not needed for NFS
 
     try:
         while True:

@@ -26,19 +26,19 @@ max_lang_detect_workers = 2
 gc_limit_bytes = 3*(1024**3)
 
 
-# SFTP connection settings for make_vcons_from_sftp.py
-sftp_url = "sftp://bantaim@banidk0:22/home/bantaim/conserver/fake_wavs_cute/"
+# Discovery settings (now using NFS)
+sftp_url = "/media/10900-hdd-0/"  # Default NFS path for discovery (legacy name kept for compatibility)
 sample_rate = 16000
 max_discover_workers = 1
 discover_batch_size = 1024  # Increased from 1 for much faster discovery
 dont_overwhelm_server_time_seconds = 1
 
-# SFTP Performance tuning
-sftp_buffer_size = 100*1024*1024  # 128KB buffer for downloads (increased from 64KB)
-sftp_prefetch_enabled = True  # Enable prefetch for better performance
-sftp_parallel_downloads = 1  # Number of parallel downloads per batch (reduced to avoid SFTP corruption)
-sftp_download_batch_size = 1  # Number of files to download in parallel (reduced to avoid connection issues)
-sftp_download_timeout = 30  # Timeout for individual file downloads (seconds)
+# Legacy SFTP settings (no longer used with NFS)
+# sftp_buffer_size = 100*1024*1024
+# sftp_prefetch_enabled = True
+# sftp_parallel_downloads = 1
+sftp_download_batch_size = 1  # Reused as NFS batch size
+# sftp_download_timeout = 30
 
 # MongoDB connection settings
 preprocess_batch_timeout_seconds = 0.1

@@ -78,6 +78,8 @@ def discover_local(base_path, stats_queue, print_status=False):
                                     vcon.basename = basename
                                     # Use local path for filename field
                                     vcon.filename = full_path
+                                    # Explicitly set done=False so it appears in database
+                                    vcon.done = False
                                     stats.count(stats_queue)
                                     count += 1
                                     
