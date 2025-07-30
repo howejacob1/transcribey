@@ -15,7 +15,7 @@ from vcon_class import Vcon
 from vcon_utils import insert_one, get_by_basename
 
 # Configuration settings
-S3_ENDPOINT = "https://nyc3.digitaloceanspaces.com"
+S3_ENDPOINT = "https://nyc3.digitaloceanspaces.com"  # Default, will be updated based on volume
 # BUCKETS = [f"vol{i}-eon" for i in range(1, 9)]  # Now specified via command line argument
 LOCAL_BASE = "/media/10900-hdd-0"
 BATCH_SIZE = 6000
@@ -437,24 +437,44 @@ def process_bucket(bucket: str):
                     print(f"Error processing {bucket}/{freeswitch}/{date}/{hour}: {e}")
 
 def main():
+    global S3_ENDPOINT
+    
     parser = argparse.ArgumentParser(description="Download and create vcons from S3")
-    parser.add_argument("volume", type=int, choices=range(1, 9), 
-                       help="Volume number to process (1-8)")
+    parser.add_argument("volume", 
+                       help="Volume to process (1-8 for vol1-eon through vol8-eon, or '2025-07-17' for the 2025-07-17 bucket)")
     args = parser.parse_args()
+    
+    # Determine endpoint and bucket based on volume
+    volume = args.volume
+    S3_ENDPOINT = "https://nyc3.digitaloceanspaces.com"  # Same endpoint for all
+    
+    if volume == "2025-07-17":
+        bucket = "2025-07-17"
+        volume_display = "2025-07-17"
+    else:
+        try:
+            volume_int = int(volume)
+            if volume_int < 1 or volume_int > 8:
+                raise ValueError("Volume must be 1-8 or '2025-07-17'")
+            bucket = f"vol{volume_int}-eon"
+            volume_display = f"vol{volume_int}"
+        except ValueError:
+            print("Error: Volume must be 1-8 or '2025-07-17'")
+            return
+    
+    print(f"Using S3 endpoint: {S3_ENDPOINT}")
+    print(f"Processing bucket: {bucket}")
     
     # Initialize statistics
     stats['start_time'] = time.time()
     
     os.makedirs(LOCAL_BASE, exist_ok=True)
     
-    # Process only the specified volume
-    bucket = f"vol{args.volume}-eon"
-    
     # Set process title for easy identification
     try:
         from setproctitle import setproctitle
-        setproctitle(f"download-create-vcons-vol{args.volume}")
-        print(f"[PID {os.getpid()}] Set process title to: download-create-vcons-vol{args.volume}")
+        setproctitle(f"download-create-vcons-{volume_display}")
+        print(f"[PID {os.getpid()}] Set process title to: download-create-vcons-{volume_display}")
     except ImportError:
         print("setproctitle not available")
     
