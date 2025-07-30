@@ -19,7 +19,6 @@ from vcon import Vcon as VconBase
 from vcon.dialog import Dialog
 from vcon.party import Party
 import audio
-import cache
 import gpu
 import secrets_utils
 import settings

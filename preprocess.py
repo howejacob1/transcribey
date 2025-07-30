@@ -1,4 +1,5 @@
 import logging
+import os
 import torch.multiprocessing as multiprocessing
 import numpy as np
 import torchaudio
@@ -11,7 +12,6 @@ from typing import List
 import torch
 
 import audio
-import cache
 import process
 import settings
 import stats
@@ -25,12 +25,10 @@ from vcon_class import Vcon
 def preprocess_vcon_one(vcon_cur: Vcon, stats_queue: Queue):
     try:
         #print(f"Preprocessing {vcon_cur.uuid}")
-        filename = vcon.processing_filename(vcon_cur)
-        vcon.move_to_processing(vcon_cur)
+        filename = vcon_cur.filename
         audio_data : torch.Tensor
         sample_rate : int
         audio_data, sample_rate = audio.load_to_cpu(filename)
-        vcon.remove_vcon_from_processing(vcon_cur)
         duration = audio.duration(audio_data, sample_rate)
         audio_data = audio.ensure_mono(audio_data)
         resampler = torchaudio.transforms.Resample(sample_rate, settings.sample_rate)
@@ -51,7 +49,7 @@ def preprocess_vcon_one(vcon_cur: Vcon, stats_queue: Queue):
     except RuntimeError:
         print(f"RuntimeError in preprocess_vcon_one for {vcon_cur.uuid}")
         vcon.mark_vcon_as_invalid(vcon_cur)
-        vcon.remove_vcon_from_processing(vcon_cur)
+        os.remove(vcon_cur.filename)
         return None
 
 def collect_batch_with_timeout(reserved_vcons_queue: Queue, batch_size: int = settings.preprocess_batch_default_size, timeout: float = 0.1):
@@ -121,15 +119,16 @@ def preprocess_batch(batch: List[Vcon], stats_queue: Queue):
 # Technically may have some max size problems but whatever
 def preprocess(reserved_vcons_queue: Queue,
                preprocessed_vcons_queue: Queue,
-               stats_queue: Queue):
+               stats_queue: Queue,
+               worker_id: int = 0):
     # Set process title for identification in nvidia-smi and ps
     try:
         from setproctitle import setproctitle
         import os
-        setproctitle("transcribey-preprocess")
-        print(f"[PID {os.getpid()}] Set process title to: transcribey-preprocess")
+        setproctitle(f"transcribey-preprocess-{worker_id}")
+        print(f"[PID {os.getpid()}] Set process title to: transcribey-preprocess-{worker_id}")
     except ImportError:
-        print("setproctitle not available for preprocess process")
+        print(f"setproctitle not available for preprocess process {worker_id}")
     
     stats.start(stats_queue)
     vcons_in_memory = []
@@ -171,6 +170,6 @@ def preprocess(reserved_vcons_queue: Queue,
         stats.stop(stats_queue)
         exit()
 
-def start_process(reserved_vcons_queue: Queue, preprocessed_vcons_queue: Queue, stats_queue: Queue):
+def start_process(reserved_vcons_queue: Queue, preprocessed_vcons_queue: Queue, stats_queue: Queue, worker_id: int = 0):
     """Start preprocess process"""
-    return process.start_process(target=preprocess, args=(reserved_vcons_queue, preprocessed_vcons_queue, stats_queue))
+    return process.start_process(target=preprocess, args=(reserved_vcons_queue, preprocessed_vcons_queue, stats_queue, worker_id))

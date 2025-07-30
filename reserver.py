@@ -3,7 +3,6 @@ import os
 
 import settings
 from utils import let_other_threads_run
-import cache
 import process
 import stats
 import vcon_utils as vcon

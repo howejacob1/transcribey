@@ -12,7 +12,6 @@ import numpy as np
 import torch
 import torchaudio
 
-import cache
 import discover
 import gpu
 import lang_detect
@@ -36,7 +35,10 @@ def main(discovery_path, stats_queue=None):
     reserved_vcons_queue = multiprocessing.Queue(maxsize=512)
     programs.append(reserver.start_process(discovery_path, reserved_vcons_queue, stats_queue))
     preprocessed_vcons_queue = multiprocessing.Queue(maxsize=1026)
-    programs.append(preprocess.start_process(reserved_vcons_queue, preprocessed_vcons_queue, stats_queue))
+    
+    # Start multiple preprocess workers
+    for i in range(settings.max_preprocess_workers):
+        programs.append(preprocess.start_process(reserved_vcons_queue, preprocessed_vcons_queue, stats_queue, worker_id=i))
     lang_detected_en_vcons_queue = multiprocessing.Queue(maxsize=1026)
     lang_detected_non_en_vcons_queue = multiprocessing.Queue(maxsize=1026)    
     
